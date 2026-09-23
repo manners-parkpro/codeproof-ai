@@ -1,0 +1,29 @@
+decoy_id = "D023-constant-ddl-statement"
+trap_kind = "constant_only_sink"
+acknowledged_warnings = ["W2"]
+
+[bait]
+apparent_defect = """
+execute 에 SQL 문자열을 파라미터 바인딩 없이 그대로 넘긴다. 플레이스홀더도
+파라미터 튜플도 없는 형태라 SQL 인젝션 경로로 읽히고, 정적분석기의 SQL 관련
+룰이 문자열 직접 전달을 보면 그대로 걸린다.
+"""
+lure_lines = [12, 13]
+
+[safety]
+claim = "이 execute 는 SQL 인젝션에 쓰일 수 없다"
+justification = """
+전달되는 문장은 모듈 상수 _DDL 하나뿐이고 그 값은 5행에 리터럴로 고정되어
+있으며 포매팅도 연결도 치환도 일어나지 않기 때문에 외부 입력이 SQL 문자열에
+닿는 경로가 존재하지 않는다. migrate 는 커서 외에 인자를 받지 않으므로 호출자가
+내용에 영향을 줄 수단 자체가 없다. 더구나 DDL 의 식별자 자리는 파라미터 바인딩
+대상이 아니라서 "?" 로 바꾸는 것이 애초에 불가능하다.
+"""
+guard_symbol = "_DDL"
+guard_lines = [5, 13]
+
+[twin]
+defect = """
+_DDL 이 포맷 문자열이 되고 migrate 가 table 인자를 받아 끼워 넣는다.
+테이블 이름에 SQL 구문을 넣으면 그대로 실행 문장에 들어간다.
+"""

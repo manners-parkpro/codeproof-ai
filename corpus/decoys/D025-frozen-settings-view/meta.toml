@@ -1,0 +1,28 @@
+decoy_id = "D025-frozen-settings-view"
+trap_kind = "frozen_after_init"
+
+[bait]
+apparent_defect = """
+모듈 최상위의 SETTINGS 를 공개 이름으로 내보낸다. 가변 딕셔너리를 전역으로
+공유하는 형태라 어느 호출자든 값을 바꾸면 프로세스 전체 설정이 흔들리는
+전역 가변 상태로 읽히고, 변경 경로를 추적할 수 없는 구조처럼 보인다.
+"""
+lure_lines = [7, 11]
+
+[safety]
+claim = "SETTINGS 를 통해 전역 설정을 바꿀 수 없다"
+justification = """
+SETTINGS 는 딕셔너리가 아니라 MappingProxyType 으로 감싼 읽기 전용 뷰이고,
+그 타입은 __setitem__ 과 update 를 아예 제공하지 않아 항목 대입이 TypeError 로
+거부되기 때문에 호출자가 전역 설정을 변경할 수단이 없다. tune 도 dict(SETTINGS)
+로 사본을 떠서 그 사본에만 덮어쓰므로 반환값을 아무리 고쳐도 원본에 닿지 않는다.
+원본 _RAW 는 비공개 이름이라 모듈 밖에서 참조되지 않는다.
+"""
+guard_symbol = "SETTINGS"
+guard_lines = [3, 7]
+
+[twin]
+defect = """
+읽기 전용 래핑이 사라져 SETTINGS 가 _RAW 딕셔너리 자체를 가리킨다.
+호출자가 SETTINGS["retries"] = 0 으로 전역 설정을 직접 바꿀 수 있다.
+"""

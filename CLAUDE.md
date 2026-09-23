@@ -407,7 +407,8 @@ CorroborationVerifier(reference=ruff_findings)   # 엔진이 돌려서 넘긴다
 "Precision 50%" 로 읽히는데, 같은 룰·같은 줄이면 탐지가 아니라 패턴 매칭이다.
 
 `score_pairs()` → **P-C**(구별) · **P-V**(과잉) · **P-B**(미탐지) · **P-R**(역전).
-헤드라인은 구별 성공률. [실측] Ruff 는 10쌍 시점에서 **0/10** 이었다.
+헤드라인은 구별 성공률. [실측] Ruff 는 25쌍에서 **0/25** 다 — 그중
+**18건이 P-R(역전)**, 즉 안전한 쪽만 지적했다. 못 찾는 것보다 거꾸로 찾는 게 많다.
 
 🔴 **`score_pairs()` 는 사후 요약이라 Precision 을 고치지 못한다.**
 per-finding 으로는 여전히 TP 가 남는다. 채점 단계에서 막으려면
@@ -516,7 +517,7 @@ attack(twin)  is True    # 🔴 공격이 실제로 결함을 잡을 수 있다
 (`tests/corpus/test_proofs.py::TestItCatchesTheBugThatSlippedThrough`)
 
 🔴 **면제 목록을 두지 않는다.** 전에는 「실행으로 확인 못 하는 것」을
-`UNTESTED_BY_DESIGN` 에 적었고, 19쌍 중 **8건(42%)이 그 목록에 있었다** —
+`UNTESTED_BY_DESIGN` 에 적었고, 그 시점의 19쌍 중 **8건(42%)이 그 목록에 있었다** —
 그리고 사유 다섯 개가 전부 틀린 것으로 드러났다(동시성·자원수명·경로탈출 전부
 검증 가능했다). **「너무 어렵다」가 조용히 「검증 안 됨」이 되는 자리**였다.
 공격을 못 쓰면 그 decoy 는 싣지 않는다.

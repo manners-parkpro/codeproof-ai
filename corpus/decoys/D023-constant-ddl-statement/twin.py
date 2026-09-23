@@ -1,0 +1,13 @@
+"""마이그레이션 - DDL 이 모듈 상수다."""
+
+from typing import Protocol
+
+_DDL = "ALTER TABLE {} ADD COLUMN trace_id TEXT"
+
+
+class Cursor(Protocol):
+    def execute(self, sql: str) -> object: ...
+
+
+def migrate(cursor: Cursor, table: str) -> None:
+    cursor.execute(_DDL.format(table))

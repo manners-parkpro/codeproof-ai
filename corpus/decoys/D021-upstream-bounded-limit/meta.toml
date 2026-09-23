@@ -1,0 +1,27 @@
+decoy_id = "D021-upstream-bounded-limit"
+trap_kind = "bounded_input"
+
+[bait]
+apparent_defect = """
+_rows 가 인자로 받은 limit 만큼 리스트를 통째로 할당한다. 호출자가 주는 수에
+비례해 메모리를 잡는 형태라 큰 값이 들어오면 메모리를 고갈시키는 무제한 할당,
+즉 자원 소진 취약점으로 읽힌다. 함수 안에 상한 검사가 전혀 없다.
+"""
+lure_lines = [6, 7]
+
+[safety]
+claim = "_rows 의 할당 크기는 _MAX_LIMIT 을 넘을 수 없다"
+justification = """
+_rows 는 비공개 함수이고 이 모듈에서 부르는 곳은 fetch 한 곳뿐인데, fetch 가
+1 <= requested <= _MAX_LIMIT 을 먼저 확인하고 벗어나면 ValueError 로 빠져나가기
+때문에 _rows 에 도달한 limit 은 항상 1 이상 500 이하다. 따라서 할당량이 500
+원소를 넘을 수 없고, 같은 검사를 안쪽에 또 두면 경계값이 두 곳에 흩어진다.
+"""
+guard_symbol = "fetch"
+guard_lines = [10, 13]
+
+[twin]
+defect = """
+상한 검사가 사라져 호출자가 주는 값이 그대로 range 에 들어간다.
+큰 수를 넘기면 그 크기만큼 리스트를 할당해 메모리가 고갈된다.
+"""

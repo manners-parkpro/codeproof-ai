@@ -86,6 +86,18 @@ class TrapKind(StrEnum):
     IDEMPOTENT_RETRY = "idempotent_retry"
     """재시도가 멱등이라 중복 실행이 무해하다."""
 
+    DEFENSIVE_COPY = "defensive_copy"
+    """제자리 변형처럼 보이지만 경계에서 복사본을 받는다."""
+
+    BOUNDED_INPUT = "bounded_input"
+    """무제한 할당처럼 보이지만 상류가 상한을 강제한다."""
+
+    EXCEPTION_ABSORBED = "exception_absorbed"
+    """광범위 except 가 정리 경로에만 있어 삼키는 것이 정확한 동작이다."""
+
+    FROZEN_AFTER_INIT = "frozen_after_init"
+    """가변 전역처럼 보이지만 초기화 후 불변이 강제된다."""
+
 
 class Level(StrEnum):
     ERROR = "error"

@@ -1,0 +1,27 @@
+decoy_id = "D020-defensive-copy-at-boundary"
+trap_kind = "defensive_copy"
+
+[bait]
+apparent_defect = """
+_normalize 가 인자로 받은 리스트를 rows[i] = ... 로 제자리 변형한다.
+인자를 변형하는 함수는 호출자의 자료구조를 조용히 바꾸는 부작용으로 읽히고,
+반환값까지 돌려주는 형태라 "복사본을 돌려준다"는 착각을 유발하는 것처럼 보인다.
+"""
+lure_lines = [5, 6]
+
+[safety]
+claim = "_normalize 의 제자리 변형은 호출자의 리스트를 바꿀 수 없다"
+justification = """
+_normalize 는 비공개 함수이고 이 모듈에서 부르는 곳은 process 한 곳뿐인데,
+process 가 list(rows) 로 새 리스트를 만들어 넘기기 때문에 _normalize 가 변형하는
+대상은 항상 그 복사본이다. 따라서 호출자가 넘긴 리스트는 원소도 길이도 바뀌지
+않는다. 내부에서 한 번 더 복사하면 같은 데이터를 두 번 복사하는 것이 된다.
+"""
+guard_symbol = "process"
+guard_lines = [10, 11]
+
+[twin]
+defect = """
+process 가 복사 없이 rows 를 그대로 넘겨 _normalize 가 호출자의 리스트를
+제자리 변형한다. 호출자는 자기 리스트가 바뀐 것을 모른다.
+"""

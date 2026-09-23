@@ -1,0 +1,28 @@
+decoy_id = "D024-cleanup-swallows-by-design"
+trap_kind = "exception_absorbed"
+
+[bait]
+apparent_defect = """
+_close_quietly 가 except Exception 으로 모든 예외를 잡아 pass 로 버린다.
+로그도 남기지 않고 재전파도 하지 않는 형태라 오류를 조용히 감추는 전형적인
+광범위 예외 삼킴으로 읽히고, 린터의 blind-except 룰이 그대로 걸린다.
+"""
+lure_lines = [15, 16]
+
+[safety]
+claim = "이 삼킴은 오류를 감추지 않으며 없애면 오히려 오류를 감춘다"
+justification = """
+_close_quietly 는 run 의 finally 절에서만 호출되는데, 파이썬은 finally 안에서
+예외가 올라오면 그 예외가 진행 중이던 원래 예외를 대체해 호출자에게 전파하기
+때문에, 여기서 close 실패를 올리면 work 가 낸 진짜 오류가 정리 실패에 가려진다.
+즉 삼키는 쪽이 정보를 보존하고 올리는 쪽이 정보를 잃는다. 삼키는 대상도 정리
+실패로 한정되어 있고 work 의 예외는 이 블록을 거치지 않으므로 영향받지 않는다.
+"""
+guard_symbol = "_close_quietly"
+guard_lines = [13, 16]
+
+[twin]
+defect = """
+try/except 가 사라져 close 실패가 finally 밖으로 전파된다.
+work 가 낸 원래 예외가 정리 단계의 예외로 대체되어 호출자에게 사라진다.
+"""
