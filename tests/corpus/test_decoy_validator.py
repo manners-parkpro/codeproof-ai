@@ -87,6 +87,15 @@ defect = \"\"\"{base["twin_defect"]}\"\"\"
 """
 
 
+GOOD_PROOF = """\
+from types import ModuleType
+
+
+def attack(mod: ModuleType) -> bool:
+    return False
+"""
+
+
 @pytest.fixture
 def decoy_dir(tmp_path: Path) -> Path:
     d = tmp_path / "D999-test"
@@ -94,6 +103,7 @@ def decoy_dir(tmp_path: Path) -> Path:
     (d / "decoy.py").write_text(GOOD_DECOY, encoding="utf-8")
     (d / "twin.py").write_text(GOOD_TWIN, encoding="utf-8")
     (d / "meta.toml").write_text(_meta(), encoding="utf-8")
+    (d / "proof.py").write_text(GOOD_PROOF, encoding="utf-8")
     return d
 
 
@@ -116,6 +126,20 @@ class TestBaselineIsValid:
 
 class TestCatchesViolations:
     """🔴 각 규칙이 실제로 위반을 잡는지 - 이게 본체다."""
+
+    def test_v12_missing_proof(self, decoy_dir: Path) -> None:
+        (decoy_dir / "proof.py").unlink()
+        assert "V12" in _errors(decoy_dir)
+
+    def test_v12_proof_without_attack(self, decoy_dir: Path) -> None:
+        (decoy_dir / "proof.py").write_text("x = 1\n", encoding="utf-8")
+        assert "V12" in _errors(decoy_dir)
+
+    def test_v12_attack_with_wrong_arity(self, decoy_dir: Path) -> None:
+        (decoy_dir / "proof.py").write_text(
+            "def attack() -> bool:\n    return False\n", encoding="utf-8"
+        )
+        assert "V12" in _errors(decoy_dir)
 
     def test_v7_id_mismatch(self, decoy_dir: Path) -> None:
         (decoy_dir / "meta.toml").write_text(_meta(decoy_id="D998-other"), encoding="utf-8")

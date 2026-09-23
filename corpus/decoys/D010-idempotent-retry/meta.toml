@@ -7,22 +7,21 @@ send 가 실패 시 최대 세 번 _deliver 를 다시 부른다. 발송 함수�
 반복 호출하는 형태라 같은 메시지가 여러 번 나가는 중복 발송으로 읽히고,
 백오프도 없어 외부 시스템을 두드리는 것처럼 보인다.
 """
-lure_lines = [13, 16]
+lure_lines = [24, 27]
 
 [safety]
 claim = "재시도가 중복 발송을 만들 수 없다"
 justification = """
 _deliver 가 첫 줄에서 idempotency_key 가 이미 _sent 에 있는지 보고 있으면
 즉시 True 를 돌려주기 때문에, 같은 message_id 로 두 번째 이후 호출이 들어와도
-실제 발송 경로에 도달하지 않는다. 따라서 루프가 세 번 돌아도 부수효과는
-최대 한 번이고, 재시도는 멱등이다.
+_outbox.append 에 도달하지 않는다. 따라서 ack 가 유실돼 루프가 세 번 돌아도
+실제 발송은 정확히 한 번이고, 재시도는 멱등이다.
 """
 guard_symbol = "_deliver"
-guard_lines = [6, 9]
+guard_lines = [16, 18]
 
 [twin]
 defect = """
-멱등 키 검사가 사라져 _deliver 가 호출될 때마다 발송 경로를 탄다.
-빈 body 로 호출하면 False 가 나와 루프가 세 번 다 돌고, 같은 메시지가
-세 번 발송된다.
+멱등 키 검사가 사라져 _deliver 가 호출될 때마다 _outbox.append 를 탄다.
+ack 가 두 번 유실되면 루프가 세 번 돌고, 같은 메시지가 세 번 발송된다.
 """

@@ -1,15 +1,28 @@
-"""안전 근거가 **참인지** 실행으로 확인한다.
+"""안전 근거의 **구조적** 확인 - 실행 반증을 보완한다.
 
-🔴 검증기(V2~V11)는 근거의 **형식**만 본다. 내용이 맞는지는 못 본다.
-   [실측] D015 를 처음 쓸 때 Semaphore(4) 를 가드로 삼았는데 4 스레드 동시
-   진입을 허용하므로 그 경쟁은 실제로 일어난다 - 안전 주장이 거짓이었고
-   **11개 규칙을 전부 통과했다.**
+🔴 이 파일은 더 이상 1차 방어선이 아니다.
 
-   안전 주장이 거짓인 decoy 는 없는 것보다 나쁘다 - 맞는 지적을 FP 로 채점한다.
+   1차는 쌍마다 있는 `proof.py` 이고 `tests/corpus/test_proofs.py` 가
+   **예외 없이 전수로** 강제한다. 여기에는 실행보다 정적 추론이 강한 경우만
+   남긴다 - 대표적으로 「외부 입력이 이 sink 에 닿는 경로가 **없다**」 처럼
+   **부재를 증명**하는 주장이다. 실행은 부재를 보일 수 없고 AST 는 보일 수 있다.
 
-여기서는 decoy 를 **실제로 실행해서** 주장을 반증하려 시도한다.
-전수는 불가능하다 - 반증 시도가 실패했다는 것이지 증명은 아니다.
-그래도 형식 검사보다는 훨씬 강한 신호다.
+## 왜 역할을 나눴는가
+
+전에는 이 파일이 유일한 실행 검증이었고, 못 쓰겠는 것은 `UNTESTED_BY_DESIGN`
+면제 목록에 적었다. 그 결과 19쌍 중 **8쌍(42%)에 twin 반증이 없었다.**
+그리고 면제 사유 다섯 개가 전부 틀린 것으로 드러났다:
+
+| 면제 사유 | 실제 |
+|---|---|
+| 동시성은 단위 테스트로 재현 불가 (D003·D015) | `race_window` 로 재현된다 |
+| 자원 수명은 부수효과 확인이 무겁다 (D004·D014) | `Path.open` 가로채기 · 합 보존으로 충분 |
+| 경로 탈출은 실제 파일시스템이 필요 (D008) | 반환 경로만 보면 된다 |
+| D018 이 같은 계약을 덮는다 (D005) | 다른 코드 · 다른 주장이다 |
+| D017 이 같은 성질을 덮는다 (D009) | 같다 |
+
+「너무 어렵다」가 조용히 「검증 안 됨」이 되는 자리였다.
+**그래서 면제 기구를 없앴다** - 공격을 못 쓰면 그 decoy 는 싣지 않는다.
 """
 
 from __future__ import annotations
@@ -249,55 +262,11 @@ class TestHalfOpenContract:
 class TestIdempotentRetry:
     """D010 — 재시도가 정말 멱등인가."""
 
-    def test_d010_repeat_delivery_is_suppressed(self) -> None:
+    def test_d010_repeat_send_does_not_duplicate_the_side_effect(self) -> None:
+        """🔴 _sent 가 아니라 _outbox 를 본다 - set 은 add 가 멱등이라
+        상태 크기로는 「세 번 발송」이 보이지 않는다."""
         m = _load("D010-idempotent-retry")
         assert m.send("msg-1", "body")
-        before = len(m._sent)
+        assert m._outbox == ["body"]
         assert m.send("msg-1", "body")
-        assert len(m._sent) == before, "같은 키가 두 번 기록됐다"
-
-    def test_d010_twin_delivers_repeatedly(self) -> None:
-        t = _load("D010-idempotent-retry", "twin")
-        assert not t.send("msg-1", "")  # 빈 body → 3회 시도 후 실패
-        assert "msg-1" in t._sent
-
-
-class TestEveryDecoyHasAClaimTest:
-    """🔴 근거를 실행으로 확인하지 않은 decoy 가 늘어나는 것을 막는다."""
-
-    UNTESTED_BY_DESIGN = frozenset({
-        # 동시성 - 단위 테스트로 경쟁을 재현할 수 없다. 코드 검토로 확인했다.
-        "D003-caller-held-lock",
-        "D015-caller-held-semaphore",
-        # 자원 수명 - 파일·트랜잭션. 부수효과 확인이 무겁다.
-        "D004-enclosing-context-manager",
-        "D014-enclosing-transaction",
-        # 경로 탈출 - 실제 파일시스템이 필요하다.
-        "D008-noop-shim-neighbor",
-        # 슬라이싱 - D018 이 같은 계약을 덮는다.
-        "D005-half-open-contract",
-        # 도달성 - D017 이 같은 성질을 덮는다.
-        "D009-unreachable-legacy-branch",
-    })
-
-    def test_coverage_of_safety_claims(self) -> None:
-        source = Path(__file__).read_text(encoding="utf-8")
-        all_ids = {
-            d.name for d in DECOYS.iterdir()
-            if d.is_dir() and not d.name.startswith("_")
-        }
-        tested = {i for i in all_ids if f'"{i}"' in source}
-        gap = all_ids - tested - self.UNTESTED_BY_DESIGN
-        assert not gap, (
-            f"안전 근거를 실행으로 확인하지 않은 decoy: {sorted(gap)}. "
-            "테스트를 쓰거나, 쓸 수 없는 이유를 UNTESTED_BY_DESIGN 에 적는다."
-        )
-
-    def test_exemptions_are_still_real(self) -> None:
-        """면제 목록에 사라진 decoy 가 남아 있지 않은지."""
-        all_ids = {
-            d.name for d in DECOYS.iterdir()
-            if d.is_dir() and not d.name.startswith("_")
-        }
-        stale = self.UNTESTED_BY_DESIGN - all_ids
-        assert not stale, f"없는 decoy 가 면제 목록에 있다: {sorted(stale)}"
+        assert m._outbox == ["body"], "재시도가 두 번째 발송을 만들었다"

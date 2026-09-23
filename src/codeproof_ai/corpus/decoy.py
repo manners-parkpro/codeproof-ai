@@ -432,6 +432,54 @@ def _check_twin(rec: DecoyRecord) -> list[Violation]:
     return out
 
 
+def _check_proof(rec: DecoyRecord) -> list[Violation]:
+    """V12 - 실행 가능한 반증 시도가 있는가.
+
+    🔴 형식 검증은 안전 근거가 **참인지** 볼 수 없다. D015 는 가드로
+       `threading.Semaphore(4)` 를 썼고(세마포어 4는 상호배제가 아니다)
+       여기 있는 규칙을 **전부 통과**했다. 서면 근거만으로 「증명된 음성」을
+       주장할 수 없다.
+
+    proof.py 의 내용까지 여기서 돌리지는 않는다 - 임의 코드 실행은 검증기가
+    아니라 테스트의 일이다. 여기서는 **있는지와 모양만** 본다.
+    """
+    path = rec.directory / "proof.py"
+    if not path.is_file():
+        return [
+            Violation(
+                "V12",
+                Level.ERROR,
+                "proof.py 가 없다 - 서면 근거만으로는 「증명된 음성」을 주장할 수 없다 "
+                "(attack(mod) -> bool 를 노출하라)",
+            )
+        ]
+    source = path.read_text(encoding="utf-8")
+    try:
+        tree = ast.parse(source)
+    except SyntaxError as err:
+        return [Violation("V12", Level.ERROR, f"proof.py 가 파싱되지 않는다: {err}")]
+
+    fn = next(
+        (
+            n
+            for n in tree.body
+            if isinstance(n, ast.FunctionDef) and n.name == "attack"
+        ),
+        None,
+    )
+    if fn is None:
+        return [Violation("V12", Level.ERROR, "proof.py 에 attack 함수가 없다")]
+    if len(fn.args.args) != 1:
+        return [
+            Violation(
+                "V12",
+                Level.ERROR,
+                f"attack 은 인자 1개(mod)를 받는다 - 지금은 {len(fn.args.args)}개",
+            )
+        ]
+    return []
+
+
 def validate_decoy(rec: DecoyRecord) -> list[Violation]:
     """decoy 1건의 내용 규칙을 검사한다.
 
@@ -445,6 +493,7 @@ def validate_decoy(rec: DecoyRecord) -> list[Violation]:
         *_check_justification(rec),
         *_check_visibility(rec, decoy_lines),
         *_check_twin(rec),
+        *_check_proof(rec),
     ]
     # 작성자가 수용한 WARN 은 내린다. ERROR 는 수용 대상이 아니다 -
     # 수용 가능한 규칙이면 애초에 ERROR 로 두면 안 된다.

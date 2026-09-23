@@ -94,16 +94,22 @@ class TestAgainstShippedCorpus:
     ) -> None:
         """🔴 실측 회귀 - 단일 slack 으로 낸 숫자는 결론이 아니다.
 
-        숫자가 바뀌면 코퍼스나 도구가 바뀐 것이다. 확인하고 갱신한다.
+        [실측] 전이점은 **코퍼스에 따라 움직인다**. D010 을 재설계하자
+        전이가 slack 5 -> 6 으로 옮겨가 (0,2,5) 스윕에서는 안정으로 보였다.
+        그건 흔들림이 사라진 게 아니라 **스윕 범위가 좁았던 것**이다.
+
+        그래서 사다리를 (0,2,5,10) 으로 고정한다 - 답을 보고 고른 값이 아니라
+        `test_wider_slack_never_reduces_flagging` 과 같은 표준 범위다.
+        이 교훈 자체가 논지의 증거다: 측정 손잡이 하나가 결론을 뒤집는다.
         """
         run = run_reviewer(
             analyzed("ruff", ("S", "B", "F", "SIM")),
             shipped_samples,
             [ProvableSafetyGrader()],
         )
-        sens = sweep(_regrader(run, shipped_samples), "provable_safety", (0, 2, 5))
+        sens = sweep(_regrader(run, shipped_samples), "provable_safety", (0, 2, 5, 10))
 
-        assert len(sens.points) == 3
+        assert len(sens.points) == 4
         assert not sens.stable, (
             "slack 에 흔들리지 않게 됐다면 이 테스트와 문서를 갱신한다 - "
             "매칭이 도구 의존적이라는 근거가 사라진 것이다"
