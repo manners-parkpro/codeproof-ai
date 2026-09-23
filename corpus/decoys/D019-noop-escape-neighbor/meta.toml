@@ -1,0 +1,28 @@
+decoy_id = "D019-noop-escape-neighbor"
+trap_kind = "noop_shim_neighbor"
+
+[bait]
+apparent_defect = """
+escape_ 접두사를 단 함수가 둘인데 escape_display 는 길이만 자르는 사실상 no-op 이다.
+write 가 외부 line 을 감사 로그에 넣으므로, 개행이나 제어문자가 섞이면 로그 한 줄을
+위조하는 로그 인젝션이 가능해 보인다. 이름이 비슷해 진짜 검증이 어느 쪽인지
+확인하지 않고 지적하기 쉽다.
+"""
+lure_lines = [17, 18]
+
+[safety]
+claim = "write 는 로그 인젝션을 허용하지 않는다"
+justification = """
+write 가 부르는 것은 이름만 비슷한 escape_display 가 아니라 escape_log 이고,
+그 함수가 _CONTROL 정규식으로 0x00-0x1f 와 0x7f 를 제거한 뒤 남은 개행까지
+공백으로 바꾸기 때문에 줄바꿈을 만들 수 있는 문자가 남지 않는다. 따라서
+한 호출이 만들어내는 로그는 항상 한 줄이고, 새 항목을 위조할 수 없다.
+"""
+guard_symbol = "escape_log"
+guard_lines = [13, 14]
+
+[twin]
+defect = """
+escape_log 가 인자를 그대로 돌려주는 no-op 이 되어 이름만 escape 인 함수가 된다.
+line 에 개행과 "[audit] " 를 넣으면 가짜 감사 항목을 만들 수 있는 로그 인젝션이다.
+"""

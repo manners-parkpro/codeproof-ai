@@ -1,0 +1,30 @@
+decoy_id = "D013-eval-on-literal"
+trap_kind = "constant_only_sink"
+acknowledged_warnings = ["W2"]
+
+[bait]
+apparent_defect = """
+eval 이 그대로 쓰여 있다. 임의 코드 실행의 대표적 표지이고 정적분석기도
+무조건 지적하는 패턴이라, 인자가 어디서 오는지 확인하지 않고 반사적으로
+지적하기 쉽다.
+"""
+lure_lines = [6, 7]
+
+[safety]
+claim = "이 eval 은 임의 코드 실행에 쓰일 수 없다"
+justification = """
+eval 에 전달되는 문자열은 모듈 상수 _THRESHOLD_EXPR 하나뿐이고 그 값은 3행에
+리터럴로 고정되어 있으며 포매팅도 연결도 치환도 없기 때문에 외부 입력이
+표현식에 닿는 경로가 존재하지 않는다. threshold_seconds 는 인자를 받지 않으므로
+호출자가 내용에 영향을 줄 수단 자체가 없다. 위험이 실현되려면 소스 변경이
+선행되어야 하고 그건 이 코드의 결함이 아니다.
+"""
+guard_symbol = "_THRESHOLD_EXPR"
+guard_lines = [3, 7]
+
+[twin]
+defect = """
+user_expr 인자를 받아 _THRESHOLD_EXPR.format 으로 표현식에 삽입한다.
+호출자가 __import__('os').system('rm -rf /') 를 넘기면 그대로 실행되는
+진짜 임의 코드 실행이다.
+"""

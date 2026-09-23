@@ -1,0 +1,28 @@
+decoy_id = "D003-caller-held-lock"
+trap_kind = "caller_held_lock"
+
+[bait]
+apparent_defect = """
+_apply_delta 가 _counter["value"] 를 읽어서 더한 뒤 다시 쓴다. 교과서적인
+read-modify-write 경쟁이고, 함수 안 어디에도 동기화가 없다. 모듈 최상위에
+_lock 이 선언돼 있는데 이 함수는 쓰지 않으므로, 락을 빼먹은 것처럼 읽힌다.
+"""
+lure_lines = [10, 12]
+
+[safety]
+claim = "_apply_delta 의 read-modify-write 는 경쟁 상태가 될 수 없다"
+justification = """
+_apply_delta 는 비공개 함수이고 이 모듈에서 호출하는 곳은 bump 한 곳뿐인데,
+bump 가 with _lock 블록 안에서만 호출하기 때문에 _apply_delta 본문은 항상
+_lock 을 보유한 스레드에서만 실행된다. 따라서 두 스레드가 동시에 본문에
+진입할 수 없고, 함수 안에 동기화를 중복으로 두는 것은 재진입 불가 락에서
+오히려 교착을 만든다.
+"""
+guard_symbol = "bump"
+guard_lines = [15, 17]
+
+[twin]
+defect = """
+bump 에서 with _lock 이 사라져 _apply_delta 가 락 없이 실행된다.
+두 스레드가 같은 current 를 읽으면 증가분 하나가 사라지는 갱신 손실이 발생한다.
+"""

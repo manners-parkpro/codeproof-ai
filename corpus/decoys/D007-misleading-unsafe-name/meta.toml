@@ -1,0 +1,28 @@
+decoy_id = "D007-misleading-unsafe-name"
+trap_kind = "misleading_name"
+
+[bait]
+apparent_defect = """
+unsafe_name 이라는 변수가 이스케이프 없이 HTML 문자열에 f-string 으로 보간된다.
+변수명 자체가 위험을 선언하고 있고 인자명도 raw_user_input 이라, 검증되지 않은
+사용자 입력이 마크업에 직접 들어가는 XSS 로 읽힌다. 이름만 보고 지적하기 쉽다.
+"""
+lure_lines = [16, 17]
+
+[safety]
+claim = "unsafe_name 보간은 XSS 가 될 수 없다"
+justification = """
+변수 이름과 달리 unsafe_name 에 담기는 값은 normalize 의 반환값이고, normalize 는
+_ALLOWED 정규식의 fullmatch 를 통과하지 못하면 예외를 던지기 때문에 영숫자와
+하이픈, 밑줄 64자 이내만 남는다. 그 문자 집합에는 꺾쇠나 따옴표가 없어 마크업을
+벗어날 수 없고, 더구나 html.escape 를 quote=True 로 한 번 더 통과한다.
+위험한 것은 값이 아니라 이름이다.
+"""
+guard_symbol = "normalize"
+guard_lines = [9, 12]
+
+[twin]
+defect = """
+render 가 normalize 를 거치지 않고 raw_user_input 을 그대로 담는다.
+호출자가 <script> 를 넘기면 그대로 마크업에 들어가는 실제 XSS 다.
+"""

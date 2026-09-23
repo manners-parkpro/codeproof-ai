@@ -1,0 +1,28 @@
+decoy_id = "D008-noop-shim-neighbor"
+trap_kind = "noop_shim_neighbor"
+
+[bait]
+apparent_defect = """
+sanitize_ 접두사를 단 함수가 둘인데 sanitize_label 은 strip 만 하는 사실상
+no-op 이다. 이름이 비슷해 혼동을 유발하고, open_upload 가 외부 name 을 받아
+파일을 읽으므로 ../../etc/passwd 같은 경로 탈출이 가능해 보인다.
+검증 함수가 이름뿐인 껍데기라고 판단하기 쉽다.
+"""
+lure_lines = [20, 21]
+
+[safety]
+claim = "open_upload 는 _ROOT 밖의 파일을 읽을 수 없다"
+justification = """
+open_upload 가 부르는 것은 이름만 비슷한 sanitize_label 이 아니라 sanitize_path 이고,
+그 함수는 결합한 경로를 resolve 로 정규화한 뒤 is_relative_to 로 _ROOT 하위인지
+확인해 아니면 예외를 던지기 때문에 상위 디렉터리로 탈출하는 입력은 통과하지 못한다.
+resolve 가 선행하므로 .. 나 심볼릭 링크로 우회하는 경로도 정규화된 뒤 검사된다.
+"""
+guard_symbol = "sanitize_path"
+guard_lines = [13, 17]
+
+[twin]
+defect = """
+sanitize_path 에서 is_relative_to 검사가 사라져 이름만 sanitize 인 함수가 된다.
+name 에 ../../etc/passwd 를 넘기면 _ROOT 밖의 파일을 그대로 읽는 경로 탈출이다.
+"""

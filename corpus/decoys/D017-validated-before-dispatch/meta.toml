@@ -1,0 +1,28 @@
+decoy_id = "D017-validated-before-dispatch"
+trap_kind = "unreachable_branch"
+
+[bait]
+apparent_defect = """
+마지막 줄이 frozenset 에 .pop() 을 호출한다. frozenset 은 불변이라 pop 이
+없으므로 AttributeError 이고, 설령 set 이었다 해도 임의 원소를 꺼내는
+비결정적 반환이다. 어느 쪽이든 명백한 버그로 보인다.
+"""
+lure_lines = [13, 13]
+
+[safety]
+claim = "_TERMINAL.pop() 은 실행될 수 없다"
+justification = """
+함수 첫 두 줄이 state 가 _ACTIVE 에 속하지 않으면 ValueError 를 올려 빠져나가므로
+그 아래에 도달한 state 는 pending 또는 running 둘 중 하나다. 그리고 이어지는
+두 분기가 그 둘을 각각 처리하고 반환하기 때문에 마지막 줄은 도달할 수 없다.
+_ACTIVE 가 두 원소이고 두 분기가 그 둘을 모두 덮는다는 것이 근거이며,
+_ACTIVE 에 원소를 추가하면 이 논증은 깨진다.
+"""
+guard_symbol = "next_state"
+guard_lines = [7, 9]
+
+[twin]
+defect = """
+_ACTIVE 검증이 사라져 임의 문자열이 마지막 줄에 도달한다.
+frozenset 에는 pop 이 없으므로 AttributeError 가 난다.
+"""

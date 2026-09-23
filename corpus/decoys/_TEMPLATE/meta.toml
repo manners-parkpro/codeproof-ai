@@ -1,0 +1,68 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# decoy 템플릿 — 이 디렉터리를 복사해서 시작한다.
+#
+#   cp -r corpus/decoys/_TEMPLATE corpus/decoys/D00X-짧은-설명
+#
+# decoy 는 "버그처럼 보이지만 증명 가능하게 안전한" 코드다.
+# 검증: uv run codeproof decoy validate
+# ─────────────────────────────────────────────────────────────────────────────
+
+# 디렉터리명과 반드시 일치해야 한다 (V7)
+decoy_id = "D00X-짧은-설명"
+
+# 미끼의 종류. 아래 중 하나:
+#   upstream_validation   상류에서 이미 전수 검증됨
+#   caller_held_lock      호출부가 락을 쥐고 있음
+#   enclosing_context     바깥 스코프의 context manager 가 보장
+#   contract_half_open    계약상 반열린 구간이라 off-by-one 처럼 보이는 쪽이 맞음
+#   constant_only_sink    위험 API 지만 외부 입력이 닿지 않음
+#   type_narrowed         타입이 이미 좁혀져 분기가 불필요
+#   misleading_name       unsafe_/raw_ 접두사지만 실제로는 검증된 값
+#   noop_shim_neighbor    진짜 sanitize 옆의 no-op shim
+#   unreachable_branch    도달 불가능한 분기
+#   idempotent_retry      재시도가 멱등이라 중복 실행이 무해
+trap_kind = "upstream_validation"
+
+# 의도적으로 수용하는 WARN 규칙 id (선택).
+# ERROR 는 여기 넣어도 수용되지 않는다 - 수용 가능하면 그건 ERROR 가 아니어야 한다.
+# 쓰지 않는 규칙을 남겨두면 V11 경고가 뜬다.
+# 🔴 반드시 최상위에 쓴다. [bait] 등 테이블 헤더 뒤에 쓰면 그 테이블 안으로 들어간다.
+# acknowledged_warnings = ["W2"]
+
+
+[bait]
+# 리뷰어(사람이든 모델이든)가 무엇을 결함으로 볼 것인가.
+# 이게 그럴듯하지 않으면 decoy 가 아니라 그냥 깨끗한 코드다.
+apparent_defect = """
+(여기에 미끼를 쓴다. 예: 'settings["host"] 등 3건이 KeyError 방어 없이 접근된다')
+"""
+
+# decoy.py 에서 미끼가 보이는 줄 [시작, 끝] — 1-based 포함 (V10)
+lure_lines = [1, 1]
+
+
+[safety]
+# 무엇이 안전한가 — 한 문장
+claim = "(예: 위 3건의 dict 접근은 KeyError 를 낼 수 없다)"
+
+# 🔴 왜 안전한가 — **기전**을 쓴다. 결론 반복은 근거가 아니다 (V3)
+#    최소 60자, 서로 다른 낱말 8개 이상, 인과 연결어 포함.
+justification = """
+(무엇이 방어하고, 왜 그 방어가 충분한지를 쓴다.
+ "안전하다" 를 반복하면 검증기가 거부한다.)
+"""
+
+# 방어가 들어 있는 심볼 이름. decoy.py 에 실제로 존재해야 한다 (V4)
+guard_symbol = "함수명"
+
+# 🔴 decoy.py 에서 방어가 실제로 있는 줄 [시작, 끝] (V4)
+#    반드시 decoy.py 범위 안이어야 한다.
+#    가드가 이 파일 밖(다른 모듈의 호출부 등)에 있으면 decoy 로 성립하지 않는다 —
+#    모델 API 비교에는 파일 접근이 없어서, 리뷰어가 알 방법이 없기 때문이다.
+guard_lines = [1, 1]
+
+
+[twin]
+# twin.py 는 **가드만 제거한** 진짜 버그 버전이다 (V6·V9).
+# 차이가 12줄을 넘거나 가드 구간을 건드리지 않으면 검증기가 거부한다.
+defect = "(예: 누락 키 검사가 없어 settings 에 host 가 없으면 KeyError 가 전파된다)"

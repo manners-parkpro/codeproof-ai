@@ -1,0 +1,29 @@
+decoy_id = "D016-raw-prefix-already-parsed"
+trap_kind = "misleading_name"
+
+[bait]
+apparent_defect = """
+raw_start 와 raw_end 를 SQL 문자열에 f-string 으로 직접 보간한다. 변수명이
+raw_ 로 시작하고 인자명도 raw_range 라, 파싱되지 않은 사용자 입력이 쿼리에
+그대로 들어가는 SQL 인젝션으로 읽힌다. 문자열 조립 자체가 정적분석기와
+리뷰어 모두의 반사적 지적 대상이다.
+"""
+lure_lines = [17, 18]
+
+[safety]
+claim = "raw_start · raw_end 보간은 SQL 인젝션이 될 수 없다"
+justification = """
+이름과 달리 두 값은 문자열이 아니라 parse_span 이 돌려준 date 객체이고,
+parse_span 은 date.fromisoformat 으로 파싱하므로 형식을 벗어난 입력은 그 지점에서
+ValueError 로 끊긴다. date 를 f-string 에 넣으면 YYYY-MM-DD 형태의 숫자와
+하이픈만 나오기 때문에 따옴표를 닫거나 구문을 추가할 문자가 존재하지 않는다.
+위험한 것은 값이 아니라 변수 이름이다.
+"""
+guard_symbol = "parse_span"
+guard_lines = [8, 13]
+
+[twin]
+defect = """
+build_query 가 parse_span 을 거치지 않고 partition 으로 잘라 문자열 그대로 보간한다.
+raw_range 에 "2024-01-01' OR '1'='1" 을 넣으면 그대로 쿼리에 들어가는 SQL 인젝션이다.
+"""

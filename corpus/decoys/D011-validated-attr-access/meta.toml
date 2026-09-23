@@ -1,0 +1,27 @@
+decoy_id = "D011-validated-attr-access"
+trap_kind = "upstream_validation"
+
+[bait]
+apparent_defect = """
+getattr 에 외부 문자열 metric 을 그대로 넘긴다. 임의 속성 접근으로 읽히고,
+__class__ 나 __dict__ 같은 내부 속성을 끌어낼 수 있는 것처럼 보인다.
+동적 속성 접근은 정적분석기와 리뷰어 모두가 반사적으로 지적하는 패턴이다.
+"""
+lure_lines = [16, 16]
+
+[safety]
+claim = "getattr 은 _ALLOWED 의 세 이름 외에는 도달할 수 없다"
+justification = """
+바로 위 두 줄이 metric 이 _ALLOWED 에 속하는지 검사해 아니면 KeyError 를 올리고
+함수를 빠져나가기 때문에, getattr 에 도달한 metric 은 반드시 latency · errors ·
+throughput 중 하나다. 셋 다 Snapshot 이 __init__ 에서 설정하는 실제 속성이므로
+AttributeError 도 날 수 없고, 던더 속성으로 우회할 경로도 없다.
+"""
+guard_symbol = "read"
+guard_lines = [14, 15]
+
+[twin]
+defect = """
+_ALLOWED 검사가 사라져 임의 속성 이름이 getattr 에 도달한다.
+__class__ 를 넘기면 float() 에서 터지고, 존재하지 않는 이름이면 AttributeError 다.
+"""

@@ -1,0 +1,27 @@
+decoy_id = "D006-emptiness-narrowed"
+trap_kind = "type_narrowed"
+
+[bait]
+apparent_defect = """
+rows[0] 을 방어 없이 첨자 접근한다. 인자 타입이 list[Row] 라 빈 리스트가
+얼마든지 들어올 수 있고, 그러면 IndexError 가 그대로 전파되는 것처럼 보인다.
+sum 은 빈 시퀀스에서 0 을 내는데 첫 원소만 따로 빼낸 점도 비대칭이라 눈에 띈다.
+"""
+lure_lines = [14, 14]
+
+[safety]
+claim = "rows[0] 은 IndexError 를 낼 수 없다"
+justification = """
+바로 위 두 줄이 not rows 로 빈 리스트를 걸러 0 을 반환하고 함수를 빠져나가기
+때문에, 14행에 도달했다는 것은 rows 에 원소가 최소 하나 있다는 뜻이다.
+따라서 인덱스 0 은 항상 유효하다. rows[1:] 는 원소가 하나뿐이어도 빈 슬라이스가
+되므로 sum 이 0 을 내고 별도 방어가 필요하지 않다.
+"""
+guard_symbol = "total"
+guard_lines = [12, 13]
+
+[twin]
+defect = """
+not rows 검사가 사라져 빈 리스트로 호출하면 rows[0] 에서 IndexError 가 난다.
+호출부가 필터링 결과를 그대로 넘기는 흔한 경로에서 바로 터진다.
+"""

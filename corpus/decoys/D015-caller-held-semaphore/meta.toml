@@ -1,0 +1,29 @@
+decoy_id = "D015-caller-held-semaphore"
+trap_kind = "caller_held_lock"
+
+[bait]
+apparent_defect = """
+_checkout 이 _in_use 에 추가하고 곧바로 그 길이를 읽어 식별자를 만든다.
+append 와 len 사이에 다른 스레드가 끼어들면 두 호출이 같은 식별자를 받는
+전형적인 read-modify-write 경쟁으로 읽힌다. 모듈 최상위에 _lock 이 있는데
+이 함수는 쓰지 않는다.
+"""
+lure_lines = [9, 11]
+
+[safety]
+claim = "_checkout 의 append-then-len 은 경쟁 상태가 될 수 없다"
+justification = """
+_checkout 은 비공개 함수이고 이 모듈에서 부르는 곳은 acquire 한 곳뿐인데,
+acquire 가 with _lock 블록 안에서만 호출하기 때문에 _checkout 본문은 항상
+_lock 을 보유한 단 하나의 스레드에서만 실행된다. threading.Lock 은 상호배제를
+보장하므로 append 와 len 사이에 다른 스레드가 끼어들 수 없고, 따라서 두 호출이
+같은 길이를 관측하는 일이 일어나지 않는다.
+"""
+guard_symbol = "acquire"
+guard_lines = [14, 16]
+
+[twin]
+defect = """
+acquire 에서 with _lock 이 사라져 _checkout 이 상호배제 없이 실행된다.
+두 스레드가 append 후 같은 len 을 읽으면 식별자가 중복된다.
+"""

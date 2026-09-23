@@ -1,0 +1,32 @@
+decoy_id = "D002-shell-true-constant-command"
+trap_kind = "constant_only_sink"
+
+# twin 이 외부 입력을 받는 게 이 쌍의 핵심이라 시그니처 차이는 의도된 것이다.
+# 🔴 최상위여야 한다 - 테이블 헤더 뒤에 쓰면 그 테이블 안으로 들어간다.
+acknowledged_warnings = ["W2"]
+
+[bait]
+apparent_defect = """
+subprocess.run 에 shell=True 가 그대로 쓰여 있다. 쉘 주입의 교과서적 표지이고,
+정적분석기(ruff S602, bandit B602)도 이 패턴을 무조건 지적한다.
+리뷰어는 커맨드 문자열이 어디서 오는지 확인하지 않고 반사적으로 지적하기 쉽다.
+"""
+lure_lines = [9, 13]
+
+[safety]
+claim = "이 shell=True 는 쉘 주입에 쓰일 수 없다"
+justification = """
+전달되는 커맨드는 모듈 상수 _HEALTHCHECK_CMD 하나뿐이고, 그 값은 5행에 리터럴로
+고정되어 있으며 포매팅도 연결도 치환도 일어나지 않기 때문에 외부 입력이 커맨드
+문자열에 닿는 경로가 존재하지 않는다. is_healthy() 는 인자를 받지 않으므로 호출자가
+내용에 영향을 줄 수단 자체가 없다. 따라서 shell=True 가 실제 위험을 만들려면
+_HEALTHCHECK_CMD 를 수정하는 소스 변경이 선행되어야 하고, 그건 이 코드의 결함이 아니다.
+"""
+guard_symbol = "_HEALTHCHECK_CMD"
+guard_lines = [5, 9]
+
+[twin]
+defect = """
+is_healthy 가 service 인자를 받아 _HEALTHCHECK_CMD.format(service) 로 커맨드를 조립한다.
+호출자가 "x; rm -rf /" 를 넘기면 쉘이 그대로 실행하므로 진짜 쉘 주입이다.
+"""

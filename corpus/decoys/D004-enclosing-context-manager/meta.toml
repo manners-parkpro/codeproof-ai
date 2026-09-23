@@ -1,0 +1,27 @@
+decoy_id = "D004-enclosing-context-manager"
+trap_kind = "enclosing_context"
+
+[bait]
+apparent_defect = """
+_emit 이 handle 에 쓰기만 하고 닫지도, flush 하지도, try/finally 로 감싸지도 않는다.
+중간에 예외가 나면 파일이 열린 채 남는 것처럼 보이고, 자원 누수 지적의 전형적인 형태다.
+"""
+lure_lines = [7, 12]
+
+[safety]
+claim = "_emit 은 파일 핸들을 누수시킬 수 없다"
+justification = """
+_emit 은 핸들을 열지 않고 인자로 받기만 하므로 소유권이 없고, 유일한 호출부인
+dump 가 with 블록 안에서 넘기기 때문에 블록을 벗어나는 모든 경로에서 핸들이 닫힌다.
+정상 반환뿐 아니라 _emit 안에서 예외가 전파되는 경우도 컨텍스트 매니저의 __exit__
+가 실행되므로 마찬가지다. 자원을 열지 않은 쪽이 닫으면 이중 해제가 된다.
+"""
+guard_symbol = "dump"
+guard_lines = [15, 17]
+
+[twin]
+defect = """
+with 가 사라지고 handle 을 직접 열어 닫지 않는다. _emit 이 예외를 던지든 정상
+반환하든 핸들이 닫히지 않아 파일 디스크립터가 누수되고, 버퍼가 flush 되지 않아
+마지막 행이 유실될 수 있다.
+"""

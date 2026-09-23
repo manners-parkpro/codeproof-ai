@@ -1,0 +1,29 @@
+decoy_id = "D001-upstream-validated-dict-access"
+trap_kind = "upstream_validation"
+
+[bait]
+apparent_defect = """
+load() 마지막 반환문에서 settings["host"], settings["port"], settings["timeout"] 세 건이
+.get() 이나 try/except 없이 직접 첨자 접근된다. 인자 타입이 dict[str, str] 이므로
+호출자가 임의의 dict 를 넘길 수 있는 것처럼 보이고, 키가 없으면 KeyError 가
+그대로 전파될 것처럼 읽힌다.
+"""
+lure_lines = [25, 27]
+
+[safety]
+claim = "반환문의 dict 접근 3건은 KeyError 를 낼 수 없다"
+justification = """
+바로 위 21-23행의 missing 검사가 _REQUIRED 의 모든 키를 순회하며 부재 키를 전부 모으고,
+하나라도 있으면 ConfigError 를 올려 함수를 빠져나가기 때문에, 25-27행에 도달했다는 것은
+_REQUIRED 의 모든 키가 settings 에 존재한다는 뜻이다. 그리고 25-27행이 접근하는 키
+"host", "port", "timeout" 은 전부 _REQUIRED 의 원소이므로 세 접근 모두 성공이 보장된다.
+int()/float() 변환 실패는 별개의 ValueError 이고 이 주장의 범위가 아니다.
+"""
+guard_symbol = "missing"
+guard_lines = [21, 23]
+
+[twin]
+defect = """
+missing 검사 3줄이 통째로 없어서, settings 에 host 가 빠진 채 호출되면
+25행에서 KeyError 가 그대로 호출자에게 전파된다.
+"""

@@ -1,0 +1,27 @@
+decoy_id = "D009-unreachable-legacy-branch"
+trap_kind = "unreachable_branch"
+
+[bait]
+apparent_defect = """
+_legacy_rate 가 len(plan) 으로 나눈다. 빈 문자열이 들어오면 ZeroDivisionError 이고,
+인자 타입이 str 이라 무엇이든 들어올 수 있어 보인다. rate 의 마지막 return 이
+그 함수를 부르므로 0 나눗셈 경로가 살아 있는 것처럼 읽힌다.
+"""
+lure_lines = [11, 12]
+
+[safety]
+claim = "_legacy_rate 는 호출되지 않으며 ZeroDivisionError 도 날 수 없다"
+justification = """
+rate 의 인자는 Plan 이고 Plan 의 멤버는 FREE 와 PRO 둘뿐인데 앞의 두 분기가
+그 둘을 모두 처리하고 반환하기 때문에, 마지막 return 문은 도달할 수 없다.
+설령 도달한다 해도 두 멤버의 값 문자열은 각각 네 글자와 세 글자라 len 이 0 이
+될 수 없다. 이 함수는 Plan 이 열거형이 되기 전의 잔재다.
+"""
+guard_symbol = "rate"
+guard_lines = [16, 19]
+
+[twin]
+defect = """
+PRO 분기가 사라져 마지막 return 이 실제로 도달한다. Plan.PRO 로 호출하면
+_legacy_rate 가 실행되어 요금이 9.9 가 아니라 100/3 으로 잘못 계산된다.
+"""

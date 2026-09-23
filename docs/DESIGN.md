@@ -1,0 +1,874 @@
+# CodeProof AI — 설계 문서
+
+> 상태: 확정 (2026-09-23) · 선행연구 조사 4건 반영 완료
+> 이 문서는 **무엇을 왜 그렇게 만드는가**를 정한다. 사용법은 [README](../README.md),
+> 코드 작성 규칙은 [CLAUDE.md](../CLAUDE.md).
+
+---
+
+## 0. 한 줄 요약
+
+**코드리뷰 품질 숫자의 상당 부분은 모델이 아니라 "정답의 정의"가 만든다.**
+이 플랫폼은 지적(finding)을 고정한 채 **측정 방식을 변수로 돌려서** 그 기여분을 분리한다.
+
+---
+
+## 1. 문제 정의
+
+### 1.1 처음 던진 질문
+
+> "Claude 와 Codex 중 어느 쪽이 코드리뷰를 더 잘하는가?"
+
+### 1.2 이 질문이 이미 망가져 있는 이유
+
+같은 과제·같은 도구인데 발표된 Precision 이 **20배** 벌어진다 [소스: 아래 표].
+
+| 벤치마크 | Precision | 정답의 정의 |
+|---|---:|---|
+| CR-Bench | ~3.5% | 사람이 실제로 남긴 리뷰 코멘트와 일치 |
+| SWRBench | 16.65% | 〃 (균형 코퍼스) |
+| Martian | 76.2% | 리뷰 후 개발자가 **실제로 고친 것**과 일치 |
+| Qodo | 79% | **주입한 결함**과 일치 |
+
+차이의 원인은 모델이 아니다. **전부 정답 정의**다.
+그런데 동일한 지적 집합을 여러 정답 정의에 통과시켜 **그 편차를 발표한 사례가 없다.**
+
+### 1.3 그래서 바꾼 질문
+
+> **"보고된 품질 숫자 중 얼마가 모델의 것이고, 얼마가 측정 선택의 것인가?"**
+
+모델 비교는 사라지지 않는다. **그 위에 축이 하나 더 얹힌다.**
+
+```
+                    ┌─ Grader A ─┐
+Finding[] (고정) ───┼─ Grader B ─┼──→ 같은 지적, 다른 Precision
+   ↑                ├─ Grader C ─┤         ↓
+Claude / Codex      └─ Grader D ─┘    편차 = 측정의 기여분
+```
+
+### 1.4 근거 있는 선례
+
+프롬프트 **포맷만** 바꿔도 정확도가 최대 **76 포인트** 움직인다
+([Sclar et al. 2310.11324](https://arxiv.org/abs/2310.11324)).
+측정 설정의 기여분이 모델 차이를 압도할 수 있다는 건 이미 알려진 사실이고,
+코드리뷰에서는 아직 아무도 재지 않았다.
+
+---
+
+## 2. 무엇을 만들지 않는가 — 범위의 핵심
+
+### 2.1 양성(positive) 라벨은 만들지 않는다
+
+> 자기 숙제를 자기가 채점하지 않는다.
+
+결함 탐지 쪽은 **기성 벤치마크를 그대로 쓴다.**
+
+| 코퍼스 | 규모 | 라벨 성격 | 라이선스 |
+|---|---|---|---|
+| **c-CRAB** | 410건 (339건 테스트 검증) | 리뷰 코멘트를 **실행 가능한 테스트**로 변환 (fail-before / pass-after) | CC BY 4.0 |
+| **AACR-Bench** | 200 PR / 50 repo / 10 lang | 시니어 엔지니어 80명+, 3라운드 교차검증 | Apache-2.0 |
+
+라벨링 시간 **0**, 그리고 자기편향 시비가 원천 차단된다.
+c-CRAB 자체 베이스라인(에이전트 20.1–32.1%, 4종 합집합 41.5%)이 비교선이 된다.
+
+### 2.2 대신 음성(negative)에 전 예산을 쓴다
+
+이게 비어 있는 자리다.
+
+---
+
+## 3. 코퍼스 설계 — 음성 4개 층
+
+### 3.1 왜 음성인가
+
+`FPR = FP / (FP + TN)` 인데 **코드리뷰에는 TN이 자연적으로 정의되지 않는다.**
+모델은 같은 파일에 지적을 0개 낼 수도 100개 낼 수도 있어서 "맞힐 기회의 총량"이 없다.
+
+그래서 기존 문헌의 FP율은 전부 **"틀림"이 아니라 "과거 리뷰어와의 불일치"** 를 재고 있다.
+"Clean-PR"은 *아무도 코멘트를 안 달았다*는 뜻일 뿐 — **증거의 부재지 부재의 증거가 아니다.**
+사람 리뷰어가 놓친 진짜 버그를 모델이 잡으면 **FP로 오채점된다.**
+
+### 3.2 4개 층
+
+| 층 | 내용 | 무엇을 재는가 | 비용 |
+|---|---|---|---|
+| **A** 합성 recall 바닥 | 변이 주입 | "기계적 경계 뒤집기도 못 잡으면 진짜 버그는 당연히 못 잡는다" — **바닥선** | ~2일 |
+| **B** 짝지은 수정후 음성 | 모든 양성의 *수정된 버전* | 같은 파일·같은 함수·**가드만 다름** → 과잉지적 | **0 (공짜)** |
+| **C** 매칭 Clean-PR | 실제 무결함 PR | 기존 문헌과의 비교 가능성 | ~1일 |
+| **D** 수제 near-miss decoy | 손으로 쓴 함정 | **증명 가능한 FP** — 이 프로젝트의 차별점 | 30–50h |
+
+### 3.3 B층이 공짜인 이유
+
+모든 양성 인스턴스의 **수정된 버전**이 완벽히 매칭된 음성이다.
+같은 파일, 같은 함수, 같은 주변 코드, **가드 위치만 다르다.**
+
+PrimeVul 의 짝 채점을 그대로 쓴다:
+
+| 코드 | 의미 |
+|---|---|
+| **P-C** | 둘 다 정답 |
+| **P-V** | 둘 다 "취약" 판정 → **과잉지적률** |
+| **P-B** | 둘 다 "안전" 판정 → 과소지적 |
+| **P-R** | 뒤집힘 |
+
+PrimeVul 에서 7B SOTA 모델이 BigVul F1 **68.26% → 3.09%** 로 붕괴한 게 이 짝 채점 때문이다.
+**과잉지적은 짝을 지어야만 보인다.**
+
+### 3.4 D층 — 차별점
+
+"버그처럼 생겼지만 **증명 가능하게 안전한**" 코드를 손으로 쓴다.
+
+예시:
+- 호출부가 non-null 을 보장하는 null 역참조
+- 호출부가 이미 쥐고 있는 락 위의 경쟁 상태
+- 바깥 스코프의 context manager 안에 있는 자원 누수
+- 계약상 반열린 구간이라 **맞는** off-by-one
+- 보간값이 `Enum` 멤버라 안전한 SQL 문자열 조립
+- `unsafe_` / `raw_` 접두사지만 실제로는 검증된 변수
+- 상수에만 쓰이는 `eval` / `pickle.loads`
+- 진짜 `sanitize()` 옆에 있는 no-op shim
+
+**작성 규칙 3가지** (SQuAD 2.0 · contrast sets 에서 차용):
+1. 리뷰어가 **진짜 작업으로 인식할** 변경일 것
+2. **안전한 이유를 서면으로 첨부**할 것 ← 이게 "부재의 증거"를 만든다
+3. **가드만 다른 진짜 버그 쌍둥이**와 페어로 낼 것 (Juliet `goodG2B`/`goodB2G` 구조)
+
+자동 생성 음성은 측정력이 없다. SQuAD 2.0 이 증명했다 —
+크라우드워커가 **손으로** 적대적 음성을 쓰게 했더니 최고성능이 85.8 → **66.3 F1** 로 떨어졌다.
+
+### 3.5 규모 — 타협 불가
+
+Wilson 95% 신뢰구간 반폭:
+
+| 음성 n | p=0.10 | p=0.30 |
+|---:|---:|---:|
+| 50 | ±8.5pp | ±12.3pp |
+| 100 | ±6.0pp | ±8.8pp |
+| **150** | **±4.8pp** | **±7.3pp** |
+| 300 | ±3.4pp | ±5.2pp |
+
+**음성 100개 미만이면 FPR은 숫자가 아니라 느낌이다.**
+B+C+D 합계 **150개**가 목표. 구조 목표는 양성:음성 ≈ **50:50** (OWASP Benchmark 선례).
+
+### 3.6 A층의 함정과 대응
+
+Google 실측: 변이체의 **85%를 개발자가 무익하다고 분류**했다.
+억제 규칙 없이 돌리면 변경 1건당 중앙값 **820개**가 쏟아진다 (억제 후 **7개**, 사람에게 보이는 건 **2개**).
+
+→ **Google 의 arid-node 억제 규칙을 먼저 포팅한다**: 로깅, 메모이제이션,
+`__repr__`/`__eq__` 보일러플레이트, `if __name__ == "__main__"`, 모니터링 카운터, 플래그 기본값.
+
+그리고 **A층은 절대 단독으로 쓰지 않는다.**
+실제 결함은 3–4 토큰을 바꾸는데 변이체는 1 토큰이고, 실제 결함의 **17%는 어떤 변이체와도 짝지어지지 않는다.**
+*"생성기가 만들 줄 아는 결함은 프롬프트를 튜닝해 찾게 만들 수 있는 결함"* 이다.
+→ **recall 바닥선으로만** 보고하고, 현실성을 주장하지 않는다.
+
+---
+
+## 4. 채점자 설계 — 논지의 핵심
+
+### 4.1 Grader Protocol
+
+```
+Grader: (Sample, Finding[]) → Judgment[]
+```
+
+같은 `Finding[]` 을 여러 채점자에 통과시키고 **편차를 헤드라인으로 낸다.**
+
+| Grader | 정답 정의 | 대응 층 | v1 |
+|---|---|---|:---:|
+| `InjectedDefectGrader` | 주입한 결함과 일치 (Qodo 정의) | A | ✅ |
+| `PairedFixGrader` | **짝에 없는 지적만 탐지로 인정** (PrimeVul 정의) | 짝이 있는 모든 층 | ✅ |
+| `ProvableSafetyGrader` | **서면 안전근거와 대조** (신규) | D | ✅ |
+| `StaticCorroborationGrader` | Ruff·mypy 독립 지적과 교차 | 전체 | ✅ |
+| `HistoricalReviewGrader` | 사람 리뷰 코멘트와 일치 (학계 정의) | C | v2 |
+| `PostHocFixGrader` | 리뷰 후 실제 수정과 일치 (Martian 정의) | C | v2 |
+| `ExecutionGrader` | 테스트 통과 여부 (c-CRAB 정의) | — | v2 |
+
+### 4.1a `PairedFixGrader` 와 `score_pairs()` 는 다른 층이다
+
+처음 설계에서 이 둘을 구분하지 않았다. 구현하며 드러난 차이:
+
+| | 무엇인가 | 정답 정의가 있는가 |
+|---|---|---|
+| `score_pairs()` | 기존 채점자의 판정을 **사후 요약** | ✗ — 넘겨받은 채점자를 재해석 |
+| `PairedFixGrader` | **정답 정의 자체** | ✓ — 「짝에 없는 지적만 탐지」 |
+
+[실측] 그 차이가 숫자에 남는다. `D002#twin` 의 `S602` 는 안전한 쪽에도 똑같이
+나오는데 `InjectedDefectGrader` 는 결함 위치와 겹치므로 **TP** 를 준다.
+짝 요약은 그 쌍을 `P-V` 로 표시하지만 **per-finding Precision 은 오염된 채**다.
+`PairedFixGrader` 는 그걸 채점 단계에서 막는다 — 네 정의 중 **가장 엄격**하다.
+
+⚠ 「짝에도 있다」를 `FALSE_POSITIVE` 로 접지 않는다. 그 지적은 **틀린 게 아니라
+  변별력이 없는** 것이다 — 진짜 결함을 가리키고는 있다. 틀림과 무정보를 섞으면
+  우리가 비판하는 그 오류가 된다 (§8 판정 불가 규칙과 같은 원칙).
+
+**구현 귀결:** 짝의 지적을 알아야 하므로 `runner` 가 **리뷰와 채점을 두 단계로
+분리**하고, 채점 직전에 `bind_run()` 으로 실행 전체의 지적을 넘긴다.
+필요한 채점자만 그 훅을 구현한다.
+
+### 4.1b 실행 경로는 하나뿐이다 — 그 훅이 만든 버그
+
+`bind_run()` 을 넣고 나서 발견한 것. 러너가 **셋**이었다:
+
+| | 쓰는 곳 | `bind_run` 호출 |
+|---|---|---|
+| `run_reviewer` | 통합 경로 | ✓ |
+| `run_analyzer` | **CLI `measure` 의 분석기 경로** | ✗ |
+| `run_provider` | **CLI `measure` 의 모델 경로** | ✗ |
+
+셋이 같은 단계(관측 → 채점)를 각자 구현했고, 새 훅은 하나에만 걸렸다.
+`PairedFixGrader` 는 빈 짝을 「짝에 지적이 없다」로 읽어 **전부 TP** 로 채점했다 —
+예외도 경고도 없이. 즉 **CLI 가 내놓는 짝 채점 숫자가 틀려 있었다.**
+
+🔴 이건 「숫자가 틀렸다」보다 나쁘다. **틀렸다는 것을 알 수 없는 숫자**였다.
+이 프로젝트가 다른 벤치마크에 대해 하는 비판을 그대로 자기가 저지른 셈이다.
+
+**고친 방법 — 세 겹:**
+
+1. **경로를 하나로 줄인다.** `run_analyzer`·`run_provider` 를 지우고
+   `run_reviewer(AnalyzerReviewer(...))` · `run_reviewer(ProviderReviewer(...))`
+   로 대체했다 (456줄 → 309줄). 경로가 하나면 훅을 빠뜨릴 곳이 없다.
+2. **조용히 틀리는 대신 터뜨린다.** `PairedFixGrader` 는 미바인딩 상태를
+   `None` 으로 구분해 `UnboundGraderError` 를 던진다. 빈 dict 로 시작하면
+   기본값이 곧 오답이 된다.
+3. **구조를 테스트로 고정한다.** `tests/architecture/test_single_runner.py` 가
+   「`runner` 의 공개 실행 함수는 `run_reviewer` 뿐」과
+   「bind 가 채점보다 먼저」를 강제한다.
+
+⚠ 합치면서 **정보를 잃을 뻔했다**. 지워진 두 러너는 매니페스트에
+`effort`·`cache_policy`·`tool_versions` 를 직접 써 넣고 있었는데,
+통합 러너는 리뷰어를 모르므로 `effort="n/a"` 를 박아 넣었다. 그건 모델 실행에
+대한 **거짓말**이다 — mypy 가 host 설정을 물려받는데 매니페스트는 `strict=False`
+라고 적던 것(§12-19)과 같은 종류다.
+
+→ **매니페스트 항목은 리뷰어가 신고한다.** `manifest_fields()` 와
+  `tool_versions()` 를 선택적 훅으로 두고, 러너는 짐작하지 않는다.
+
+### 4.2 🔴 LLM 판정자를 쓰지 않는 이유
+
+채점에 LLM 판정자를 쓰면 **Claude vs Codex 비교가 무효화된다.**
+
+- **자기선호 편향**: 판정자는 **저-perplexity 텍스트를 선호**하고,
+  자기 출력은 구조적으로 자기에게 저-perplexity다. 기전이 규명돼 있고 모델 크기에 따라 강해진다.
+- **코드 도메인의 판정자 일치도가 전 도메인 최악**:
+  pairwise Cohen's κ **0.159**, Fleiss' κ **0.070**.
+- **일관성 ≠ 타당성**: test-retest 0.99 와 위치편향 0.19 가 공존한다.
+
+→ v1 채점자은 **전부 비-LLM 증거 기반**으로 설계한다.
+→ 불가피하게 LLM 매칭을 쓸 경우 **평가 대상과 다른 모델 패밀리**에서 뽑고,
+  자체 라벨 30건으로 검증한 κ 를 **반드시 함께 보고**한다.
+
+### 4.3 교차모델 합의는 confidence 가 아니다
+
+2026-07 감사(265k 샘플): 합의도↔정답률 상관이 **ρ 0.20–0.59** 에 불과하고,
+프런티어 모델은 **합의 ≥0.8 인 77% 구간에서 48%가 오답**이었다.
+→ **triage 신호로만** 쓰고 진실값으로는 쓰지 않는다.
+
+---
+
+## 5. 파이프라인
+
+```
+ReviewTarget           ← 🔴 리뷰어가 볼 수 있는 전부. 라벨 없음
+  │
+  ├─ Reviewer ─────────── static · imported · agent · model_api · human
+  │                       전부 같은 하네스로 돈다 (§6.3)
+  │                       확률적이면 N회 → ObservedFinding(빈도 보존)
+  │                          ↓
+  ├─[3] Verification ──── citation · guard(callee 포함) · corroboration · reachability
+  │                       🔴 증거를 **받는다**. 도구를 돌리지 않는다
+  └─[4] Confidence ────── Evidence 집계. 인용 반박이면 하드 0
+                             ↓
+                      Final Review     ← 런타임 산출물, 라벨 불필요
+
+  ══════════════ 런타임 끝 / 오프라인 평가 시작 ══════════════
+
+  [5] Grader 채점 ──── 같은 Finding[] → 채점자 3종
+                       🔴 고유 지적당 1회. 임계값은 집계 시점에
+  [6] 집계 ─────────── spread(편차) · pairing(P-C/V/B/R) ·
+                       sensitivity(매칭 민감도) · Wilson CI
+  [7] store ────────── 외래키가 manifest 없는 결과를 거부
+                       config_hash 로 재현성 비교
+```
+
+**[1]–[4] 는 제품이고 [5]–[6] 은 실험이다.** 수명주기도 테스트 방법도 다르다.
+→ 패키지 자체를 분리한다 (`verify/` vs `eval/`).
+
+---
+
+## 6. 아키텍처
+
+### 6.1 레이어 규칙 — 단 하나
+
+> **`domain` 은 아무것도 import 하지 않는다. 나머지 전부가 `domain` 을 import 한다.**
+
+이 한 줄이 재사용성의 전부다. 어기면 도메인 테스트가 LLM 키를 요구하기 시작한다.
+
+### 6.2 패키지
+
+```
+src/codeproof_ai/
+├── domain/                  # 의존성 0
+│   ├── location.py          #   Position(line, col_char, col_byte)  ← §7.1
+│   ├── finding.py           #   Finding + fingerprint               ← §7.2
+│   ├── evidence.py          #   Evidence, VerifiedFinding
+│   ├── observation.py       #   ObservedFinding - 빈도는 신호       ← §7bis.1a
+│   ├── target.py            #   ReviewTarget - 🔴 라벨 없음
+│   ├── reviewer.py          #   Reviewer · ReviewerKind - 🔴 1급 개념
+│   └── run.py               #   RunManifest (config_hash / run_id)  ← §7.4
+│
+├── analysis/                # [1] 정적분석 — 언어 플러그인
+│   ├── base.py              #   Analyzer · materialize · materialize_many
+│   ├── toolchain.py         #   도구 실행 (uv run 우회)             ← §6.7
+│   └── python/{ruff,mypy_,ast_index}.py
+│
+├── llm/                     # [2] 모델 호출 — 얇은 어댑터
+│   ├── base.py · schema.py · render.py · parse.py
+│   ├── anthropic_.py · openai_.py · replay.py
+│   ├── credentials.py       #   무엇이 준비됐는지만 보고
+│   └── prompts/review_v1.md #   프롬프트는 데이터
+│
+├── reviewers/               # 🔴 통합 Reviewer 층
+│   ├── wrap.py              #   분석기·모델을 Reviewer 로
+│   ├── imported.py          #   외부 지적 가져오기 (자격증명 불필요)
+│   └── formats.py           #   SARIF · bandit · native 파서
+│
+├── verify/                  # [3][4] 런타임 · 라벨 불필요
+│   └── {citation,guard,corroboration,reachability,confidence}.py
+│
+├── eval/                    # [5][6] 오프라인 · 라벨 필수
+│   ├── sample.py · loader.py       #   LabeledSample · 코퍼스 → 샘플
+│   ├── grading/{safety,injected,corroboration}.py
+│   ├── spread.py            #   🔴 채점 기준 편차 = 헤드라인
+│   ├── pairing.py           #   PrimeVul P-C/P-V/P-B/P-R
+│   ├── sensitivity.py       #   매칭 민감도 스윕
+│   ├── bait.py              #   미끼 효과 측정
+│   ├── metrics.py           #   Wilson CI
+│   └── runner.py            #   🔴 run_reviewer **하나뿐** (§4.1b)
+│
+├── corpus/decoy.py          # decoy 작성·검증 (실험을 모른다)
+├── store/{schema,sqlite}.py # SQLite — 외래키로 E1 강제
+└── cli.py                   # measure · eval · import · doctor · history · decoy
+```
+
+### 6.3 리뷰어는 하나의 개념이다
+
+지적을 내는 것은 전부 `Reviewer` 다 — **같은 하네스(`run_reviewer`)로 돌고
+같은 채점을 받는다.** 그래야 "Ruff 0/10" 과 "Claude N/10" 이 비교 가능해진다.
+
+| `ReviewerKind` | 예 | 자격증명 | 결정적 |
+|---|---|:---:|:---:|
+| `static` | Ruff · mypy | — | ✓ |
+| `imported` | SARIF(CodeQL·semgrep·Snyk) · bandit JSON | — | ✓ |
+| `agent` | Codex CLI · Claude Code 출력 | — | ✗ |
+| `model_api` | Anthropic · OpenAI SDK | 필요 | ✗ |
+| `human` | 사람 리뷰 | — | ✓ |
+
+🔴 **층이 다르면 섞어 집계하지 않는다.** 에이전트는 파일 탐색·다회 턴이 가능해
+`model_api` 와 조건이 다르다. `kind.is_deterministic` 인 리뷰어에
+`sample_n>1` 을 주면 **거부한다** — 같은 결과를 N번 세면 빈도가 의미를 잃는다.
+
+**새 리뷰어를 넣기 전에 자격증명이 필요한지 먼저 본다.**
+SARIF 나 다른 JSON 을 내는 도구면 `ImportedReviewer` + 포맷 파서 하나로 끝난다.
+
+### 6.4 확장점 — 전부 Protocol
+
+| Protocol | 확장 방법 |
+|---|---|
+| `Reviewer` | `reviewers/<name>.py` — **먼저 `ImportedReviewer` 로 되는지 본다** |
+| `FindingFormat` | `reviewers/formats.py` 에 파서 추가 |
+| `Analyzer` | `analysis/<lang>/` — Java 지원은 디렉터리 추가만으로 |
+| `Verifier` | `verify/<rule>.py` |
+| `Grader` | `eval/grading/<name>.py` |
+
+### 6.5 🔴 CLI 가 주 인터페이스, FastAPI 는 어댑터
+
+원래 설계는 FastAPI 를 최상단에 뒀지만, 벤치마크 플랫폼의 본체는 **배치 러너**다.
+엔진이 HTTP 를 알면 실험을 스크립트로 못 돌린다.
+→ `engine` 은 라이브러리, `cli` 가 주 진입점, `api` 는 v2 의 얇은 껍데기.
+
+### 6.6 🔴 측정 도구를 호스트 환경에서 격리한다
+
+측정 도구가 실행되는 레포의 설정을 주워오면 **같은 코퍼스가 레포마다 다른 숫자**를 낸다.
+설계 중 실제로 두 번 물렸다.
+
+| 도구 | 격리 | 없으면 (실측) |
+|---|---|---|
+| ruff | `--isolated` | 호스트 select·exclude 적용 |
+| mypy | `--config-file=/dev/null` | 이 레포의 `strict = true` 를 주워왔다 |
+| mypy | `--no-incremental` `--cache-dir=/dev/null` | **삭제된 임시 디렉터리 경로**의 진단이 섞였다 |
+
+🔴 격리 전에는 `config_signature()` 가 `mypy(strict=False)` 라고 적으면서
+실제로는 strict 로 돌고 있었다 — **매니페스트가 거짓이면 재현성 설계가 무의미하다.**
+
+### 6.7 대상이 여럿이면 일괄로 돈다
+
+`Analyzer.analyze_many(targets)` 가 **한 번의 subprocess** 로 전부 분석한다.
+
+[실측] 30 대상: ruff 0.39s → 0.04s (**9.9배**), mypy 17.1s → 0.52s (**33배**).
+그리고 `uv run <tool>` 을 거치지 않는다 — 이미 venv 안이라 PATH 에 잡힌다
+(ruff 53→10ms, mypy 308→123ms).
+
+🔴 **복원 방식이 분석 결과를 바꾸면 안 된다.** `__init__.py` 를 무조건 넣었더니
+Ruff 의 `INP001` 이 사라져 일괄과 개별이 다른 숫자를 냈다. mypy 만 모듈명 해소에
+필요하므로 `as_packages` 로 **선택적**이다. 테스트가 「일괄 == 개별」을 강제한다.
+
+### 6.8 🔴 코퍼스 구축은 별도 프로젝트
+
+```
+codeproof-ai/
+├── pyproject.toml          # 플랫폼 — requires-python = ">=3.14"
+├── src/codeproof_ai/
+└── corpus/
+    ├── pyproject.toml      # 🔴 별도 프로젝트 · 별도 lock · 느슨한 핀
+    ├── .python-version     #    Docker 필요
+    └── src/codeproof_corpus/
+```
+
+이유: `>=3.14` 가 벤치마크 툴체인 대부분과 충돌한다 —
+cosmic-ray, SWE-smith, c-CRAB 는 더 낮은 인터프리터를 고정하고 Docker 를 요구한다.
+
+uv workspace 가 아니라 **완전히 분리된 두 프로젝트**로 둔다.
+workspace 는 resolution 을 통합해서 같은 충돌을 되살린다.
+
+---
+
+## 7. 반드시 지켜야 할 함정
+
+### 7.1 🔴 컬럼 기준이 도구마다 다르다
+
+| 출처 | line | column | 단위 |
+|---|---|---|---|
+| Ruff JSON | 1-based | **1-based** | 문자 |
+| mypy JSON | 1-based | **0-based** | **UTF-8 바이트** |
+| mypy 텍스트 | 1-based | 1-based | 바이트 |
+| `ast.col_offset` | 1-based | **0-based** | **UTF-8 바이트** |
+| SARIF | 1-based | 1-based | 문자 |
+
+**같은 mypy 실행이 텍스트와 JSON 에서 서로 다른 컬럼을 보고한다.**
+비ASCII 가 한 글자라도 있는 줄에서 Ruff 와 mypy 를 그냥 합치면 조용히 어긋난다.
+
+→ 내부 단일 규약: **1-based line + 0-based 문자 column** (+ `byte_start` 병기).
+→ 어댑터 4개가 **각자 변환 하나씩만** 책임진다.
+→ 비ASCII 회귀 테스트 필수.
+
+### 7.2 🔴 지적 식별자에 라인번호를 쓰지 않는다
+
+```
+fingerprint = hash(rule_id, enclosing_symbol, normalized_snippet)
+```
+
+라인번호를 쓰면 **위쪽 줄만 고쳐도 전부 다른 지적이 된다.**
+SARIF 출력 시 `partialFingerprints` 에 싣는다 (`fingerprints` 아님).
+
+### 7.3 🔴 temperature 는 통제변수가 아니다
+
+Anthropic 은 Claude 4.7 이후 모델에서 `temperature` / `top_p` / `top_k` 를
+**제거했고 비기본값을 보내면 400 을 반환한다** (공식 문서 확인).
+OpenAI 추론 모델도 거부한다고 널리 보고되지만 **공식 문서에서 확인되지 않았다** —
+경험적으로 검증하기 전까지는 주장하지 않는다.
+
+→ **"temperature=0 으로 고정했다"고 주장하는 2026년 벤치마크는 그 실험을 하지 않은 것이다.**
+
+**게다가 Anthropic 에는 `seed` 파라미터가 아예 없다.**
+temperature 도 못 쓰고 seed 도 없으므로 **Claude 실행은 환원 불가능하게 확률적이다.**
+OpenAI 의 `seed` 는 존재하지만 "Beta · best effort · 결정성 보장 안 함" 이다.
+
+→ 재현성을 **다회 샘플링 + 오차막대**로 확보한다 (Epoch AI 방식: 8–16회 반복, ±1 SE).
+→ **"재현 가능한 출력"이 아니라 "재현 가능한 프로토콜"** 이라고 주장한다.
+→ 모든 원본 응답을 아카이브한다. 모델 은퇴 후에도 감사 가능해야 한다.
+
+모델 핀은 Anthropic 이 유리하다 — *"Every Claude model ID is a pinned snapshot,
+including the dateless IDs used from the 4.6 generation on."*
+OpenAI 는 별칭이 아니라 날짜 스냅샷을 명시적으로 고정해야 한다.
+
+### 7.3a 🔴 캐싱 비대칭 — 가장 위험한 함정
+
+| | Anthropic | OpenAI |
+|---|---|---|
+| 캐싱 | **옵트인** (`cache_control` 필요) | **기본 활성화, 문서화된 해제 수단 없음** |
+| 임계 | 모델별 | 1,024 입력 토큰 (GPT-5.6+) |
+| TTL | 5m / 1h | 30m (GPT-5.6+) |
+
+**"프롬프트당 N회 반복해서 중앙값"이 구조적으로 편향된다.**
+2회차부터 OpenAI 만 공짜 캐시에 적중하고 Anthropic 은 하지 않는다.
+→ 추론이 아니라 **prefill 생략을 측정**하게 되고, **OpenAI 비용을 최대 90% 과소 보고**한다.
+
+**대응** — 둘 중 하나를 고르고 명시한다:
+1. 프롬프트 **맨 앞**에 고유 nonce 를 붙인다 (캐싱은 prefix 매칭이므로 **뒤에 붙이면 무효**)
+2. cold-only 로만 보고한다
+
+어느 쪽이든 **호출별 캐시 토큰 수를 공개**한다. 이게 없으면 리뷰어가 검증할 수 없다.
+
+### 7.3b 🔴 effort 기본값이 모델마다 다르다
+
+| 모델 | 기본 effort |
+|---|---|
+| `claude-opus-5-5` | **`medium`** |
+| `claude-sonnet-5` | `high` |
+| `claude-fable-5-1` | `high` |
+
+**"기본값으로 비교했다"고 하면 한쪽에 조용히 더 많은 추론 예산을 주는 것이다.**
+
+→ **모든 호출에 effort 를 명시**한다. 단일 점이 아니라
+  **effort 를 스윕해 비용/정확도 프런티어로 보고**한다 —
+  단일 점은 벤더를 대신해 내가 고른 값이다.
+
+### 7.3c 🔴 `input_tokens` 의 의미가 벤더마다 다르다
+
+Anthropic 의 `input_tokens` 는 **마지막 캐시 breakpoint 이후만** 센다.
+공식 문서의 예시 — 200k 캐시 문서 + 50토큰 질문 → `input_tokens: 50`.
+
+```
+Anthropic total_input = cache_read_input_tokens
+                      + cache_creation_input_tokens
+                      + input_tokens
+OpenAI   prompt_tokens = 캐시 포함 (그대로)
+```
+
+두 벤더의 "input" 필드를 그냥 더하면 **범주 오류**다.
+래퍼 라이브러리들이 정확히 이 필드를 잘못 재유도한다 (→ §6.6).
+
+### 7.3d 🔴 토크나이저는 세대 간에도 비교 불가
+
+공식 Pricing 문서: *"Claude 4.7 and later models use a newer tokenizer…
+approximately **30% more tokens** for the same text."*
+
+→ 벤더 간은 물론 **Anthropic 4.6/4.7 경계를 넘는 토큰 수 재사용을 금지**한다.
+→ **`tiktoken` 을 Claude 에 쓰지 않는다.** `count_tokens` 엔드포인트를 모델별로 호출한다.
+→ 정규화 보고용 기준 토크나이저 1개를 정하고, **벤더 네이티브 청구 토큰 수를 별도 병기**한다.
+
+### 7.4 🔴 RunManifest 없이는 실험이 아니다
+
+```
+RunManifest(
+    model_id,        # 날짜 고정 ID. 별칭 금지
+    prompt_hash,     # 프롬프트는 버전 관리 대상
+    corpus_hash,
+    tool_versions,   # ruff·mypy 는 pre-1.0 → 정확히 핀
+    params, sample_n, ts,
+)
+```
+
+3개월 뒤 숫자를 재현할 수 없으면 실험 플랫폼이 아니다.
+
+### 7.5 🔴 파이썬 호출그래프 도구는 전멸했다
+
+PyCG(2023 아카이브) · JarvisCG(2026-03 아카이브) · **Pyre/Pysa(2026-06 Meta 아카이브)** ·
+scalpel(2022 정지) · rope(문법 지원 3.10까지). **살아있는 전용 도구가 없다.**
+
+→ v1 은 `ruff analyze graph` 로 **모듈 단위 도달성만** 본다.
+→ 함수 단위(LibCST + jedi 직접 조합)는 **확장점으로 연기**한다.
+  여기 예산을 태우면 정작 논지를 못 만든다.
+
+### 7.6 🔴 데코레이터 함정
+
+`FunctionDef.lineno` 는 `def` 키워드를 가리키고 **데코레이터 줄을 포함하지 않는다.**
+Ruff 는 데코레이터 줄에 진단을 자주 낸다 → 보정 없으면 전부 `<module>` 로 오분류된다.
+
+```
+포함범위 = min(node.lineno, *[d.lineno for d in node.decorator_list])
+```
+
+---
+
+### 7.7 🔴 검증기는 근거가 **참인지** 검사하지 못한다
+
+decoy 검증기 11규칙은 근거의 **형식**(길이 · 낱말 수 · 인과 연결어)만 본다.
+
+[실측] `D015` 를 처음 쓸 때 `threading.Semaphore(4)` 를 가드로 삼았다.
+세마포어는 4 스레드 동시 진입을 허용하므로 **그 경쟁은 실제로 일어난다** —
+안전 주장이 거짓이었고 **11개 규칙을 전부 통과했다.** 손으로 검토하다 잡았다.
+
+안전 주장이 거짓인 decoy 는 없는 것보다 나쁘다 — **맞는 지적을 FP 로 채점한다.**
+
+→ 가드 훅(`.claude/hooks/decoy-validate-guard.sh`)이 형식을 자동으로 막지만,
+  **바닥선이지 충분조건이 아니다.** decoy 작성은 가드를 직접 짜는 것과 같은
+  엄밀함을 요구하고, 도구가 대신할 수 없는 층이 남는다.
+
+### 7.8 미끼 효과는 리뷰어 설정에 의존한다
+
+[실측] 같은 코퍼스인데 `--select ALL` 은 9/10, 좁은 선택은 훨씬 적게 물린다.
+**단일 설정으로 decoy 품질을 판정하면 안 된다.**
+
+그리고 「안 물림 = 나쁨」이 아니다. 셋으로 갈린다 — 물림(시험됨) ·
+안 물림이지만 추론 대상(미시험) · 안 물림이고 미끼가 약함(나쁨).
+**뒤의 둘은 정적분석기만으로 구별할 수 없고**, 도구가 구별했다고 말하지 않는다.
+
+[실측] `type_narrowed` 는 0/2 다 — Ruff 에 그런 룰이 없고 mypy 는 좁힘을
+**정당하다고 인정**한다. 구조적 사실이지 decoy 결함이 아니다.
+
+### 7.9 매칭 정밀도는 도구 의존적이다
+
+[실측] 같은 결함을 Ruff 는 호출 시작 줄(L9)로, bandit 은 `shell=True` 인자 줄(L11)로
+보고한다. 결함 구간이 5–10 이면 `slack=0` 에서 한쪽만 TP 가 된다 —
+**리뷰 품질 차이가 아니라 보고 관례 차이다.**
+
+→ 단일 slack 값으로 낸 숫자를 결론으로 쓰지 않는다. 스윕해서 **흔들리는지**를
+  같이 낸다. 스윕은 **채점만** 다시 한다 — 리뷰어를 다시 돌리면 slack 효과와
+  실행 변동이 섞인다.
+
+## 7bis. 측정 프로토콜
+
+### 7bis.1 🔴 Batch API 는 지연 비교를 무효화한다
+
+정확도·비용은 batch 로 (50% 할인), **지연은 별도의 동기·스트리밍 소규모 실험으로** 분리한다.
+둘을 하나의 "성능" 점수로 병합하지 않는다.
+
+확인된 실격 사유 5가지:
+
+1. **양쪽 결과 스키마에 요청별 타이밍 필드가 아예 없다** (batch 단위 `created_at`/`completed_at` 뿐)
+2. 파생 duration 은 모델 속도가 아니라 **큐 깊이**를 잰다
+3. Anthropic 은 batch 에서 `speed: "fast"` 를 거부한다 — 사유를 직접 밝힌다:
+   *"Fast mode tunes synchronous latency, which doesn't apply to asynchronous batch processing."*
+4. **`stream: true` 를 거부한다** → TTFT 가 구조적으로 정의 불가
+5. 결과가 **임의 순서**로 반환된다 → 도착 순서 복원조차 불가
+
+보너스: batch 는 캐시 적중이 best-effort 라 **비용도 실행마다 변동한다.**
+
+### 7bis.1a 🔴 다회 실행의 의미론
+
+`temperature` 도 `seed` 도 없으므로 다회 샘플링이 재현성의 유일한 수단이다(§7.3).
+그러면 대상당 지적 집합이 N개 나오는데, 이걸 어떻게 다루느냐가 결과를 바꾼다.
+
+**빈도는 노이즈가 아니라 신호다.** 제약이 공짜로 주는 유일한 관측치다.
+
+```
+group_runs(runs) → ObservationSet
+                     └ ObservedFinding(finding, runs: frozenset[int], variants)
+                          runs 를 **개수가 아니라 집합**으로 드는 이유:
+                          "3번째 실행에서 뭘 봤나" 와 "6번 이상" 이
+                          둘 다 사후에 유도된다. 비용 0.
+```
+
+채점은 **고유 지적당 한 번**. 임계값은 집계 시점에 건다 →
+k 를 스윕해도 재채점이 없고, 채점 비용이 임계값 수에 비례하지 않는다.
+
+**두 숫자를 절대 섞지 않는다:**
+
+| 숫자 | 의미 |
+|---|---|
+| 단일 실행 기대값 (`in_run(i)` 평균) | **개발자가 실제로 보는 것** |
+| k-임계 (`at_least(k)`) | N회 실행이 필요한 **기법** |
+
+그룹핑 정책("같은 지적인가")은 그 자체가 측정 선택이므로 `RunManifest.grouper` 에 싣는다.
+
+**공짜로 열리는 결과**: 정답이 있으므로 *"자기일관성이 정확성을 예측하는가"* 를
+답할 수 있다. 교차모델 합의는 이미 약한 대리지표로 반증됐지만(§4.3) 자기일관성은
+다른 질문이고, 코드리뷰에서 측정된 적이 없다. 판정자 문헌의 **일관성-편향 역설**
+(test-retest 0.99 와 위치편향 0.19 공존)이 경고하는 바가 정확히 이것이라
+**결과가 어느 쪽이든 의미가 있다.**
+
+### 7bis.2 지연 측정 규칙
+
+- **TTFT 는 스트리밍에서 직접 잰다.** 비스트리밍이나 `get_final_message()` 에서 유도하지 않는다.
+- 추론 모델은 **지표 2개**: TTFT(첫 *추론* 토큰) + Time to First Answer Token
+- **출력 길이를 통제한다** — 출력 50% 감소 ≈ 지연 50% 감소인데,
+  입력 50% 감소는 지연 1–5% 개선에 그친다. **수다스러운 모델이 공짜로 느려 보인다.**
+- **워밍업 2–3회를 폐기한다** — TLS/DNS 뿐 아니라 **스키마 문법 컴파일** 때문이다 (§7bis.3)
+- `max_retries=0`. 재시도는 직접 센다.
+- 429/5xx/529 시행은 **폐기하고 재실행**한다. 429 율은 별도 신뢰성 지표로 보고한다.
+- P50 + P90/P99 + n + stddev. **클라이언트 리전을 고정하고 공개**한다.
+- `service_tier` 를 양쪽 고정한다 — OpenAI `flex` 는 의도적으로 느리고 `priority` 는 의도적으로 빠르다.
+  Priority 와 standard 를 붙이는 건 측정이 아니다.
+
+### 7bis.3 🔴 스키마 문법이 첫 호출에 컴파일된다
+
+양 벤더 모두 구조화 출력 스키마를 **첫 사용 시 컴파일하고 24시간 캐시**한다.
+워밍업 없이 측정하면 **첫 시행이 스키마 컴파일 시간**이다.
+
+### 7bis.4 구조화 출력 — 양 벤더 역량 차이
+
+| | Anthropic `output_config.format` | OpenAI `strict: true` |
+|---|---|---|
+| 강제력 | 제약 디코딩으로 **엄격 보장** | 엄격 보장 |
+| **재귀 스키마** | **미지원** | **지원** (`"$ref": "#"`) |
+| 기타 미지원 | 외부 `$ref`, `minimum`/`maximum`, `minLength`/`maxLength`, `pattern`, `maxItems` | — |
+
+→ 🔴 **공통 출력 스키마를 평탄하게(non-recursive) 설계한다.** 양쪽을 통과해야 한다.
+→ 🔴 Anthropic SDK 는 **스키마를 조용히 재작성한다** (미지원 제약을 제거해 `description` 으로 접고
+  `additionalProperties: false` 를 주입). **Pydantic 모델이 아니라 wire 스키마를 로깅한다.**
+
+**강제 tool use 는 쓰지 않는다** — `claude-opus-5-5` / `claude-fable-5-1` / `claude-mythos-5-1`
+에서 `tool_choice: {"type": "any"|"tool"}` 은 **400 을 반환한다.**
+LiteLLM · instructor · PydanticAI · LangChain 의 기본 구조화 출력 경로가 전부 여기서 죽는다
+(→ §6.6 의 또 다른 근거).
+
+### 7bis.5 🔴 disclosure block 을 먼저 만든다
+
+첫 벤치마크 실행 **전에** 기계 생성 disclosure block 을 작성한다:
+
+```
+모델 ID (정확히) · 엔드포인트 · 보낸 파라미터 **와 생략한 파라미터** ·
+effort (명시값, "기본값" 금지) · 출력 상한과 여유 근거 ·
+호출별 캐시 필드 · 반복 수와 집계 규칙 · 하네스 git SHA ·
+벤더 네이티브 토큰 수 · 클라이언트 리전 · wall-clock 타임스탬프
+```
+
+이게 없으면 §8.3 의 무효화 사유 대부분이 **리뷰어에게 보이지 않는다.**
+
+---
+
+## 8. 지표
+
+### 8.1 규칙
+
+1. **🔴 층을 절대 섞지 않는다.** Recall 은 A·B 각각, FPR 은 C·D 각각.
+   섞으면 유리한 층 뒤에 숨을 수 있다.
+2. **FPR 은 두 정의를 병기한다** — clean 샘플당 지적 수 / 지적 1개 이상 받은 샘플 비율.
+3. **Youden's J = TPR + TNR − 1** 을 유병률 독립 헤드라인으로 (OWASP 선례).
+   + 명시적 가정 유병률에서의 precision + 민감도 곡선.
+4. **모든 수치에 Wilson 95% CI.**
+5. **매칭 함수 자체가 라벨 원천이다** → 신뢰도를 반드시 보고한다.
+6. **Tricorder 의 FPR 10% 개발자 이탈 임계**에 앵커한다 — 리더보드 밖의 의미를 준다.
+
+### 8.2 🔴 폐기한 지표
+
+원래 설계의 `Precision 88% / False Positive 12%` 는 **정확히 `1 − Precision`** 이다.
+지표 2개처럼 보이지만 **같은 수 하나를 두 번 적은 것**이다. 폐기한다.
+
+### 8.3 🔴 비교를 통째로 무효화하는 것들
+
+하나라도 해당하면 그 실험은 발표할 수 없다.
+
+1. "temperature 를 고정했다" — Anthropic 은 400 을 낸다. 말한 실험을 하지 않은 것이다.
+2. effort 를 고정하지 않고 "기본값으로" 비교 (Opus 5.5 `medium` vs Sonnet 5 `high`)
+3. 반복 호출에 캐시 무력화 없음 + 캐시 토큰 수 미보고
+4. 토크나이저 정규화 없이 $/토큰 비교, 또는 Anthropic 4.6/4.7 경계를 넘어 토큰 수 재사용
+5. 항목당 1회 실행, 오차막대 없음
+6. 프롬프트 템플릿 1종만 사용
+7. 추론/비추론 모델에 동일 출력 상한을 주고 "같은 예산" 이라고 표기
+8. 시스템 텍스트를 한쪽은 system 슬롯, 다른 쪽은 user 턴에 배치
+9. 1st-party 와 파트너 엔드포인트(Bedrock/Vertex/Foundry) 혼용을 미공개
+10. 실행 선택 정책 미공개 (여러 번 돌려 좋은 걸 고르기)
+
+---
+
+## 9. 정직성 요건
+
+README 에 **반드시** 들어가야 한다.
+
+1. **실제 리뷰 코멘트 중 결함 지적은 14% 뿐이다** (Bacchelli & Bird, 570건 카드분류).
+   최대 범주는 *코드 개선* 29%.
+   → 결함 탐지만 채점하는 벤치마크는 **리뷰어가 하는 일의 1/8** 을 재고 있다.
+
+2. **일치와 유용은 다르다.** c-CRAB 에서 정답 테스트 통과는 20–32% 인데
+   사람이 유용하다고 평가한 건 **84%** 였다.
+   이 둘을 섞는 게 이 분야 숫자가 과대포장되는 가장 흔한 경로다.
+
+3. **50:50 세트의 precision 은 프로덕션 precision 이 아니다.**
+   `(TPR, FPR)` 로 보고해 누구나 자기 유병률에서 재유도할 수 있게 한다.
+
+4. **오염**: A·D 층은 면역(직접 생성/작성), B·C 층은 아니다. 명시한다.
+
+---
+
+## 10. 라이선스 규칙
+
+- **MIT / BSD / Apache-2.0 레포만** 인증된 GitHub API 로 마이닝한다.
+- 배포는 `(repo, SHA, path, line range)` + 자체 라벨 + **재구성 스크립트**.
+  **소스 코드 자체를 번들하지 않는다.** (Defects4J · SWE-bench 둘 다 이 방식)
+- GitHub AUP 연구 예외는 **결과물이 open access 일 것**을 요구한다.
+
+---
+
+## 11. 구현 현황
+
+### 완료 — API 없이 끝까지 동작한다
+
+| 레이어 | 내용 |
+|---|---|
+| `domain` | 위치 정규화 · 지적 · 근거 · **관측(빈도)** · **Reviewer** · 매니페스트 |
+| `analysis` | Ruff · mypy 어댑터 · AST 심볼 인덱스 · **일괄 분석** · **호스트 격리** |
+| `reviewers` | **통합 Reviewer 층** · SARIF/bandit/native 가져오기 |
+| `verify` | citation · guard(callee 포함) · corroboration · reachability · confidence |
+| `eval` | 채점자 **4종** · **편차** · **짝 채점** · **민감도** · **미끼 측정** · Wilson CI |
+| `store` | SQLite · 외래키로 E1 강제 · `config_hash` 재현성 검사 |
+| `corpus` | decoy 템플릿 · 검증기 11규칙 · **19쌍**(분류 10종 커버) |
+| `llm` | 스키마 · 프롬프트 · 파서 · replay · **Anthropic/OpenAI 어댑터** |
+| `cli` | `measure` · `eval` · `import` · `doctor` · `history` · `decoy` |
+| 테스트 | **244개 · 26초** |
+
+### 남은 것
+
+| 항목 | 막는 것 |
+|---|---|
+| **decoy 19 → 150** | 손으로 쓰는 작업. 음성 100 미만이면 FPR 이 숫자가 아니다 |
+| 모델 실측 | 자격증명 (어댑터는 준비됨 — 로그인하면 바로 돈다) |
+| A·B·C 층 코퍼스 | 마이닝 인프라 · Docker |
+| `codeproof review` · `report` | 미구현 |
+| `api/` FastAPI | v2 |
+
+## 12. 원 설계에서 바뀐 것
+
+### 초기 설계 검증에서 (세션 시작)
+
+| # | 원 설계 | 확정 | 근거 |
+|---|---|---|---|
+| 1 | `Java Source Parser` + Ruff/mypy 공존 | Python 리뷰, Java 는 Protocol 확장점 | Ruff 는 Java 를 파싱 못 함 |
+| 2 | `Precision 88% / FP 12%` | FP 지표 재설계 | `12% = 1 − 88%`. 지표가 아님 |
+| 3 | `Validator → 실제 정답 비교` (출처 공백) | **공백을 논지로 전환** — 채점 기준 편차 | [소스] 발표된 Precision 이 정의에 따라 20배 차이 |
+| 4 | `Verification` 과 `Validator` 혼재 | `verify/`(런타임) / `eval/`(오프라인) 분리 | 수명주기·테스트 방법이 다름 |
+| 5 | 매칭 규칙 없음 | `matcher` + fingerprint 정책 명시 | 매칭 함수 자체가 라벨 원천 |
+| 6 | Gemini 포함 3종 | Claude + Codex 2종 | 사용자 결정 |
+| 7 | FastAPI 최상단 | CLI 주 진입점 | 엔진이 HTTP 를 알면 배치를 못 돌림 |
+| 8 | 단일 정답 · 단일 코퍼스 | 음성 4개 층 + 기성 양성 코퍼스 | 자기 채점 회피 + TN 정의 확보 |
+
+### 구현하며 드러난 것
+
+| # | 발견 | 조치 |
+|---|---|---|
+| 9 | 타입 허용목록은 새 타입이 생기면 뚫린다 | **레이어 의존 그래프** 하나로 교체 |
+| 10 | `Sample` 이 런타임과 라벨을 같이 들었다 | `ReviewTarget`(domain) / `LabeledSample`(eval) 분리 |
+| 11 | 다회 실행을 평균·합집합으로 뭉개면 정보가 사라진다 | **빈도를 1급 값**으로 (`ObservedFinding.runs`) |
+| 12 | per-finding 채점이 과잉지적을 가린다 | **PrimeVul 짝 채점** 도입. Ruff 0/10 |
+| 13 | 어휘가 다른 채점자를 편차에 섞으면 범주 차이가 편차로 둔갑 | `Grader.emits` 로 거른다 (0~44 → 18~44) |
+| 14 | 가드는 제거될 수도 **우회**될 수도 있다 | V9 를 `guard_symbol` 참조까지 확장 |
+| 15 | 코퍼스를 프로젝트 린트 대상에 두면 표본이 파괴된다 | `extend-exclude` |
+| 16 | 검증 레이어가 안전/취약을 구별 못 했다 | **callee-guard** 추가. 못 보는 것(taint)은 문서화 |
+| 17 | `Analyzer`/`ReviewProvider` 이원화로 새 종류마다 새 경로가 필요했다 | **`Reviewer` 1급 개념**으로 통합 |
+| 18 | 「SARIF 면 다 된다」가 절반만 맞았다 (bandit 미지원) | `FindingFormat` Protocol |
+| 19 | mypy 가 호스트 `strict=true` 를 주워왔다 | `--config-file=/dev/null`. 매니페스트가 거짓이었다 |
+| 20 | mypy 캐시가 **삭제된 경로**의 진단을 냈다 | `--no-incremental` |
+| 21 | 채점자가 분석기를 직접 돌려 61초를 썼다 | **증거를 받는다** 원칙을 `eval/` 에도 적용 |
+| 22 | 검증기가 근거의 **참/거짓**을 못 본다 | 한계를 문서화 + 가드 훅은 형식만 |
+| 23 | `cli.py` 가 8곳에서 구현체를 직접 생성 (문서는 registry 를 주장) | registry 신설 + 자기강제 테스트 |
+| 24 | 안전 근거 검증을 **일부는 기계로** 할 수 있었다 | 실행·AST 로 반증 시도. 못 하는 것은 명시 면제 |
+| 25 | `PairedFixGrader` 가 `score_pairs()` 에 흡수된 줄 알았다 | **다른 층이었다.** 구현 + 설계 정정 (§4.1a) |
+| 26 | 러너가 셋이라 `bind_run` 훅이 한쪽에만 걸렸다 — CLI 가 짝 채점을 **전부 TP** 로 기록 | 러너를 하나로 합치고 아키텍처 테스트로 고정 (§4.1b) |
+| 27 | 짝 채점자가 미바인딩 시 조용히 기본값으로 채점 | `UnboundGraderError` 로 **거부**. 그 동작을 정답으로 적었던 테스트도 정정 |
+| 28 | 통합 과정에서 `effort`·`tool_versions` 가 매니페스트에서 증발 | 매니페스트 항목을 **리뷰어가 신고**하도록 (`manifest_fields` · `tool_versions`) |
+
+## 부록 A. 주요 참고문헌
+
+**벤치마크** — [SWRBench 2509.01494](https://arxiv.org/abs/2509.01494) ·
+[CR-Bench 2603.11078](https://arxiv.org/abs/2603.11078) ·
+[c-CRAB 2603.23448](https://arxiv.org/abs/2603.23448) ·
+[CRScore 2409.19801](https://arxiv.org/abs/2409.19801) ·
+[CodeReviewer 2203.09095](https://arxiv.org/abs/2203.09095) ·
+[Martian](https://github.com/withmartian/code-review-benchmark) ·
+[AACR-Bench](https://github.com/alibaba/aacr-bench)
+
+**음성 통제** — [SQuAD 2.0 1806.03822](https://arxiv.org/abs/1806.03822) ·
+[Contrast Sets 2004.02709](https://arxiv.org/abs/2004.02709) ·
+[SecLLMHolmes 2312.12575](https://arxiv.org/abs/2312.12575) ·
+[PrimeVul 2403.18624](https://arxiv.org/abs/2403.18624) ·
+[OWASP Benchmark](https://owasp.org/www-project-benchmark/) ·
+[Juliet/SARD](https://samate.nist.gov/SARD/)
+
+**판정자 신뢰도** — [Reliability without Validity 2606.19544](https://arxiv.org/html/2606.19544v1) ·
+[Self-Preference 2404.13076](https://arxiv.org/abs/2404.13076) ·
+[When LLMs Agree 2607.08065](https://arxiv.org/abs/2607.08065)
+
+**측정 민감도** — [Sclar et al. 2310.11324](https://arxiv.org/abs/2310.11324) ·
+[Leaderboard Illusion 2504.20879](https://arxiv.org/abs/2504.20879)
+
+**변이/마이닝** — [Google Mutation Testing 2102.11378](https://arxiv.org/pdf/2102.11378) ·
+[Gopinath et al. ISSRE 2014](https://rahul.gopinath.org/resources/issre2014/gopinath2014mutations.pdf) ·
+[SWE-bench+ 2410.06992](https://arxiv.org/abs/2410.06992) ·
+[Herbold et al. 2011.06244](https://arxiv.org/abs/2011.06244)
+
+**리뷰 실증** — [Bacchelli & Bird ICSE 2013](https://sback.it/publications/icse2013.pdf) ·
+[Tricorder ICSE 2015](https://research.google.com/pubs/archive/43322.pdf) ·
+[Sadowski et al. ICSE-SEIP 2018](https://sback.it/publications/icse2018seip.pdf)

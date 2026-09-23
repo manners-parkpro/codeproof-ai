@@ -1,0 +1,128 @@
+"""짝 채점 - 과잉지적은 짝을 지어야만 보인다."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from codeproof_ai.analysis.python.ruff import RuffAnalyzer
+from codeproof_ai.domain.observation import ObservationSet
+from codeproof_ai.eval.grading.base import Judgment, Outcome
+from codeproof_ai.eval.grading.safety import ProvableSafetyGrader
+from codeproof_ai.eval.loader import load_decoy_samples
+from codeproof_ai.eval.pairing import (
+    PairVerdict,
+    discrimination_rate,
+    pair_summary,
+    score_pairs,
+)
+from codeproof_ai.eval.runner import SampleOutcome, run_reviewer
+from codeproof_ai.reviewers.wrap import AnalyzerReviewer
+
+DECOYS = Path(__file__).resolve().parents[2] / "corpus" / "decoys"
+G = "provable_safety"
+
+
+def _outcome(sid: str, *, safe: bool, outcomes: list[Outcome]) -> SampleOutcome:
+    return SampleOutcome(
+        sample_id=sid,
+        is_proven_safe=safe,
+        observations=ObservationSet(
+            target_id=sid, reviewer="ruff", total_runs=1, grouper="fingerprint",
+            observed=(),
+        ),
+        judgments={G: tuple(Judgment(f"k{i}", o, G) for i, o in enumerate(outcomes))},
+    )
+
+
+def _pair(neg: list[Outcome], pos: list[Outcome]) -> PairVerdict:
+    got = score_pairs(
+        [
+            _outcome("d", safe=True, outcomes=neg),
+            _outcome("d#twin", safe=False, outcomes=pos),
+        ],
+        G,
+    )
+    assert len(got) == 1
+    return got[0].verdict
+
+
+class TestFourVerdicts:
+    def test_correct_discrimination(self) -> None:
+        """양성만 지적 - 유일하게 옳은 결과."""
+        assert _pair([], [Outcome.TRUE_POSITIVE]) is PairVerdict.CORRECT
+
+    def test_over_flagging(self) -> None:
+        """🔴 둘 다 지적 - 구별하지 못했다. per-finding 으로는 안 보인다."""
+        assert (
+            _pair([Outcome.FALSE_POSITIVE], [Outcome.TRUE_POSITIVE])
+            is PairVerdict.OVER_FLAG
+        )
+
+    def test_under_flagging(self) -> None:
+        assert _pair([], []) is PairVerdict.UNDER_FLAG
+
+    def test_reversed(self) -> None:
+        assert _pair([Outcome.FALSE_POSITIVE], []) is PairVerdict.REVERSED
+
+
+class TestUndecidableIsNotSilence:
+    def test_undecidable_on_positive_is_not_detection(self) -> None:
+        """판정 불가는 '지적했다' 가 아니다 - 판정 범위 밖일 뿐이다."""
+        assert _pair([], [Outcome.UNDECIDABLE]) is PairVerdict.UNDER_FLAG
+
+    def test_undecidable_on_negative_is_not_a_false_positive(self) -> None:
+        assert (
+            _pair([Outcome.UNDECIDABLE], [Outcome.TRUE_POSITIVE])
+            is PairVerdict.CORRECT
+        )
+
+
+class TestPairingRequiresBothSides:
+    def test_unpaired_sample_is_skipped(self) -> None:
+        assert score_pairs([_outcome("d", safe=True, outcomes=[])], G) == ()
+
+    def test_positive_without_negative_is_skipped(self) -> None:
+        assert score_pairs([_outcome("d#twin", safe=False, outcomes=[])], G) == ()
+
+
+class TestPerFindingHidesWhatPairingShows:
+    """🔴 이 테스트가 짝 채점의 존재 이유다."""
+
+    def test_same_rule_on_both_sides_looks_fine_per_finding(self) -> None:
+        neg = _outcome("d", safe=True, outcomes=[Outcome.FALSE_POSITIVE])
+        pos = _outcome("d#twin", safe=False, outcomes=[Outcome.TRUE_POSITIVE])
+
+        # per-finding: TP 1 · FP 1 -> Precision 50%, 양성 쪽만 보면 100%
+        tp = sum(
+            1 for j in pos.judgments[G] if j.outcome is Outcome.TRUE_POSITIVE
+        )
+        assert tp == 1, "양성 쪽만 보면 완벽해 보인다"
+
+        # 짝: 구별 실패
+        assert score_pairs([neg, pos], G)[0].verdict is PairVerdict.OVER_FLAG
+
+
+class TestAgainstShippedCorpus:
+    def test_ruff_discriminates_poorly(self) -> None:
+        """실측 - Ruff 는 이 코퍼스에서 한 쌍도 구별하지 못한다.
+
+        숫자가 바뀌면 코퍼스나 분석기가 바뀐 것이다. 확인하고 갱신한다.
+        """
+        samples = load_decoy_samples(DECOYS)
+        run = run_reviewer(
+AnalyzerReviewer(RuffAnalyzer()), samples, [ProvableSafetyGrader()], harness_sha="test"
+        )
+        pairs = score_pairs(run.outcomes, G)
+        hit, total = discrimination_rate(pairs)
+
+        assert total == len(samples) // 2, "모든 decoy 가 짝을 이뤄야 한다"
+        assert hit == 0, f"Ruff 가 {hit}/{total} 을 구별했다 - 실측이 바뀌었다"
+
+        counts = pair_summary(pairs)
+        assert counts[PairVerdict.OVER_FLAG] >= 1, "D002 의 P-V 가 사라졌다"
+
+    def test_every_decoy_has_a_twin(self) -> None:
+        samples = load_decoy_samples(DECOYS)
+        ids = {s.sample_id for s in samples}
+        for s in samples:
+            assert s.paired_with in ids, f"{s.sample_id} 의 짝이 없다"
