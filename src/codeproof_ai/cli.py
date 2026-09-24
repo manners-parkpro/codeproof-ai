@@ -34,6 +34,7 @@ from codeproof_ai.eval.pairing import (
     pair_summary,
     score_pairs,
 )
+from codeproof_ai.eval.report import render_measurements
 from codeproof_ai.eval.runner import (
     ReviewerRun,
     SampleOutcome,
@@ -181,15 +182,30 @@ def build_parser() -> argparse.ArgumentParser:
         help="같은 설정으로 돌린 실행들을 비교한다",
     )
 
-    rep = sub.add_parser("report", help="리포트 생성")
-    rep.add_argument("--run", required=True, help="run id")
-    rep.add_argument(
-        "--by-oracle",
-        action="store_true",
-        help="채점자별 편차 — 이 프로젝트의 헤드라인",
-    )
+    _add_report_parser(sub)
 
     return parser
+
+
+def _add_report_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    """측정값 생성 - 문서가 숫자를 베끼면 반드시 낡는다."""
+    rep = sub.add_parser(
+        "report",
+        help="측정값 문서를 생성한다 (산문에 숫자를 베끼지 않기 위해)",
+    )
+    rep.add_argument("--corpus", default="corpus/decoys")
+    rep.add_argument("--analyzer", default="ruff")
+    rep.add_argument("--ruff-select", default="ALL")
+    rep.add_argument(
+        "--out",
+        default="docs/MEASUREMENTS.md",
+        help="생성 경로. '-' 면 표준출력",
+    )
+    rep.add_argument(
+        "--check",
+        action="store_true",
+        help="쓰지 않고 최신인지만 확인한다 (다르면 exit 1)",
+    )
 
 
 def _cmd_decoy_validate(corpus: Path, *, strict: bool) -> int:
@@ -708,6 +724,50 @@ def _dispatch_decoy(args: argparse.Namespace) -> int:
     return _cmd_decoy_new(corpus, args.decoy_id)
 
 
+def _cmd_report(
+    corpus: Path, analyzer: str, ruff_select: str, out: str, *, check: bool
+) -> int:
+    """🔴 측정값을 **생성**한다 - 문서가 숫자를 베끼면 반드시 낡는다."""
+    samples = load_decoy_samples(corpus)
+    if not samples:
+        print(f"샘플이 없다: {corpus}", file=sys.stderr)
+        return 2
+
+    kwargs: dict[str, object] = {}
+    if analyzer == "ruff" and ruff_select:
+        kwargs["select"] = tuple(ruff_select.split(","))
+    try:
+        an = create_analyzer(analyzer, **kwargs)
+    except UnknownAnalyzerError as exc:
+        print(exc, file=sys.stderr)
+        return 2
+
+    graders = _graders_for(analyzer, 0, samples)
+    run = run_reviewer(AnalyzerReviewer(an), samples, graders)
+    body = render_measurements(run, samples, graders)
+
+    if out == "-":
+        print(body, end="")
+        return 0
+
+    target = Path(out)
+    if check:
+        current = target.read_text(encoding="utf-8") if target.is_file() else ""
+        if current == body:
+            print(f"{target} 는 최신이다")
+            return 0
+        print(
+            f"{target} 가 낡았다 - `uv run codeproof report` 로 다시 만든다",
+            file=sys.stderr,
+        )
+        return 1
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(body, encoding="utf-8")
+    print(f"{target} 를 썼다 ({len(body.splitlines())}줄)")
+    return 0
+
+
 def _cmd_decoy_stats(corpus: Path, ruff_select: str) -> int:
     """🔴 지적이 없으면 채점할 것도 없다 - 물리지 않는 decoy 를 세어 150 을 채우면
     숫자만 는다."""
@@ -770,6 +830,9 @@ _COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
         cache_policy=a.cache_policy,
         slack=a.slack,
         store_path=a.store,
+    ),
+    "report": lambda a: _cmd_report(
+        Path(a.corpus), a.analyzer, a.ruff_select, a.out, check=a.check
     ),
     "doctor": lambda _a: _cmd_doctor(),
     "history": lambda a: _cmd_history(a.store, a.limit, a.repro),

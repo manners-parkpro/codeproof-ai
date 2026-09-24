@@ -1,0 +1,28 @@
+decoy_id = "D043-resolved-before-compare"
+trap_kind = "upstream_validation"
+
+[bait]
+apparent_defect = """
+_under_root 이 is_relative_to 만으로 경로를 판정한다. 그 메서드는 문자열 접두사
+비교라 .. 나 심볼릭 링크를 해석하지 않으므로, 정규화 없이 쓰면 상위 디렉터리로
+빠져나가는 입력을 통과시키는 전형적인 경로 검사 우회로 읽힌다.
+"""
+lure_lines = [8, 9]
+
+[safety]
+claim = "_under_root 의 접두사 비교는 우회될 수 없다"
+justification = """
+_under_root 은 비공개 함수이고 이 모듈에서 부르는 곳은 resolve_entry 한 곳뿐인데,
+그 함수가 resolve 로 .. 와 심볼릭 링크를 모두 해석한 절대 경로를 만들어 넘기기
+때문에 _under_root 이 받는 값에는 우회에 쓸 상대 요소가 남아 있지 않다. 따라서
+접두사 비교만으로 충분하고, 정규화를 판정 함수 안으로 옮기면 같은 경로를 두 번
+resolve 하게 된다.
+"""
+guard_symbol = "resolve_entry"
+guard_lines = [12, 15]
+
+[twin]
+defect = """
+resolve 호출이 사라져 정규화되지 않은 경로가 판정에 들어간다.
+"../../etc/passwd" 같은 값이 접두사 비교를 통과해 루트 밖 경로가 반환된다.
+"""

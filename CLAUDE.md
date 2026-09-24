@@ -22,6 +22,7 @@ uv run mypy                      # files 설정은 pyproject 에
 uv run codeproof doctor          # 자격증명·도구 준비 상태
 uv run codeproof measure         # 정적분석기로 채점 기준 편차 측정 (API 불필요)
 uv run codeproof history         # 저장된 실행 · 재현성 확인
+uv run codeproof report          # docs/MEASUREMENTS.md 생성 (--check 로 최신 확인)
 uv run codeproof decoy validate  # decoy 규격 검사
 uv run codeproof decoy new <id>  # 템플릿에서 새 decoy
 ```
@@ -452,6 +453,24 @@ D층 집계 FPR 은 「도구의 오탐률」이 아니라 **「내가 고른 �
 ⚠ 지적은 **독립 시행이 아니다** — decoy 하나가 여러 지적을 낸다. 지적 단위 CI 는
   실제보다 좁으므로 **샘플 단위 비율을 같이** 낸다.
 
+### F5b. 변동하는 측정값을 산문에 베끼지 않는다 🔴
+
+```bash
+uv run codeproof report            # docs/MEASUREMENTS.md 생성
+uv run codeproof report --check    # 낡았으면 exit 1
+```
+
+[실측] 코퍼스를 19 → 25 → 37 → 43 쌍으로 키우는 동안 문서 일관성 테스트가
+**매번** README·DESIGN·CLAUDE 세 곳의 낡은 숫자를 잡았다. 테스트가 제 일을
+한 것이지만 **반복은 설계 신호**였다 - 변동값을 산문에 박아 둔 것이 원인이다.
+
+- 현재 수치는 **생성물**이 든다. 산문은 안정된 주장만 쓰고 그 파일을 가리킨다.
+- 산문에 숫자를 남길 때는 **표본 크기를 붙인다** — `[실측 · 37쌍]`.
+  숫자와 표본이 붙어 다니면 **스스로 날짜를 밝히므로** 나중에도 읽힌다.
+- 🔴 생성물에 **시각·run_id 를 넣지 않는다.** 넣으면 코퍼스가 그대로여도
+  매번 달라져 「최신인가」를 물을 수 없다. 재현 정보는 `config_hash` 로 충분하다.
+- 생성물은 손으로 고치지 않는다. 파일 첫 줄이 그렇게 말하고 테스트가 강제한다.
+
 ### F6. 다회 실행을 뭉개지 않는다 🔴
 
 평균도 합집합도 아니다. **빈도가 신호다** — seed 도 temperature 도 없는 제약이
@@ -678,6 +697,8 @@ Google 실측으로 변이체의 85% 가 무익하다. arid-node 억제(로깅·
 | 판정 불가를 FP 로 | F4 |
 | 짝을 개별 지적으로만 채점 | F5 |
 | 구성비를 선언 안 하고 집계 FPR 만 | F5a |
+| 변동 측정값을 산문에 베끼기 | F5b — 생성물이 든다 |
+| 생성물에 시각·run_id | F5b — 최신 여부를 못 묻는다 |
 | CI 겹치는데 「분류마다 다르다」 | F5a |
 | 다회 실행을 평균/합집합 | F6 |
 | `rate` 를 판정 근거로 | F6 |

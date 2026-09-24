@@ -913,7 +913,7 @@ README 에 **반드시** 들어가야 한다.
 | `verify` | citation · guard(callee 포함) · corroboration · reachability · confidence |
 | `eval` | 채점자 **4종** · **편차** · **짝 채점** · **민감도** · **미끼 측정** · Wilson CI |
 | `store` | SQLite · 외래키로 E1 강제 · `config_hash` 재현성 검사 |
-| `corpus` | decoy 템플릿 · 검증기 **12규칙** · 실행 반증(`proof.py`) · **37쌍**(분류 14종 커버) |
+| `corpus` | decoy 템플릿 · 검증기 **12규칙** · 실행 반증(`proof.py`) · 분류 14종 × 가드 위치 4종 (쌍 수는 [MEASUREMENTS](MEASUREMENTS.md)) |
 | `llm` | 스키마 · 프롬프트 · 파서 · replay · **Anthropic/OpenAI 어댑터** |
 | `cli` | `measure` · `eval` · `import` · `doctor` · `history` · `decoy` |
 | 테스트 | **244개 · 26초** |
@@ -922,7 +922,7 @@ README 에 **반드시** 들어가야 한다.
 
 | 항목 | 막는 것 |
 |---|---|
-| **decoy 37 → 150** | 손으로 쓰는 작업. 집계 CI 보다 **분류별 이질성 검정**이 진짜 이유다 (§3.5) |
+| **decoy → 150** (목표) | 손으로 쓰는 작업. 집계 CI 보다 **분류별 이질성 검정**이 진짜 이유다 (§3.5) |
 | 모델 실측 | 자격증명 (어댑터는 준비됨 — 로그인하면 바로 돈다) |
 | A·B·C 층 코퍼스 | 마이닝 인프라 · Docker |
 | `codeproof review` · `report` | 미구현 |

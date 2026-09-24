@@ -14,10 +14,11 @@ from pathlib import Path
 
 import pytest
 
-from codeproof_ai.cli import _COMMANDS, build_parser
+from codeproof_ai.cli import _COMMANDS, build_parser, main
 from codeproof_ai.corpus.decoy import TrapKind
 
 ROOT = Path(__file__).resolve().parents[2]
+MEASUREMENTS = ROOT / "docs" / "MEASUREMENTS.md"
 DECOYS = ROOT / "corpus" / "decoys"
 DOCS = {
     "README.md": ROOT / "README.md",
@@ -54,6 +55,36 @@ class TestReferencedFilesExist:
         assert not missing, f"깨진 내부 링크: {sorted(missing)}"
 
 
+class TestGeneratedMeasurementsAreCurrent:
+    """🔴 측정값은 생성물이다 - 산문에 베끼면 반드시 낡는다.
+
+    [실측] 코퍼스를 19 -> 25 -> 37 -> 43 쌍으로 키우는 동안 **매번** 아래
+    `TestCorpusCountIsCurrent` 가 낡은 숫자를 잡았다. 테스트가 제 일을 한
+    것이지만 반복되는 것은 신호였다 - 변동하는 값을 산문에 박아 둔 게 원인이다.
+    그래서 `codeproof report` 가 `docs/MEASUREMENTS.md` 를 생성하고,
+    산문은 안정된 주장만 쓰고 숫자는 그 파일을 가리킨다.
+    """
+
+    def test_measurements_file_exists(self) -> None:
+        assert MEASUREMENTS.is_file(), (
+            "docs/MEASUREMENTS.md 가 없다 - `uv run codeproof report` 로 만든다"
+        )
+
+    def test_it_is_marked_as_generated(self) -> None:
+        head = MEASUREMENTS.read_text(encoding="utf-8").splitlines()[0]
+        assert "생성된 파일" in head and "codeproof report" in head, (
+            "생성물이라는 표시가 없으면 누군가 손으로 고친다"
+        )
+
+    def test_it_is_up_to_date(self) -> None:
+        """🔴 코퍼스가 자랐는데 다시 만들지 않았으면 여기서 걸린다."""
+        code = main(["report", "--check"])
+        assert code == 0, (
+            "docs/MEASUREMENTS.md 가 코퍼스와 어긋난다 - "
+            "`uv run codeproof report` 로 다시 만든다"
+        )
+
+
 class TestCorpusCountIsCurrent:
     """decoy 수는 자주 바뀐다 - 문서가 따라가는지 본다."""
 
@@ -66,29 +97,42 @@ class TestCorpusCountIsCurrent:
 
     def test_claimed_pair_count_matches(self) -> None:
         actual = self._actual()
-        claims = {int(m) for m in re.findall(r"(\d+)쌍", _all_docs())}
-        # 목표치(150)는 주장이 아니라 목표다 - 실제값이 주장에 있어야 한다.
+        claims = {
+            int(m)
+            for m in re.findall(
+                r"(\d+)쌍", MEASUREMENTS.read_text(encoding="utf-8")
+            )
+        }
         assert actual in claims, (
-            f"decoy 가 {actual}쌍인데 문서는 {sorted(claims)}쌍이라고 한다"
+            f"decoy 가 {actual}쌍인데 생성된 측정값은 {sorted(claims)}쌍이라고 한다 - "
+            "`uv run codeproof report` 로 다시 만든다"
         )
 
-    def test_smaller_claims_are_marked_as_historical(self) -> None:
-        """실제보다 작은 수는 **과거 시점의 실측**이라고 밝혀야 한다.
+    def test_prose_carries_no_unmarked_count(self) -> None:
+        """🔴 산문의 쌍 수는 전부 **시점**이거나 **목표**여야 한다.
 
-        코퍼스가 자라도 과거 측정값은 그대로 유효하다 - 지우는 게 아니라
-        「그때의 숫자」라고 적는 것이 맞다. 다만 현재값으로 읽히면 안 된다.
+        현재값은 산문이 들지 않는다 - 생성물(`docs/MEASUREMENTS.md`)이 든다.
+        [실측] 19 -> 25 -> 37 -> 43 쌍을 거치며 이 테스트가 **매번** 산문의
+        낡은 숫자를 잡았다. 테스트가 제 일을 한 것이지만, 반복은 설계 신호였다.
+
+        허용되는 표기 셋:
+          · `목표` - 도달하려는 값이지 주장이 아니다
+          · `시점` - 그때의 실측이라고 밝힌 것
+          · `실측 · N쌍` - 코퍼스 크기를 함께 적어 **스스로 날짜를 밝힌** 값
+
+        마지막 것이 권장이다. 숫자와 그 숫자가 나온 표본 크기가 붙어 다니면
+        나중에 읽어도 무엇에 대한 값인지 분명하다.
         """
         actual = self._actual()
         text = _all_docs()
         unmarked: list[str] = []
         for m in re.finditer(r"(\d+)쌍", text):
-            if int(m.group(1)) >= actual:
-                continue
             window = text[max(0, m.start() - 60) : m.end() + 120]
-            if "시점" not in window and "목표" not in window:
+            if not any(mk in window for mk in ("시점", "목표", "실측")):
                 unmarked.append(window.strip()[:90])
         assert not unmarked, (
-            f"실제 {actual}쌍보다 작은 수가 시점 표기 없이 있다:\n"
+            f"산문에 시점·목표 표기 없는 쌍 수가 있다 (현재 {actual}쌍). "
+            "현재값은 docs/MEASUREMENTS.md 가 든다:\n"
             + "\n".join(f"  ...{u}..." for u in unmarked)
         )
 

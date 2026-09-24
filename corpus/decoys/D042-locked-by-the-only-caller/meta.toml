@@ -1,0 +1,28 @@
+decoy_id = "D042-locked-by-the-only-caller"
+trap_kind = "caller_held_lock"
+
+[bait]
+apparent_defect = """
+_consume 이 잔량을 읽어 비교한 뒤 그 값을 다시 깎는다. check-then-act 사이에
+다른 스레드가 끼어들면 두 호출이 같은 잔량을 보고 둘 다 통과해 버킷이 음수로
+내려가는 전형적인 경쟁으로 읽힌다. 모듈에 _lock 이 있는데 이 함수는 쓰지 않는다.
+"""
+lure_lines = [10, 12]
+
+[safety]
+claim = "_consume 의 check-then-act 는 경쟁 상태가 될 수 없다"
+justification = """
+_consume 은 비공개 함수이고 이 모듈에서 부르는 곳은 take 한 곳뿐인데, take 가
+with _lock 블록 안에서만 호출하기 때문에 _consume 본문은 항상 락을 보유한 단
+하나의 스레드에서만 실행된다. 따라서 비교와 차감 사이에 다른 스레드가 끼어들
+수 없고 잔량이 음수로 내려가지 않는다. 함수 안에 락을 중복으로 두면 일반
+Lock 에서는 교착이 되고, RLock 이어도 같은 구간을 두 번 잠그는 군더더기가 된다.
+"""
+guard_symbol = "take"
+guard_lines = [16, 18]
+
+[twin]
+defect = """
+take 에서 with _lock 이 사라져 _consume 이 상호배제 없이 실행된다.
+여러 스레드가 같은 잔량을 관측해 모두 통과하면 잔량이 음수가 된다.
+"""

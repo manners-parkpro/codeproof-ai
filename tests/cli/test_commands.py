@@ -278,13 +278,62 @@ class TestImport:
 class TestUnimplementedCommands:
     """🔴 미구현은 조용히 성공하지 않아야 한다."""
 
-    @pytest.mark.parametrize("cmd", ["review", "report"])
+    @pytest.mark.parametrize("cmd", ["review"])
     def test_returns_nonzero(
         self, cmd: str, capsys: pytest.CaptureFixture[str]
     ) -> None:
         args = {
-            "review": ["review", "--diff", "x", "--provider", "claude", "--effort", "low"],
-            "report": ["report", "--run", "x"],
+            "review": [
+                "review", "--diff", "x", "--provider", "claude", "--effort", "low"
+            ],
         }[cmd]
         assert main(args) == 1
         assert "미구현" in capsys.readouterr().err
+
+
+class TestReport:
+    """🔴 측정값을 **생성**한다 - 문서가 숫자를 베끼면 반드시 낡는다."""
+
+    def test_writes_a_generated_file(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        out = tmp_path / "M.md"
+        assert main(["report", "--out", str(out)]) == 0
+        body = out.read_text(encoding="utf-8")
+        assert "생성된 파일" in body.splitlines()[0]
+        assert "codeproof report" in body.splitlines()[0]
+        assert "채점 기준 편차" in body
+        capsys.readouterr()
+
+    def test_output_is_stable_across_runs(self, tmp_path: Path) -> None:
+        """🔴 시각·run_id 를 넣지 않는다 - 넣으면 「최신인가」를 물을 수 없다."""
+        a, b = tmp_path / "a.md", tmp_path / "b.md"
+        main(["report", "--out", str(a)])
+        main(["report", "--out", str(b)])
+        assert a.read_text(encoding="utf-8") == b.read_text(encoding="utf-8")
+
+    def test_check_detects_a_stale_file(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        out = tmp_path / "M.md"
+        out.write_text("낡은 내용\n", encoding="utf-8")
+        assert main(["report", "--out", str(out), "--check"]) == 1
+        assert "낡았다" in capsys.readouterr().err
+
+    def test_check_passes_on_a_fresh_file(self, tmp_path: Path) -> None:
+        out = tmp_path / "M.md"
+        main(["report", "--out", str(out)])
+        assert main(["report", "--out", str(out), "--check"]) == 0
+
+    def test_missing_corpus_is_exit_2(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert main(["report", "--corpus", str(tmp_path / "none"), "--out", "-"]) == 2
+        assert "샘플이 없다" in capsys.readouterr().err
+
+    def test_unknown_analyzer_is_exit_2(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        code = main(["report", "--analyzer", "nope", "--out", str(tmp_path / "x.md")])
+        assert code == 2
+        capsys.readouterr()

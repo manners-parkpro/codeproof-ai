@@ -1,0 +1,27 @@
+decoy_id = "D041-exhaustive-rate-table"
+trap_kind = "unreachable_branch"
+
+[bait]
+apparent_defect = """
+딕셔너리를 get 이나 기본값 없이 대괄호로 직접 조회한다. 조회 키가 표에 없으면
+KeyError 가 터지는 형태라 방어가 빠진 조회로 읽히고, 외부에서 온 값으로
+맵을 찾는 전형적인 무방비 접근처럼 보인다.
+"""
+lure_lines = [19, 20]
+
+[safety]
+claim = "이 조회는 KeyError 를 낼 수 없다"
+justification = """
+rate 의 인자는 Tier 이고 Tier 의 멤버는 FREE · PRO · TEAM 셋뿐인데 _RATES 가
+그 셋을 키로 모두 담고 있기 때문에, 어떤 인자가 들어와도 조회가 반드시 맞는다.
+get 으로 바꾸면 표에 빠진 멤버가 생겨도 조용히 기본값을 돌려주어 요금이 틀린
+채로 흘러가는데, 대괄호 조회는 그 순간 즉시 터져서 누락을 드러낸다.
+"""
+guard_symbol = "_RATES"
+guard_lines = [12, 16]
+
+[twin]
+defect = """
+_RATES 에서 Tier.TEAM 항목이 빠져 표가 열거를 전수로 덮지 못한다.
+rate(Tier.TEAM) 이 KeyError 로 터진다.
+"""

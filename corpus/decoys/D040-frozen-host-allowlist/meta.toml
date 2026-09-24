@@ -1,0 +1,27 @@
+decoy_id = "D040-frozen-host-allowlist"
+trap_kind = "frozen_after_init"
+
+[bait]
+apparent_defect = """
+허용 목록이 모듈 최상위의 가변 리스트 _RAW_HOSTS 에서 나오고, 판정 함수가 그
+파생물을 그대로 조회한다. 어느 코드든 _RAW_HOSTS 에 append 하면 허용 정책이
+바뀌는 전역 가변 상태로 읽히고, SSRF 방어를 우회하는 경로로 보인다.
+"""
+lure_lines = [3, 9]
+
+[safety]
+claim = "_RAW_HOSTS 를 바꿔도 허용 정책은 바뀌지 않는다"
+justification = """
+ALLOWED_HOSTS 는 _RAW_HOSTS 를 가리키는 별칭이 아니라 frozenset(...) 이 import
+시점에 원소를 **복사해** 만든 새 객체이고, frozenset 은 추가와 삭제를 제공하지
+않기 때문에 이후 _RAW_HOSTS 에 무엇을 넣든 판정에 쓰이는 집합은 변하지 않는다.
+allowed 가 조회하는 것도 그 사본이므로 전역 리스트를 통한 우회 경로가 없다.
+"""
+guard_symbol = "ALLOWED_HOSTS"
+guard_lines = [3, 5]
+
+[twin]
+defect = """
+frozenset 복사가 사라져 ALLOWED_HOSTS 가 _RAW_HOSTS 리스트 자체를 가리킨다.
+_RAW_HOSTS.append("evil.example") 한 줄로 허용 정책이 뚫린다.
+"""

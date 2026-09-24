@@ -1,0 +1,27 @@
+decoy_id = "D039-capped-preview-read"
+trap_kind = "bounded_input"
+
+[bait]
+apparent_defect = """
+파일 크기를 stat 으로 읽어 그 값만큼 한 번에 메모리로 올린다. 크기를 외부
+파일이 결정하는 형태라 거대한 파일을 가리키면 메모리를 통째로 잡는 자원 소진
+경로로 읽히고, 스트리밍이나 청크 읽기를 쓰지 않은 것처럼 보인다.
+"""
+lure_lines = [10, 11]
+
+[safety]
+claim = "이 읽기는 64KiB 를 넘는 메모리를 잡을 수 없다"
+justification = """
+read 에 넘기는 size 는 stat 결과 그대로가 아니라 바로 위 줄에서 min 으로
+_MAX_BYTES 와 비교해 작은 쪽을 고른 값이기 때문에, 파일이 아무리 커도 요청
+바이트 수가 65536 을 넘지 않는다. read 는 요청한 만큼만 읽으므로 반환 문자열도
+그 한계 안이다. 미리보기 용도라 뒷부분을 버리는 것이 의도된 동작이다.
+"""
+guard_symbol = "preview"
+guard_lines = [9, 11]
+
+[twin]
+defect = """
+min 으로 자르는 부분이 사라져 파일 크기가 그대로 읽기 요청이 된다.
+큰 파일을 가리키면 그 크기만큼 메모리에 올라간다.
+"""
