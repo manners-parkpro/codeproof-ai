@@ -31,6 +31,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from codeproof_ai.eval.grading.base import Outcome
@@ -107,8 +108,9 @@ class MixSensitivity:
     """구성비를 바꾸면 집계가 얼마나 움직이는가."""
 
     grader: str
+    axis: Axis
     kinds: tuple[KindRate, ...]
-    """FP율 내림차순."""
+    """물림율 내림차순."""
 
     observed: Proportion
     """현재 코퍼스 구성비에서의 집계 (지적 단위)."""
@@ -187,10 +189,10 @@ class MixSensitivity:
 
     def render(self) -> str:
         lines = [
-            f"  [코퍼스 구성비 민감도] 채점자={self.grader}",
-            "    🔴 코드도 도구도 채점자도 그대로다. **미끼 분류 구성비만** 바꾼다.",
+            f"  [코퍼스 구성비 민감도 · {self.axis.label}] 채점자={self.grader}",
+            f"    🔴 코드도 도구도 채점자도 그대로다. **{self.axis.label} 구성비만** 바꾼다.",
             "",
-            f"    {'미끼 분류':24s} {'물림':>4} {'지적':>5} {'범위밖':>6}"
+            f"    {self.axis.label:24s} {'물림':>4} {'지적':>5} {'범위밖':>6}"
             f"  {'물림율':>7} [95% CI]        {'decoy':>6}",
         ]
         for k in self.kinds:
@@ -234,16 +236,33 @@ class MixSensitivity:
         return "\n".join(lines)
 
 
+class Axis(StrEnum):
+    """무엇으로 나눌 것인가. 🔴 두 축은 **직교**한다.
+
+    `TRAP` 은 「안전 주장이 어떤 종류의 논증인가」,
+    `SHAPE` 는 「가드를 찾으려면 어디를 봐야 하는가」다.
+    한 축만 고르게 채워도 다른 축이 쏠릴 수 있으므로 **둘 다** 잰다.
+    """
+
+    TRAP = "trap"
+    SHAPE = "shape"
+
+    @property
+    def label(self) -> str:
+        return "미끼 분류" if self is Axis.TRAP else "가드 위치"
+
+
 def mix_sensitivity(
     outcomes: Sequence[SampleOutcome],
     samples: Sequence[LabeledSample],
     grader: str,
+    axis: Axis = Axis.TRAP,
 ) -> MixSensitivity:
-    """증명된 음성만 모아 분류별 FP율을 낸다.
+    """증명된 음성만 모아 축별 물림율을 낸다.
 
     🔴 음성만 본다. 양성(twin)의 지적을 섞으면 FP율이 아니라 다른 숫자가 된다.
     """
-    kind_of = _kinds(samples)
+    kind_of = _kinds(samples, axis)
     fp: dict[str, int] = defaultdict(int)
     total: dict[str, int] = defaultdict(int)
     undecided: dict[str, int] = defaultdict(int)
@@ -288,15 +307,20 @@ def mix_sensitivity(
     )
     return MixSensitivity(
         grader=grader,
+        axis=axis,
         kinds=kinds,
         observed=Proportion(successes=obs_fp, total=obs_total),
     )
 
 
-def _kinds(samples: Sequence[LabeledSample]) -> Mapping[str, str]:
-    """음성 샘플 id -> 미끼 분류."""
-    return {
-        s.sample_id: s.safety.category
-        for s in samples
-        if s.safety is not None and s.safety.category
-    }
+def _kinds(samples: Sequence[LabeledSample], axis: Axis) -> Mapping[str, str]:
+    """음성 샘플 id -> 그 축에서의 값."""
+    field = "category" if axis is Axis.TRAP else "shape"
+    out: dict[str, str] = {}
+    for s in samples:
+        if s.safety is None:
+            continue
+        value = getattr(s.safety, field, None)
+        if value:
+            out[s.sample_id] = value
+    return out

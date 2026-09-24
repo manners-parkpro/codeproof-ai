@@ -16,7 +16,11 @@ from codeproof_ai.domain.observation import group_runs
 from codeproof_ai.domain.target import ReviewTarget, SourceFile
 from codeproof_ai.eval.grading.base import Judgment, Outcome
 from codeproof_ai.eval.grading.safety import ProvableSafetyGrader
-from codeproof_ai.eval.mix import TARGET_PAIRS_PER_KIND, mix_sensitivity
+from codeproof_ai.eval.mix import (
+    TARGET_PAIRS_PER_KIND,
+    Axis,
+    mix_sensitivity,
+)
 from codeproof_ai.eval.runner import SampleOutcome, run_reviewer
 from codeproof_ai.eval.sample import LabeledSample, SafetyRationale, Stratum
 
@@ -187,6 +191,41 @@ class TestBothRatesAreReported:
         assert kind.samples == 2
 
 
+class TestTheTwoAxesAreOrthogonal:
+    """🔴 한 축만 고르게 채워도 다른 축이 쏠릴 수 있다 - 둘 다 잰다."""
+
+    def test_shape_axis_reads_a_different_field(self) -> None:
+        samples = _samples({"a": "trap_x", "b": "trap_x"}, shapes={"a": "local", "b": "module"})
+        outcomes = [
+            _outcome("a", [Outcome.UNDECIDABLE]),
+            _outcome("b", [Outcome.FALSE_POSITIVE]),
+        ]
+        by_trap = mix_sensitivity(outcomes, samples, GRADER, Axis.TRAP)
+        by_shape = mix_sensitivity(outcomes, samples, GRADER, Axis.SHAPE)
+
+        assert len(by_trap.kinds) == 1, "미끼 분류로는 한 덩어리다"
+        assert len(by_shape.kinds) == 2, "가드 위치로는 갈린다 - 축이 직교한다"
+        assert by_trap.reachable == (0.5, 0.5)
+        assert by_shape.reachable == (0.0, 1.0)
+
+    def test_axis_label_appears_in_the_report(self) -> None:
+        samples = _samples({"a": "k"}, shapes={"a": "local"})
+        outcomes = [_outcome("a", [Outcome.FALSE_POSITIVE])]
+        assert "가드 위치" in mix_sensitivity(
+            outcomes, samples, GRADER, Axis.SHAPE
+        ).render()
+
+    def test_shipped_corpus_carries_both(
+        self, shipped_samples: list[LabeledSample]
+    ) -> None:
+        negatives = [s for s in shipped_samples if s.is_proven_safe]
+        assert negatives
+        for s in negatives:
+            assert s.safety is not None
+            assert s.safety.category, f"{s.sample_id}: 미끼 분류가 없다"
+            assert s.safety.shape, f"{s.sample_id}: 가드 위치가 없다 (도출 실패)"
+
+
 class TestPositivesAreExcluded:
     """🔴 양성(twin)의 지적을 섞으면 FP율이 아니라 다른 숫자가 된다."""
 
@@ -199,7 +238,10 @@ class TestPositivesAreExcluded:
         assert ms.observed.total == 1
 
 
-def _samples(kinds: dict[str, str]) -> list[LabeledSample]:
+def _samples(
+    kinds: dict[str, str], shapes: dict[str, str] | None = None
+) -> list[LabeledSample]:
+    shapes = shapes or {}
     return [
         LabeledSample(
             target=ReviewTarget(
@@ -207,7 +249,10 @@ def _samples(kinds: dict[str, str]) -> list[LabeledSample]:
             ),
             stratum=Stratum.DECOY,
             safety=SafetyRationale(
-                claim="c", justification="j", category=kind
+                claim="c",
+                justification="j",
+                category=kind,
+                shape=shapes.get(sid),
             ),
             paired_with=f"{sid}#twin",
         )

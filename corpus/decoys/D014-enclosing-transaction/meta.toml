@@ -18,7 +18,7 @@ _move 의 유일한 호출부인 transfer 가 ledger.transaction() 컨텍스트 
 외부에서 관측되는 상태는 이체 전이거나 이체 후이지 그 중간이 아니다.
 _move 안에 롤백을 중복으로 두면 이중 복원이 된다.
 """
-guard_symbol = "transaction"
+guard_symbol = "transfer"
 guard_lines = [26, 28]
 
 [twin]

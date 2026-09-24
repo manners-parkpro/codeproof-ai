@@ -17,6 +17,7 @@ from codeproof_ai.corpus.decoy import (
     twin_changed_lines,
     validate_decoy,
 )
+from codeproof_ai.corpus.shape import classify
 from codeproof_ai.domain.location import Location, Position, Span
 from codeproof_ai.domain.target import ReviewTarget, SourceFile
 from codeproof_ai.eval.sample import (
@@ -78,6 +79,10 @@ def decoy_to_samples(rec: DecoyRecord) -> tuple[LabeledSample, LabeledSample]:
                 max(rec.lure.end, rec.guard.end),
             ),
             category=rec.trap_kind.value,
+            # 🔴 도출한다 - meta.toml 에 필드를 더하지 않는다.
+            shape=classify(
+                rec.decoy_source, rec.lure.start, rec.guard_symbol
+            ).value,
         ),
         paired_with=_twin_id(rec.decoy_id),
     )

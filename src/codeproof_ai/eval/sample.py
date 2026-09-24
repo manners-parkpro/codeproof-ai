@@ -83,6 +83,13 @@ class SafetyRationale:
     판정 불가를 오답으로 채점하는 것. 그래서 밖은 UNDECIDABLE 로 낸다.
     """
 
+    shape: str | None = None
+    """가드를 찾으려면 어디를 봐야 하는가(`GuardShape`). **분류와 직교하는 축**이다.
+
+    🔴 손으로 적지 않는다 - `guard_symbol` 과 소스에서 **도출**된다.
+       적게 하면 틀리고, 틀려도 아무도 모른다.
+    """
+
     category: str | None = None
     """🔴 미끼 분류(`TrapKind`). **음성 쪽에도 실어야 한다.**
 

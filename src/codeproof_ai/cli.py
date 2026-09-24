@@ -27,7 +27,7 @@ from codeproof_ai.eval.grading.paired import PairedFixGrader
 from codeproof_ai.eval.grading.safety import ProvableSafetyGrader
 from codeproof_ai.eval.loader import load_decoy_samples
 from codeproof_ai.eval.metrics import credibility_warning
-from codeproof_ai.eval.mix import mix_sensitivity
+from codeproof_ai.eval.mix import Axis, mix_sensitivity
 from codeproof_ai.eval.pairing import (
     PairVerdict,
     discrimination_rate,
@@ -363,11 +363,13 @@ def _print_mix(
     run: ReviewerRun, samples: Sequence[LabeledSample], grader: str
 ) -> None:
     """🔴 코퍼스 구성비도 측정 손잡이다 - 그걸 선언한 벤치마크를 보지 못했다."""
-    ms = mix_sensitivity(run.outcomes, samples, grader)
-    if not ms.kinds:
-        return
-    print()
-    print(ms.render())
+    # 🔴 두 축을 **둘 다** 낸다. 한 축만 고르게 채워도 다른 축이 쏠릴 수 있다.
+    for axis in Axis:
+        ms = mix_sensitivity(run.outcomes, samples, grader, axis)
+        if not ms.kinds:
+            continue
+        print()
+        print(ms.render())
 
 
 def _print_strata(run: ReviewerRun) -> None:
