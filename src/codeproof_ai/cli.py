@@ -27,6 +27,7 @@ from codeproof_ai.eval.grading.paired import PairedFixGrader
 from codeproof_ai.eval.grading.safety import ProvableSafetyGrader
 from codeproof_ai.eval.loader import load_decoy_samples
 from codeproof_ai.eval.metrics import credibility_warning
+from codeproof_ai.eval.mix import mix_sensitivity
 from codeproof_ai.eval.pairing import (
     PairVerdict,
     discrimination_rate,
@@ -358,6 +359,17 @@ def _print_pairs(run: ReviewerRun, graders: Sequence[Grader]) -> None:
                 print(f"      {pr.verdict.value}  {pr.pair_id}  - {pr.detail}")
 
 
+def _print_mix(
+    run: ReviewerRun, samples: Sequence[LabeledSample], grader: str
+) -> None:
+    """🔴 코퍼스 구성비도 측정 손잡이다 - 그걸 선언한 벤치마크를 보지 못했다."""
+    ms = mix_sensitivity(run.outcomes, samples, grader)
+    if not ms.kinds:
+        return
+    print()
+    print(ms.render())
+
+
 def _print_strata(run: ReviewerRun) -> None:
     """🔴 층별로 나눠서 본다. 풀링 금지 (E2)."""
     print()
@@ -477,6 +489,7 @@ def _cmd_eval(
         _print_spread(run, graders)
         _print_pairs(run, graders)
         _print_sensitivity(run, labeled, "provable_safety")
+        _print_mix(run, labeled, "provable_safety")
         _print_strata(run)
         _persist(run, store_path)
 
@@ -535,6 +548,7 @@ def _cmd_import(
     _print_spread(run, graders)
     _print_pairs(run, graders)
     _print_sensitivity(run, labeled, "provable_safety")
+    _print_mix(run, labeled, "provable_safety")
     _print_strata(run)
     _persist(run, store_path)
     return 0
@@ -672,6 +686,7 @@ def _cmd_measure(
         _print_spread(run, graders)
         _print_pairs(run, graders)
         _print_sensitivity(run, samples, "provable_safety")
+        _print_mix(run, samples, "provable_safety")
         _print_strata(run)
 
         _persist(run, store_path)

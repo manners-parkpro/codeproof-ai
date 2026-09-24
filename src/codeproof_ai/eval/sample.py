@@ -83,6 +83,14 @@ class SafetyRationale:
     판정 불가를 오답으로 채점하는 것. 그래서 밖은 UNDECIDABLE 로 낸다.
     """
 
+    category: str | None = None
+    """🔴 미끼 분류(`TrapKind`). **음성 쪽에도 실어야 한다.**
+
+    전에는 분류가 twin(양성)의 `Defect.category` 에만 있었다. FPR 은 음성에서
+    재는데 음성이 분류를 모르면 **분류별 FPR 을 낼 수 없다** - 코퍼스 구성비가
+    집계를 얼마나 움직이는지(`eval/mix.py`)를 측정할 수 없게 된다.
+    """
+
     def __post_init__(self) -> None:
         if not self.justification.strip():
             msg = "decoy 에는 서면 안전 근거가 반드시 있어야 한다 (K2)"

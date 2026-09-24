@@ -77,6 +77,7 @@ def decoy_to_samples(rec: DecoyRecord) -> tuple[LabeledSample, LabeledSample]:
                 min(rec.lure.start, rec.guard.start),
                 max(rec.lure.end, rec.guard.end),
             ),
+            category=rec.trap_kind.value,
         ),
         paired_with=_twin_id(rec.decoy_id),
     )
