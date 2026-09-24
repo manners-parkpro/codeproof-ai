@@ -1,0 +1,27 @@
+decoy_id = "D031-normalized-before-join"
+trap_kind = "misleading_name"
+
+[bait]
+apparent_defect = """
+locate 가 raw_name 이라는 이름의 값을 _ROOT 와 그대로 결합한다. raw 접두사가
+검증되지 않은 외부 입력을 뜻하는 것처럼 읽히므로 ../ 를 넣어 루트 밖으로
+나가는 경로 탐색 취약점으로 보이고, 결합 직전에 경로 검사가 없다.
+"""
+lure_lines = [16, 18]
+
+[safety]
+claim = "raw_name 결합은 _ROOT 밖의 경로를 만들 수 없다"
+justification = """
+이름과 달리 결합되는 값은 원본이 아니라 normalize 의 반환값이고, normalize 는
+_SAFE 정규식의 fullmatch 를 통과하지 못하면 예외를 던지기 때문에 16진수 여덟
+글자에 .bin 확장자인 문자열만 남는다. 그 문자 집합에는 슬래시도 점 연속도 없어
+상위 디렉터리로 나갈 수단이 존재하지 않는다. 위험한 것은 값이 아니라 변수 이름이다.
+"""
+guard_symbol = "normalize"
+guard_lines = [10, 17]
+
+[twin]
+defect = """
+normalize 호출이 사라져 검증되지 않은 이름이 그대로 결합된다.
+../../etc/passwd 같은 값을 넣으면 루트 밖 경로가 만들어진다.
+"""

@@ -1,0 +1,28 @@
+decoy_id = "D029-exhaustive-match-dispatch"
+trap_kind = "unreachable_branch"
+
+[bait]
+apparent_defect = """
+함수 마지막 줄이 빈 딕셔너리에서 없는 키를 꺼낸다. 어떤 입력이 여기 닿으면
+KeyError 가 터지는 형태라 방어가 빠진 기본 분기로 읽히고, 빈 컬렉션에 대한
+무방비 첨자 접근이라 정적분석기의 관련 룰에도 걸린다.
+"""
+lure_lines = [22, 23]
+
+[safety]
+claim = "_UNSET['missing'] 은 실행될 수 없다"
+justification = """
+priority 의 인자는 Signal 이고 Signal 의 멤버는 START · STOP · PING 셋뿐인데
+match 의 세 case 가 그 셋을 각각 처리하고 곧바로 반환하기 때문에 match 블록을
+빠져나오는 경로가 존재하지 않는다. 따라서 마지막 줄은 도달 불가능하고, 이
+줄은 나중에 멤버가 늘었을 때 조용히 잘못된 값을 돌려주는 대신 즉시 터지도록
+남겨 둔 표식이다.
+"""
+guard_symbol = "priority"
+guard_lines = [16, 22]
+
+[twin]
+defect = """
+PING 을 처리하는 case 가 사라져 match 가 그 값을 흘려보낸다.
+Signal.PING 을 넘기면 마지막 줄에 도달해 KeyError 가 난다.
+"""

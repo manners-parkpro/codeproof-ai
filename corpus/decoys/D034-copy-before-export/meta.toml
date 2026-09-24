@@ -1,0 +1,27 @@
+decoy_id = "D034-copy-before-export"
+trap_kind = "defensive_copy"
+
+[bait]
+apparent_defect = """
+_roster 가 모듈 전역 딕셔너리 안의 리스트를 그대로 반환한다. 내부 자료구조의
+참조를 밖으로 내보내는 형태라 호출자가 append 나 clear 로 전역 상태를 조용히
+바꿀 수 있는 캡슐화 파괴로 읽히고, 방어적 복사가 빠진 것처럼 보인다.
+"""
+lure_lines = [9, 10]
+
+[safety]
+claim = "_roster 가 돌려준 참조로 전역 명단을 바꿀 수 없다"
+justification = """
+_roster 는 비공개 함수이고 이 모듈에서 부르는 곳은 members 한 곳뿐인데,
+members 가 list(...) 로 새 리스트를 만들어 내보내기 때문에 호출자가 받는 것은
+항상 사본이다. 따라서 반환값을 아무리 변형해도 _members 안의 리스트에 닿지
+않는다. 안쪽에서 한 번 더 복사하면 같은 데이터를 두 번 복사하는 것이 된다.
+"""
+guard_symbol = "members"
+guard_lines = [13, 14]
+
+[twin]
+defect = """
+members 가 복사 없이 _roster 의 반환값을 그대로 내보낸다.
+호출자가 members("eng").append(...) 로 전역 명단을 직접 바꿀 수 있다.
+"""

@@ -1,0 +1,29 @@
+decoy_id = "D026-typeguard-narrowed-payload"
+trap_kind = "type_narrowed"
+
+[bait]
+apparent_defect = """
+route 가 Any 로 받은 값에 곧바로 ["kind"] 로 첨자 접근을 하고 그 결과에
+.upper() 를 부른다. 타입이 확정되지 않은 외부 입력에 대한 무방비 접근으로
+읽히고, dict 가 아니거나 키가 없으면 TypeError 나 KeyError 가 나는 것처럼 보인다.
+"""
+lure_lines = [16, 17]
+
+[safety]
+claim = "value['kind'].upper() 는 TypeError 도 KeyError 도 낼 수 없다"
+justification = """
+바로 위 두 줄의 is_envelope 검사가 통과하지 못한 값을 먼저 반환으로 걷어내기
+때문에 17행에 도달한 value 는 반드시 dict 이고 "kind" 키가 있으며 모든 값이
+문자열이다. is_envelope 은 TypeGuard 로 선언되어 있어 타입 검사기도 그 지점부터
+value 를 dict[str, str] 로 좁혀서 보고, 따라서 첨자 접근도 .upper() 호출도
+정적으로나 실행상으로나 안전하다.
+"""
+guard_symbol = "is_envelope"
+guard_lines = [15, 16]
+
+[twin]
+defect = """
+TypeGuard 검사가 사라져 어떤 값이든 그대로 첨자 접근에 들어간다.
+dict 가 아니면 TypeError, 키가 없으면 KeyError, 값이 문자열이 아니면
+AttributeError 가 난다.
+"""

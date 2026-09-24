@@ -1,0 +1,27 @@
+decoy_id = "D037-atomic-replace-retry"
+trap_kind = "idempotent_retry"
+
+[bait]
+apparent_defect = """
+save 가 조건 없이 _write 를 세 번 반복한다. 성공 여부를 보지도 않고 같은 쓰기
+작업을 되풀이하는 형태라 파일에 내용이 여러 번 쌓이는 중복 기록으로 읽히고,
+디스크에 불필요한 부하를 주는 것처럼 보인다.
+"""
+lure_lines = [14, 16]
+
+[safety]
+claim = "반복 호출이 파일 내용을 늘릴 수 없다"
+justification = """
+_write 는 대상 파일에 이어 쓰지 않고 별도 staging 파일에 전체 내용을 새로 쓴 뒤
+replace 로 대상 자리에 통째로 옮기기 때문에, 몇 번을 반복하든 대상 파일의 내용은
+마지막 한 번의 결과와 같다. replace 는 같은 파일시스템에서 원자적이라 중간 상태가
+관측되지도 않는다. 따라서 이 반복은 멱등이고, 부분 기록도 누적도 일어나지 않는다.
+"""
+guard_symbol = "_write"
+guard_lines = [8, 11]
+
+[twin]
+defect = """
+_write 가 append 모드로 대상 파일에 직접 이어 쓴다.
+save 가 세 번 돌면 같은 내용이 세 번 쌓여 파일이 망가진다.
+"""

@@ -47,6 +47,21 @@ UNCLASSIFIED = "(분류 없음)"
 MIN_KINDS_FOR_COMPARISON = 2
 """이질성을 말하려면 비교할 분류가 최소 둘은 있어야 한다."""
 
+TARGET_PAIRS_PER_KIND = 10
+"""🔴 분류당 **미리 선언한** 목표 쌍 수. 14종 x 10 = 140 쌍.
+
+왜 미리 선언하는가 - **optional stopping 을 막기 위해서다.**
+
+구성비 민감도를 보면 「극단 두 분류의 CI 를 갈라야 이질성을 주장할 수 있다」가
+바로 보인다. 그러면 그 두 분류에만 decoy 를 더 넣고 싶어진다. 그런데
+**CI 가 갈릴 때까지 표본을 늘리다 갈리면 멈추는 것**은 통계적으로 부정이다 -
+어떤 잡음이든 충분히 들여다보면 원하는 모양이 한 번은 나온다.
+
+그래서 **분류마다 같은 목표치를 먼저 박아 두고, 도달한 뒤에 본다.**
+「아직 목표 미달」은 결과가 아니라 진행률이다. `underpowered_kinds` 가
+그 구분을 표에 강제한다.
+"""
+
 
 @dataclass(frozen=True, slots=True)
 class KindRate:
@@ -125,6 +140,16 @@ class MixSensitivity:
         return r[1] / r[0]
 
     @property
+    def underpowered_kinds(self) -> tuple[str, ...]:
+        """선언한 목표 쌍 수에 못 미친 분류.
+
+        🔴 하나라도 남아 있으면 이질성 판정은 **중간 경과**지 결론이 아니다.
+        """
+        return tuple(
+            k.kind for k in self.kinds if k.samples < TARGET_PAIRS_PER_KIND
+        )
+
+    @property
     def heterogeneity_verdict(self) -> str:
         """분류 간 차이가 표본 잡음으로 설명되는가.
 
@@ -141,10 +166,19 @@ class MixSensitivity:
             return "판정 불가 - 신뢰구간을 낼 수 없다"
 
         if lo_iv[1] < hi_iv[0]:
-            return (
+            verdict = (
                 f"분류 간 차이가 **실재한다** - 극단 두 분류의 95% CI 가 겹치지 "
                 f"않는다 ({lo.kind} ≤{lo_iv[1]:.1%} < {hi_iv[0]:.1%}≤ {hi.kind})"
             )
+            if self.underpowered_kinds:
+                # 🔴 목표 미달 상태에서 갈린 것은 **중간 경과**다. 여기서
+                #    멈추면 optional stopping 이 된다.
+                return (
+                    f"{verdict}. ⚠ 다만 {len(self.underpowered_kinds)}종이 아직 "
+                    f"분류당 목표 {TARGET_PAIRS_PER_KIND}쌍에 못 미친다 - "
+                    "선언한 표본을 다 채운 뒤의 판정이라야 결론이다"
+                )
+            return verdict
         return (
             f"분류 간 차이를 **아직 주장할 수 없다** - {lo.kind} 와 {hi.kind} 의 "
             f"95% CI 가 겹친다([{lo_iv[0]:.1%}, {lo_iv[1]:.1%}] vs "
@@ -183,6 +217,14 @@ class MixSensitivity:
                 f"    🔴 구성비만 바꿔 도달 가능 : {r[0]:.1%} ~ {r[1]:.1%}{ratio}"
             )
         lines.append(f"    ⚖ {self.heterogeneity_verdict}")
+        if self.underpowered_kinds:
+            short = len(self.underpowered_kinds)
+            lines.append(
+                f"    📋 진행률: {len(self.kinds) - short}/{len(self.kinds)}종이 "
+                f"선언 목표({TARGET_PAIRS_PER_KIND}쌍/분류) 달성. "
+                "🔴 목표는 **미리** 박아 둔 값이다 - CI 가 갈릴 때까지 "
+                "늘리다 멈추면 optional stopping 이다"
+            )
         lines.append(
             "    ⚠ 지적 단위 CI 는 실제보다 좁다 - decoy 하나가 여러 지적을 내므로"
         )

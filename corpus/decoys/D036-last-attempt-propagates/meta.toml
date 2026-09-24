@@ -1,0 +1,28 @@
+decoy_id = "D036-last-attempt-propagates"
+trap_kind = "exception_absorbed"
+
+[bait]
+apparent_defect = """
+_try_once 가 OSError 를 잡아서 None 으로 바꾼다. 로그도 남기지 않고 재전파도
+하지 않는 형태라 네트워크나 디스크 오류를 조용히 감추는 예외 삼킴으로 읽히고,
+호출자는 무엇이 왜 실패했는지 알 수 없는 것처럼 보인다.
+"""
+lure_lines = [10, 11]
+
+[safety]
+claim = "이 삼킴은 오류를 감출 수 없다"
+justification = """
+_try_once 의 None 은 "재시도하라"는 신호일 뿐이고, 유일한 호출부인 fetch 가
+_ATTEMPTS 회를 모두 소진한 뒤에는 _try_once 를 거치지 않고 call 을 직접 부르기
+때문에 마지막 실패의 OSError 는 원래 타입과 메시지 그대로 호출자에게 전파된다.
+즉 중간 시도의 예외만 삼키고 최종 결과는 삼키지 않으므로, 실패가 사라지는 경로가
+존재하지 않는다.
+"""
+guard_symbol = "fetch"
+guard_lines = [15, 20]
+
+[twin]
+defect = """
+마지막 줄이 call() 대신 빈 문자열을 돌려준다.
+모든 시도가 실패해도 호출자는 예외 대신 빈 값을 받아 실패를 알 수 없다.
+"""

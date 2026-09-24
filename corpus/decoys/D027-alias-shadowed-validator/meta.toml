@@ -1,0 +1,29 @@
+decoy_id = "D027-alias-shadowed-validator"
+trap_kind = "misleading_name"
+
+[bait]
+apparent_defect = """
+verify 가 compare 라는 평범한 이름의 함수로 비밀 토큰을 맞춰 본다. 이름만 보면
+== 비교를 감싼 유틸리티로 읽히고, 그러면 일치하는 접두사 길이에 따라 수행 시간이
+달라지는 타이밍 공격 경로가 된다. 보안 비교라는 표시가 이름 어디에도 없다.
+"""
+lure_lines = [13, 14]
+
+[safety]
+claim = "이 토큰 비교는 타이밍 공격에 노출되지 않는다"
+justification = """
+compare 는 일반 비교 유틸리티가 아니라 hmac.compare_digest 를 그대로 감싼
+함수이고, 그 함수는 입력 길이가 같은 한 일치 여부와 무관하게 동일한 시간을
+쓰도록 구현되어 있기 때문에 접두사 길이에서 정보가 새지 않는다. 즉 위험한
+것은 값도 동작도 아니라 compare 라는 이름뿐이고, 본문이 무엇을 부르는지가
+안전을 결정한다.
+"""
+guard_symbol = "compare"
+guard_lines = [8, 14]
+
+[twin]
+defect = """
+verify 가 compare 를 거치지 않고 == 로 직접 비교한다.
+파이썬 문자열 비교는 첫 불일치에서 끊기므로 수행 시간이 일치 접두사 길이에
+비례하고, 토큰을 한 글자씩 복원할 수 있다.
+"""

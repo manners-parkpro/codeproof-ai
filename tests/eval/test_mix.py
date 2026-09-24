@@ -16,7 +16,7 @@ from codeproof_ai.domain.observation import group_runs
 from codeproof_ai.domain.target import ReviewTarget, SourceFile
 from codeproof_ai.eval.grading.base import Judgment, Outcome
 from codeproof_ai.eval.grading.safety import ProvableSafetyGrader
-from codeproof_ai.eval.mix import mix_sensitivity
+from codeproof_ai.eval.mix import TARGET_PAIRS_PER_KIND, mix_sensitivity
 from codeproof_ai.eval.runner import SampleOutcome, run_reviewer
 from codeproof_ai.eval.sample import LabeledSample, SafetyRationale, Stratum
 
@@ -117,6 +117,56 @@ class TestItRefusesToOverclaim:
         ms = mix_sensitivity(outcomes, _samples({"a": "hi", "b": "lo"}), GRADER)
         assert ms.reachable == (0.0, 1.0)
         assert ms.ratio is None
+
+
+class TestOptionalStoppingIsGuarded:
+    """🔴 CI 가 갈릴 때까지 표본을 늘리다 멈추면 통계적 부정이다.
+
+    구성비 표를 보면 「이 두 분류만 늘리면 갈리겠다」가 바로 보인다.
+    그 유혹을 막으려고 **분류당 목표치를 미리 선언**하고, 미달 상태의
+    판정은 결론이 아니라 중간 경과라고 표시한다.
+    """
+
+    def test_underpowered_kinds_are_listed(self) -> None:
+        outcomes = [
+            _outcome("a", [Outcome.FALSE_POSITIVE]),
+            _outcome("b", [Outcome.UNDECIDABLE]),
+        ]
+        ms = mix_sensitivity(outcomes, _samples({"a": "hi", "b": "lo"}), GRADER)
+        assert set(ms.underpowered_kinds) == {"hi", "lo"}
+
+    def test_a_separated_verdict_is_still_marked_provisional(self) -> None:
+        """목표 미달인데 갈렸으면 **결론이 아니라고** 말한다."""
+        outcomes = [
+            _outcome(f"hi{i}", [Outcome.FALSE_POSITIVE] * 10) for i in range(6)
+        ] + [_outcome(f"lo{i}", [Outcome.UNDECIDABLE] * 10) for i in range(6)]
+        samples = _samples(
+            {f"hi{i}": "kind_hi" for i in range(6)}
+            | {f"lo{i}": "kind_lo" for i in range(6)}
+        )
+        ms = mix_sensitivity(outcomes, samples, GRADER)
+
+        assert "실재한다" in ms.heterogeneity_verdict
+        assert ms.underpowered_kinds, "6쌍은 선언 목표 10쌍에 미달이다"
+        assert "결론이다" in ms.heterogeneity_verdict, (
+            "목표 미달 상태의 판정을 중간 경과로 표시하지 않았다 - "
+            "여기서 멈추면 optional stopping 이 된다"
+        )
+
+    def test_a_fully_powered_verdict_has_no_caveat(self) -> None:
+        n = TARGET_PAIRS_PER_KIND
+        outcomes = [
+            _outcome(f"hi{i}", [Outcome.FALSE_POSITIVE] * 10) for i in range(n)
+        ] + [_outcome(f"lo{i}", [Outcome.UNDECIDABLE] * 10) for i in range(n)]
+        samples = _samples(
+            {f"hi{i}": "kind_hi" for i in range(n)}
+            | {f"lo{i}": "kind_lo" for i in range(n)}
+        )
+        ms = mix_sensitivity(outcomes, samples, GRADER)
+
+        assert not ms.underpowered_kinds
+        assert "실재한다" in ms.heterogeneity_verdict
+        assert "결론이다" not in ms.heterogeneity_verdict
 
 
 class TestBothRatesAreReported:

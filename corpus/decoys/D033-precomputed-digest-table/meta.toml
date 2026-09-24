@@ -1,0 +1,27 @@
+decoy_id = "D033-precomputed-digest-table"
+trap_kind = "frozen_after_init"
+
+[bait]
+apparent_defect = """
+권한 표를 모듈 최상위 공개 이름으로 내보내고 allows 가 그것을 직접 조회한다.
+어느 호출자든 표를 바꾸면 프로세스 전체의 권한 판정이 흔들리는 전역 가변 상태로
+읽히고, 권한 상승 경로로 보인다.
+"""
+lure_lines = [10, 14]
+
+[safety]
+claim = "ROLES 를 통해 권한 표를 바꿀 수 없다"
+justification = """
+ROLES 는 딕셔너리가 아니라 MappingProxyType 으로 감싼 읽기 전용 뷰이고 그 타입은
+항목 대입과 update 를 제공하지 않아 TypeError 로 거부하기 때문에 표 자체를 바꿀
+수단이 없다. 그리고 각 값이 set 이 아니라 frozenset 이므로 ROLES["viewer"].add
+같은 우회도 막힌다. 바깥 뷰만 얼리고 안쪽을 가변으로 두면 그 우회가 열린다.
+"""
+guard_symbol = "ROLES"
+guard_lines = [5, 10]
+
+[twin]
+defect = """
+읽기 전용 래핑이 사라지고 값도 set 으로 돌아가 ROLES 가 원본을 그대로 가리킨다.
+ROLES["viewer"].add("purge") 로 권한을 올릴 수 있다.
+"""

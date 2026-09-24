@@ -1,0 +1,28 @@
+decoy_id = "D028-caller-owns-the-cursor"
+trap_kind = "enclosing_context"
+
+[bait]
+apparent_defect = """
+_insert_all 이 커서를 받아서 쓰기만 하고 닫지 않는다. DB 자원을 다루면서
+close 도 컨텍스트 매니저도 없는 형태라 커넥션 누수로 읽히고, 루프 도중
+예외가 나면 그대로 새는 것처럼 보인다.
+"""
+lure_lines = [13, 18]
+
+[safety]
+claim = "_insert_all 은 커서를 누수시킬 수 없다"
+justification = """
+_insert_all 은 커서를 만들지 않고 인자로 받기만 하므로 소유권이 없고, 유일한
+호출부인 store 가 contextlib.closing 블록 안에서 넘기기 때문에 블록을 벗어나는
+모든 경로에서 커서가 닫힌다. 루프 중간에 예외가 전파되는 경우도 closing 의
+__exit__ 가 실행되므로 마찬가지다. 자원을 열지 않은 쪽이 닫으면 호출자가
+같은 커서를 계속 쓰려 할 때 이중 해제가 된다.
+"""
+guard_symbol = "store"
+guard_lines = [21, 23]
+
+[twin]
+defect = """
+closing 블록이 사라져 커서를 만들고 닫지 않는다.
+정상 반환이든 예외든 커서가 열린 채 남아 커넥션이 샌다.
+"""
