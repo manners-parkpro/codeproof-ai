@@ -761,6 +761,7 @@ True 가 되어 걸린다 — **11개 형식 규칙이 놓친 것을 잡는다.*
 |---|---|---|
 | V2~V11 | 형식 — 근거 길이 · 가드 가시성 · 짝 구조 | `decoy validate` (훅이 강제) |
 | **V12** | **proof.py 존재와 서명** | `decoy validate` |
+| **V13** | **`guard_lines` 가 `guard_symbol` 과 관계된 자리인가** | `decoy validate` |
 | **반증 실행** | **근거가 참인가** | `pytest tests/corpus/test_proofs.py` |
 | AST 구조 증명 | 「경로가 **없다**」류 주장 | `tests/corpus/test_safety_claims.py` |
 
@@ -970,7 +971,7 @@ README 에 **반드시** 들어가야 한다.
 | `verify` | citation · guard(callee 포함) · corroboration · reachability · confidence |
 | `eval` | 채점자 **4종** · **편차** · **짝 채점** · **민감도** · **미끼 측정** · Wilson CI |
 | `store` | SQLite · 외래키로 E1 강제 · `config_hash` 재현성 검사 |
-| `corpus` | decoy 템플릿 · 검증기 **12규칙** · 실행 반증(`proof.py`) · 분류 14종 × 가드 위치 4종 (쌍 수는 [MEASUREMENTS](MEASUREMENTS.md)) |
+| `corpus` | decoy 템플릿 · 검증기 **13규칙** · 실행 반증(`proof.py`) · 분류 14종 × 가드 위치 4종 (쌍 수는 [MEASUREMENTS](MEASUREMENTS.md)) |
 | `llm` | 스키마 · 프롬프트 · 파서 · replay · **Anthropic/OpenAI 어댑터** |
 | `cli` | `measure` · `eval` · `import` · `doctor` · `history` · `decoy` |
 | 테스트 | **244개 · 26초** |

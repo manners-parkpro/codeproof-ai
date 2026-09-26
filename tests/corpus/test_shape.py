@@ -75,6 +75,23 @@ def size(r: Range) -> int:
     return r.high - r.low
 '''
 
+TRANSITIVE = '''
+def _accumulate(value):
+    current = _totals["sum"]
+    _totals["sum"] = current + value
+
+
+def _drain(values):
+    for v in values:
+        _accumulate(v)
+
+
+def run(values):
+    worker = Thread(target=_drain, args=(values,))
+    worker.start()
+    worker.join()
+'''
+
 NESTED = '''
 def outer(x: int) -> int:
     def inner(y: int) -> int:
@@ -109,6 +126,30 @@ class TestTheFourShapes:
         라는 잘못된 결론이 나왔다. 실제로는 32% / 30% 로 갈려 있었다.
         """
         assert classify(CALLER, 3, "bump") is not classify(CALLEE, 9, "sanitize")
+
+
+class TestCallEdgesAreFollowedProperly:
+    """🔴 「어느 방향을 봐야 하는가」는 깊이나 호출 형태와 무관하다."""
+
+    def test_two_hops_still_counts_as_caller(self) -> None:
+        """[실측] D051 이 `run` -> `_drain` -> `_accumulate` 로 두 단계였다.
+
+        한 단계만 보던 때는 OTHER 로 떨어졌다.
+        """
+        assert classify(TRANSITIVE, 3, "run") is GuardShape.CALLER
+
+    def test_a_callback_reference_is_a_call_edge(self) -> None:
+        """🔴 `Thread(target=_drain)` 은 호출식이 아니지만 간선이다.
+
+        리뷰어는 그 함수를 따라가야 한다. 호출식만 세면 콜백을 통째로 놓친다 -
+        threading · 콜백 등록 · 데코레이터에서 흔한 모양이다.
+        """
+        body = TRANSITIVE.split("def run")[1]
+        # 이 픽스처는 _drain 을 **부르지 않고** 넘기기만 해야 한다
+        assert "_drain(" not in body
+        assert "target=_drain" in body
+
+        assert classify(TRANSITIVE, 8, "run") is GuardShape.CALLER
 
 
 class TestItSurvivesRealCode:

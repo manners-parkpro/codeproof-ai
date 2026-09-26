@@ -1,0 +1,27 @@
+decoy_id = "D053-real-quote-beside-trimmer"
+trap_kind = "noop_shim_neighbor"
+
+[bait]
+apparent_defect = """
+사용자 인자를 공백으로 이어 붙여 셸 명령 문자열을 만든다. 문자열 조립으로
+명령을 만드는 형태라 세미콜론이나 백틱이 섞이면 명령이 추가 실행되는
+셸 인젝션 경로로 읽히고, 바로 위에 쓰이지 않는 것처럼 보이는 함수도 있다.
+"""
+lure_lines = [15, 16]
+
+[safety]
+claim = "build 가 만든 문자열에는 셸 메타문자가 살아남을 수 없다"
+justification = """
+build 가 부르는 것은 이름만 그럴듯한 trim_arg 가 아니라 quote_arg 이고,
+그 함수는 shlex.quote 를 그대로 감싸 인자를 작은따옴표로 감싸고 내부의
+따옴표까지 탈출시키기 때문에 세미콜론 · 백틱 · 파이프가 전부 리터럴 문자가
+된다. 공백만 떼어내는 trim_arg 는 그 문자들을 그대로 두므로 방어가 되지 않는다.
+"""
+guard_symbol = "quote_arg"
+guard_lines = [11, 16]
+
+[twin]
+defect = """
+build 가 quote_arg 대신 trim_arg 를 부른다.
+공백 제거는 메타문자를 막지 못해 "; rm -rf /" 같은 인자가 그대로 나간다.
+"""

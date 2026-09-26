@@ -127,6 +127,36 @@ class TestBaselineIsValid:
 class TestCatchesViolations:
     """🔴 각 규칙이 실제로 위반을 잡는지 - 이게 본체다."""
 
+    def test_v13_guard_lines_must_involve_the_symbol(self, decoy_dir: Path) -> None:
+        """🔴 파일 안이면서 **엉뚱한 줄**인 경우를 잡는다.
+
+        V4 는 「구간이 파일 안인가」와 「심볼이 파일에 있는가」를 따로 본다.
+        둘 다 통과하면서 서로 다른 곳을 가리킬 수 있다.
+        """
+        (decoy_dir / "meta.toml").write_text(
+            _meta(guard_lines=[1, 2]), encoding="utf-8"
+        )
+        assert "V13" in _errors(decoy_dir)
+
+    def test_v13_accepts_a_use_site_guard(self, decoy_dir: Path) -> None:
+        """가드는 심볼의 **정의**일 수도 **호출부**일 수도 있다.
+
+        [실측] 정의만 허용했더니 D001·D026 을 잘못 잡았다 - 둘 다 가드가
+        호출부에 있는 정당한 decoy 다.
+        """
+        src = (decoy_dir / "decoy.py").read_text(encoding="utf-8")
+        # _REQUIRED 는 위에서 정의되고 아래 컴프리헨션에서 **쓰인다**
+        line = next(
+            i
+            for i, text in enumerate(src.splitlines(), 1)
+            if "_REQUIRED" in text and "for k in" in text
+        )
+        (decoy_dir / "meta.toml").write_text(
+            _meta(guard_symbol="_REQUIRED", guard_lines=[line, line]),
+            encoding="utf-8",
+        )
+        assert "V13" not in _errors(decoy_dir)
+
     def test_v12_missing_proof(self, decoy_dir: Path) -> None:
         (decoy_dir / "proof.py").unlink()
         assert "V12" in _errors(decoy_dir)

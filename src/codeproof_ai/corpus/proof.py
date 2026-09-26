@@ -213,6 +213,13 @@ def race_window(*func_names: str) -> Iterator[None]:
     반증하는 도구로 정당하다.
 
     ⚠ 그래도 비결정적이다. 실패하지 않았다고 경쟁이 없는 것은 아니다.
+
+    🔴 **창은 줄과 줄 사이에만 열린다.** read-modify-write 가 한 줄이면
+       (`d["k"] = d["k"] + v`) 그 안에 추적 지점이 없어 재현되지 않는다.
+       [실측] D051 을 한 줄로 썼을 때 twin 이 5회 시도 전부 통과했고,
+       두 줄(`current = d["k"]` / `d["k"] = current + v`)로 나누자 바로 깨졌다.
+       경쟁 decoy 를 쓸 때는 read 와 write 를 **다른 줄에** 둔다 -
+       실제 코드에서도 그 모양이 더 흔하다.
     """
     wanted = frozenset(func_names)
 

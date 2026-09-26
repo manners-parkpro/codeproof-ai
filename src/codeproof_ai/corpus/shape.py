@@ -36,10 +36,18 @@ class GuardShape(StrEnum):
     """같은 함수 안. 지역 추론으로 끝난다 - 가장 쉽다."""
 
     CALLER = "caller"
-    """이 함수를 **부르는** 쪽에 있다. 호출부를 거슬러 올라가야 한다."""
+    """이 함수를 **부르는** 쪽에 있다. 호출부를 거슬러 올라가야 한다.
+
+    🔴 전이적이다. [실측] D051 은 `run` -> `_drain` -> `_accumulate` 로 두 단계
+    건너인데, 직접 호출만 보던 때는 OTHER 로 떨어졌다. 깊이가 달라도
+    **어느 방향을 봐야 하는가**는 같으므로 한 분류로 둔다.
+    """
 
     CALLEE = "callee"
-    """이 함수가 **부르는** 쪽에 있다. 이름이 비슷한 이웃을 구별해야 한다."""
+    """이 함수가 **부르는** 쪽에 있다. 이름이 비슷한 이웃을 구별해야 한다.
+
+    CALLER 와 마찬가지로 전이적이다.
+    """
 
     MODULE = "module"
     """함수 밖 - 모듈 상수 · 타입 선택 · 클래스 불변식. 함수 본문을 벗어나야 보인다.
@@ -90,12 +98,39 @@ def _call_direction(
     lure_fn: str,
     guard_symbol: str,
 ) -> GuardShape:
-    """호출 방향이 곧 「어디를 봐야 하는가」다."""
-    if lure_fn in _calls(functions[guard_symbol]):
+    """호출 방향이 곧 「어디를 봐야 하는가」다.
+
+    🔴 전이적으로 본다. 한 단계만 보면 `run` -> `_drain` -> `_accumulate` 같은
+       평범한 위임 구조가 분류에서 빠진다.
+    """
+    if lure_fn in _reachable(functions, guard_symbol):
         return GuardShape.CALLER
-    if lure_fn in functions and guard_symbol in _calls(functions[lure_fn]):
+    if lure_fn in functions and guard_symbol in _reachable(functions, lure_fn):
         return GuardShape.CALLEE
     return GuardShape.OTHER
+
+
+def _reachable(
+    functions: dict[str, ast.FunctionDef | ast.AsyncFunctionDef], start: str
+) -> frozenset[str]:
+    """start 에서 호출로 닿는 모든 함수 이름 (자기 자신 제외).
+
+    같은 모듈 안에서만 따라간다 - decoy 는 파일 하나이므로 그것으로 충분하다.
+    순환 호출에 대비해 방문 표시를 둔다.
+    """
+    seen: set[str] = set()
+    stack = [start]
+    while stack:
+        current = stack.pop()
+        node = functions.get(current)
+        if node is None:
+            continue
+        for name in _calls(node):
+            if name not in seen and name in functions:
+                seen.add(name)
+                stack.append(name)
+    seen.discard(start)
+    return frozenset(seen)
 
 
 def _enclosing(tree: ast.Module, line: int) -> str:
@@ -157,14 +192,21 @@ def _class_owners(tree: ast.Module) -> dict[str, str]:
 
 
 def _calls(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> frozenset[str]:
-    """그 함수 본문이 부르는 이름들. 속성 호출은 마지막 부분만 센다."""
+    """그 함수 본문이 **부르거나 넘기는** 이름들.
+
+    🔴 호출식만 보면 콜백을 놓친다. [실측] D051 의 `run` 은 `_drain` 을
+       부르지 않고 `Thread(target=_drain)` 으로 **넘긴다** - 그래도 리뷰어는
+       그 함수를 따라가야 하므로 같은 방향의 간선이다.
+       threading · 콜백 등록 · 데코레이터에서 흔한 모양이다.
+
+    이름 참조를 전부 세는 것은 과대근사다. 부르지 않고 이름만 언급하는 경우도
+    간선으로 잡힌다 - decoy 크기의 코드에서는 드물고, 「어느 방향을 봐야
+    하는가」라는 질문에는 그래도 맞는 답이 나온다.
+    """
     names: set[str] = set()
-    for node in ast.walk(fn):  # 호출 수집은 망라가 맞다 - 중첩을 포함해야 한다
-        if not isinstance(node, ast.Call):
-            continue
-        target = node.func
-        if isinstance(target, ast.Name):
-            names.add(target.id)
-        elif isinstance(target, ast.Attribute):
-            names.add(target.attr)
+    for node in ast.walk(fn):  # 망라가 맞다 - 중첩을 포함해야 한다
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            names.add(node.func.attr)
+        elif isinstance(node, ast.Name):
+            names.add(node.id)
     return frozenset(names)

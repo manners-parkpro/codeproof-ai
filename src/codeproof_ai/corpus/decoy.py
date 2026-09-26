@@ -366,6 +366,8 @@ def _check_visibility(rec: DecoyRecord, decoy_lines: int) -> list[Violation]:
         out.append(
             Violation("V4", Level.ERROR, f"guard_symbol '{rec.guard_symbol}' 이 decoy.py 에 없다")
         )
+    else:
+        out.extend(_check_guard_points_at_the_symbol(rec))
     if not rec.lure.within(decoy_lines):
         out.append(
             Violation(
@@ -375,6 +377,83 @@ def _check_visibility(rec: DecoyRecord, decoy_lines: int) -> list[Violation]:
             )
         )
     return out
+
+
+def _symbol_span(source: str, symbol: str) -> LineRange | None:
+    """그 이름이 **정의되는** 줄 범위. 함수·클래스·모듈 수준 대입을 본다.
+
+    못 찾으면 None - 그 이름이 정의가 아니라 참조로만 등장하는 경우다.
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return None
+
+    found: LineRange | None = None
+
+    def visit(node: ast.AST) -> None:
+        nonlocal found
+        for child in ast.iter_child_nodes(node):
+            name = _defined_name(child)
+            if name == symbol and found is None:
+                decorators: list[ast.expr] = getattr(child, "decorator_list", [])
+                start = min([child.lineno, *(d.lineno for d in decorators)])  # type: ignore[attr-defined]
+                found = LineRange(start, child.end_lineno or start)  # type: ignore[attr-defined]
+            visit(child)
+
+    visit(tree)
+    return found
+
+
+def _defined_name(node: ast.AST) -> str | None:
+    """이 노드가 정의하는 이름. 아니면 None."""
+    if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+        return node.name
+    if isinstance(node, ast.Assign):
+        for t in node.targets:
+            if isinstance(t, ast.Name):
+                return t.id
+    if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+        return node.target.id
+    return None
+
+
+def _check_guard_points_at_the_symbol(rec: DecoyRecord) -> list[Violation]:
+    """V13 - guard_lines 가 guard_symbol 과 **실제로 관계된 자리**인가.
+
+    🔴 V4 는 「구간이 파일 안인가」와 「심볼이 파일에 있는가」를 **따로** 본다.
+       둘 다 통과하면서 서로 다른 곳을 가리킬 수 있다 - 파일 안이지만
+       엉뚱한 줄을 적어도 아무도 모른다.
+
+    통과 조건은 둘 중 하나다:
+      · 구간 안에 그 이름이 **글자로 등장**한다 (사용 자리 가드)
+      · 구간이 그 이름의 **정의 범위와 겹친다** (정의 자리 가드)
+
+    ⚠ 둘을 다 허용하는 이유: 가드는 심볼의 정의일 수도, 그 심볼을 **부르는
+      자리**일 수도 있다. [실측] D026 은 `is_envelope` 의 정의(6-11)가 아니라
+      호출부(15-16)가 가드이고 그게 맞다 - 처음에 정의만 허용했다가
+      정당한 decoy 둘을 잘못 잡았다.
+    """
+    lines = rec.decoy_source.splitlines()
+    window = lines[rec.guard.start - 1 : rec.guard.end]
+    if any(rec.guard_symbol in line for line in window):
+        return []
+
+    span = _symbol_span(rec.decoy_source, rec.guard_symbol)
+    if span is None:
+        return []
+    if rec.guard.end < span.start or span.end < rec.guard.start:
+        return [
+            Violation(
+                "V13",
+                Level.ERROR,
+                f"guard_lines {rec.guard.start}-{rec.guard.end} 에 "
+                f"guard_symbol '{rec.guard_symbol}' 이 나오지도 않고 "
+                f"그 정의({span.start}-{span.end})와 겹치지도 않는다 - "
+                "「가드가 여기 있다」가 거짓이다",
+            )
+        ]
+    return []
 
 
 def _diff_touches_symbol(rec: DecoyRecord, diffs: list[LineRange]) -> bool:
