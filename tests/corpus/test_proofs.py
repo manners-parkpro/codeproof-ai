@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from codeproof_ai.corpus.proof import ProofError, run_proof
+from codeproof_ai.corpus.proof import MAX_ATTEMPTS, ProofError, run_proof
 
 DECOYS = Path(__file__).resolve().parents[2] / "corpus" / "decoys"
 PAIRS = sorted(p for p in DECOYS.glob("D*") if p.is_dir())
@@ -69,9 +69,84 @@ class TestTheContractIsNotVacuous:
         assert f is not None
         assert "decoy 를 깼다" in f
 
+    def test_unimportable_twin_is_an_error(self, tmp_path: Path) -> None:
+        """🔴 파싱되는데 **import 가 안 되는** 짝을 잡는다.
+
+        [실측] D048 의 twin 이 그랬다 - `dataclass` 가 가변 기본값을
+        ValueError 로 거부해서 파일이 아예 로드되지 않았다. `decoy validate`
+        의 V2 는 **파싱**만 보므로 통과시켰고, 이 층이 잡았다.
+
+        import 조차 안 되는 twin 은 결함이 아니라 깨진 파일이고, 그런 짝은
+        「가드만 다르다」는 전제가 성립하지 않는다.
+        """
+        pair = _fake_pair(tmp_path, "def attack(mod: object) -> bool:\n    return True\n")
+        (pair / "twin.py").write_text(
+            "raise ValueError('cannot import')\n", encoding="utf-8"
+        )
+        with pytest.raises(ProofError, match="import 하다 터졌다"):
+            run_proof(pair)
+
     def test_missing_proof_is_an_error(self, tmp_path: Path) -> None:
         pair = _fake_pair(tmp_path, None)
         with pytest.raises(ProofError, match=r"proof\.py 이 없다"):
+            run_proof(pair)
+
+
+class TestRepeatedAttemptsStrengthenBothSides:
+    """🔴 시도를 늘려도 **완화가 아니다**.
+
+    경쟁 기반 반증은 비결정적이라 한 번에 재현되지 않을 수 있다.
+    [실측] D042 가 단독 실행에서는 5/5 통과했는데 전체 테스트 부하에서
+    twin 을 못 깨 flaky 했다. flaky 한 관문은 느린 관문보다 나쁘다 -
+    사람이 재실행으로 넘기기 시작한다.
+
+    그래서 `ATTEMPTS = N` 을 선언하면 **양쪽 모두** N회 시도한다.
+    decoy 는 한 번이라도 깨지면 실패이므로 시도가 늘수록 **엄격해진다.**
+    """
+
+    def test_default_is_a_single_attempt(self, tmp_path: Path) -> None:
+        pair = _fake_pair(
+            tmp_path, "def attack(mod: object) -> bool:\n    return True\n"
+        )
+        assert run_proof(pair).attempts == 1
+
+    def test_declared_attempts_are_honoured(self, tmp_path: Path) -> None:
+        pair = _fake_pair(
+            tmp_path,
+            "ATTEMPTS = 4\n\ndef attack(mod: object) -> bool:\n    return True\n",
+        )
+        assert run_proof(pair).attempts == 4
+
+    def test_a_flaky_attack_still_catches_a_broken_decoy(
+        self, tmp_path: Path
+    ) -> None:
+        """🔴 decoy 를 가끔만 깨는 공격도 **잡아야 한다** - 시도가 늘면 더 잡는다."""
+        pair = _fake_pair(
+            tmp_path,
+            "ATTEMPTS = 12\n"
+            "_n = {'i': 0}\n\n"
+            "def attack(mod: object) -> bool:\n"
+            "    _n['i'] += 1\n"
+            "    return _n['i'] % 5 == 0\n",
+        )
+        assert run_proof(pair).broke_decoy, (
+            "가끔만 깨는 공격을 놓쳤다 - 라벨이 거짓인 decoy 가 통과한다"
+        )
+
+    def test_attempts_are_capped(self, tmp_path: Path) -> None:
+        """무한정 시도하면 어떤 공격이든 언젠가 성공해 twin 조건이 무의미해진다."""
+        pair = _fake_pair(
+            tmp_path,
+            "ATTEMPTS = 9999\n\ndef attack(mod: object) -> bool:\n    return True\n",
+        )
+        assert run_proof(pair).attempts == MAX_ATTEMPTS
+
+    def test_bad_attempts_value_is_an_error(self, tmp_path: Path) -> None:
+        pair = _fake_pair(
+            tmp_path,
+            "ATTEMPTS = 0\n\ndef attack(mod: object) -> bool:\n    return True\n",
+        )
+        with pytest.raises(ProofError, match="1 이상의 정수"):
             run_proof(pair)
 
 

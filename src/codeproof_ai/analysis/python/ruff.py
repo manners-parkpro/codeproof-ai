@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from codeproof_ai.analysis.base import (
@@ -36,7 +37,24 @@ _SEVERITY: dict[str, Severity] = {
     "fatal": Severity.FATAL,
 }
 
-# 룰 접두사 -> 내부 분류. 하드코딩이 아니라 **접두사 계열** 매핑이다.
+# Ruff 자체 카테고리 -> 내부 분류.
+# 🔴 이 표는 룰 목록이 아니라 **Ruff 가 스스로 붙인 9개 카테고리**의 대응이다.
+#    룰이 추가돼도 카테고리는 그대로이므로 낡지 않는다 (C2: 룰 하드코딩 금지).
+_CATEGORY_BY_RUFF: dict[str, Category] = {
+    "security": Category.SECURITY,
+    "correctness": Category.CORRECTNESS,
+    "suspicious": Category.CORRECTNESS,
+    "performance": Category.PERFORMANCE,
+    "complexity": Category.MAINTAINABILITY,
+    # 아래 넷은 **관례 주장**이다 - 안전 근거가 반박할 수 있는 종류가 아니다.
+    "pedantic": Category.STYLE,
+    "style": Category.STYLE,
+    "formatting": Category.STYLE,
+    "restriction": Category.STYLE,
+}
+
+# 접두사 계열 매핑. introspect 가 실패했을 때만 쓰는 **대체 경로**다.
+# 정확도가 떨어진다 - D103 은 맞히지만 TRY003·PERF203 은 관례인데 놓친다.
 _CATEGORY_BY_PREFIX: tuple[tuple[str, Category], ...] = (
     ("S", Category.SECURITY),
     ("ASYNC", Category.CONCURRENCY),
@@ -62,11 +80,39 @@ _CATEGORY_BY_PREFIX: tuple[tuple[str, Category], ...] = (
 )
 
 
-def _category(code: str) -> Category:
+def _category_by_prefix(code: str) -> Category:
     for prefix, cat in sorted(_CATEGORY_BY_PREFIX, key=lambda x: -len(x[0])):
         if code.startswith(prefix):
             return cat
     return Category.OTHER
+
+
+def introspect_categories(timeout: float = 30.0) -> dict[str, Category]:
+    """`ruff rule --all` 로 룰별 카테고리를 읽어 온다.
+
+    🔴 접두사로 짐작하지 않는다 (C2). Ruff 가 룰마다 `category` 를 직접 주는데
+       그걸 안 쓰고 접두사로 추정하면 조용히 틀린다 - `TRY003` 과 `PERF203` 은
+       접두사로는 각각 maintainability · performance 지만 Ruff 는 둘 다
+       `pedantic` 으로 분류한다.
+
+    [실측] 이 호출은 16ms 다. 실행당 한 번이므로 측정 비용이 아니다.
+
+    실패하면 **빈 dict 를 돌려준다** - 호출부가 접두사 경로로 degrade 한다.
+    도구 introspection 실패로 분석 전체를 멈추지 않는다.
+    """
+    try:
+        out = run_tool("ruff", ["rule", "--all", "--output-format=json"], timeout)
+        rules = json.loads(out.stdout)
+    except (OSError, subprocess.SubprocessError, json.JSONDecodeError):
+        return {}
+
+    mapping: dict[str, Category] = {}
+    for rule in rules:
+        code = rule.get("code")
+        ruff_category = rule.get("category")
+        if isinstance(code, str) and isinstance(ruff_category, str):
+            mapping[code] = _CATEGORY_BY_RUFF.get(ruff_category, Category.OTHER)
+    return mapping
 
 
 class RuffAnalyzer:
@@ -97,6 +143,8 @@ class RuffAnalyzer:
         self.ignore_noqa = ignore_noqa
         self.timeout = timeout
         self._index = PythonSymbolIndex()
+        # 🔴 접두사로 짐작하지 않고 도구에 묻는다 (C2). 16ms · 실행당 한 번.
+        self._categories = introspect_categories(timeout)
 
     def version(self) -> ToolVersion:
         out = run_tool("ruff", ["--version"], self.timeout)
@@ -105,7 +153,15 @@ class RuffAnalyzer:
 
     def config_signature(self) -> str:
         noqa = "ignore-noqa" if self.ignore_noqa else "respect-noqa"
-        return f"ruff(select={'+'.join(self.select)},{noqa})"
+        # 🔴 분류 출처를 매니페스트에 적는다. introspect 와 접두사 추정은
+        #    다른 숫자를 내므로, 어느 쪽이었는지 모르면 재현이 안 된다.
+        src = "cat=tool" if self._categories else "cat=prefix"
+        return f"ruff(select={'+'.join(self.select)},{noqa},{src})"
+
+    def _category(self, code: str) -> Category:
+        """도구가 말한 분류를 쓰고, 없으면 접두사로 degrade 한다."""
+        found = self._categories.get(code)
+        return found if found is not None else _category_by_prefix(code)
 
     def analyze(self, target: ReviewTarget) -> list[Finding]:
         with materialize(target) as root:
@@ -196,7 +252,7 @@ class RuffAnalyzer:
                         ),
                     ),
                 ),
-                category=Category.OTHER if is_syntax else _category(code),
+                category=Category.OTHER if is_syntax else self._category(code),
                 severity=_SEVERITY.get(str(item.get("severity", "warning")), Severity.WARNING),
                 quoted_code=self._line(source_text, row),
                 rule_name=str(item.get("name") or "") or None,

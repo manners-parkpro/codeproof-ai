@@ -1,0 +1,28 @@
+decoy_id = "D045-snapshot-before-iteration"
+trap_kind = "defensive_copy"
+
+[bait]
+apparent_defect = """
+순회하는 대상에서 원소를 지운다. 반복 중 컬렉션을 변경하는 형태라
+RuntimeError: dictionary changed size during iteration 이 나는 전형적인
+동시 수정 오류로 읽히고, 루프 안의 del 이 곧바로 눈에 띈다.
+"""
+lure_lines = [9, 10]
+
+[safety]
+claim = "이 순회 중 삭제는 RuntimeError 를 낼 수 없다"
+justification = """
+for 가 도는 대상은 _sessions.items() 뷰가 아니라 list(...) 가 그 시점에 떠 둔
+별도 리스트이기 때문에, 루프 안에서 원본 딕셔너리를 아무리 바꿔도 순회 중인
+컬렉션은 변하지 않는다. 파이썬이 RuntimeError 를 내는 조건은 뷰를 직접 돌 때
+크기가 바뀌는 경우인데 여기서는 그 조건이 성립하지 않는다. 사본은 키와 값에
+대한 얕은 복사라 비용도 항목 수에 비례하는 수준이다.
+"""
+guard_symbol = "sweep"
+guard_lines = [8, 8]
+
+[twin]
+defect = """
+list(...) 사본이 사라져 딕셔너리 뷰를 직접 순회한다.
+루프 안에서 del 이 일어나는 순간 RuntimeError 로 터진다.
+"""

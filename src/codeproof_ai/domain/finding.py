@@ -42,6 +42,23 @@ class Category(StrEnum):
     STYLE = "style"
     OTHER = "other"
 
+    @property
+    def is_defect_claim(self) -> bool:
+        """이 지적이 **결함을 주장**하는가, 아니면 관례를 주장하는가.
+
+        🔴 채점에서 갈리는 경계다. 안전 근거는 「이 결함처럼 보이는 것이
+        왜 결함이 아닌가」를 말하므로, **관례 주장은 반박할 수 없다.**
+
+        [실측] 이 구분을 빼먹었을 때 `provable_safety` 의 FP 66건 중 **45건이
+        `D103`(docstring 누락)** 이었다. decoy 함수에 정말 docstring 이 없으니
+        그 지적은 옳다 - 그걸 FP 로 센 것은 **우리가 비판하는 바로 그 오류**다
+        (증거의 부재를 오답으로 채점하는 것과 같은 종류).
+
+        ⚠ `OTHER` 는 결함 주장으로 친다. 모델 지적은 분류가 비어 올 수 있는데,
+          그걸 관례로 취급하면 **모델의 FP 가 조용히 사라진다.**
+        """
+        return self is not Category.STYLE
+
 
 _WS = re.compile(r"\s+")
 

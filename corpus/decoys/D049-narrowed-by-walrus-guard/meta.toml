@@ -1,0 +1,28 @@
+decoy_id = "D049-narrowed-by-walrus-guard"
+trap_kind = "type_narrowed"
+
+[bait]
+apparent_defect = """
+_port 가 인자를 str 로 선언해 두고 int() 에 그대로 넘긴다. 환경 변수는 없을 수도
+있고 숫자가 아닐 수도 있는 값이라, None 이나 빈 문자열이 흘러들면 TypeError 나
+ValueError 로 터지는 무방비 변환으로 읽힌다.
+"""
+lure_lines = [6, 7]
+
+[safety]
+claim = "_port 는 None 을 받을 수 없다"
+justification = """
+_port 는 비공개 함수이고 이 모듈에서 부르는 곳은 configured_port 한 곳뿐인데,
+그 함수가 대입식으로 값을 받은 즉시 None 인지 확인해 기본 포트를 반환하고
+빠져나가기 때문에 _port 에 도달한 raw 는 반드시 str 이다. 타입 검사기도
+walrus 뒤의 is None 비교를 좁힘으로 인정해 같은 결론을 낸다. 숫자가 아닌
+문자열이 오면 ValueError 가 나지만 그건 설정 오류를 드러내는 의도된 동작이다.
+"""
+guard_symbol = "configured_port"
+guard_lines = [10, 13]
+
+[twin]
+defect = """
+None 검사가 사라져 환경 변수가 없을 때 None 이 그대로 int() 에 들어간다.
+APP_PORT 가 설정되지 않은 환경에서 TypeError 로 터진다.
+"""

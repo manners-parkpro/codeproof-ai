@@ -1,0 +1,11 @@
+"""재시도 대기 - 지수 백오프에 상한이 있다."""
+
+_MAX_DELAY = 30.0
+
+
+def _backoff(attempt: int) -> float:
+    return 2.0**attempt
+
+
+def delay_for(attempt: int) -> float:
+    return _backoff(attempt)

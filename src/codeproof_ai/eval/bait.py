@@ -144,7 +144,15 @@ def measure(
         for label in reviewers:
             findings = batched[label][s.sample_id]
             total[label] = len(findings)
-            in_bait[label] = sum(1 for f in findings if lo <= f.location.line <= hi)
+            # 🔴 위치만 보지 않는다. "docstring 이 없다"가 미끼 줄에 떨어져도
+            #    덫이 작동한 것이 아니다 - 그건 사실인 지적이고 미끼와 무관하다.
+            #    [실측] 이 구분 없이 셌을 때 type_narrowed 가 1/4 로 "물렸는데"
+            #    실제로 문 것은 D103 이었다.
+            in_bait[label] = sum(
+                1
+                for f in findings
+                if lo <= f.location.line <= hi and f.category.is_defect_claim
+            )
 
         stats.append(
             DecoyStat(

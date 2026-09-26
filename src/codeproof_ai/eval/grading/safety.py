@@ -29,7 +29,10 @@ class ProvableSafetyGrader:
     """서면 안전 근거와 대조한다. LLM 판정자를 쓰지 않는다."""
 
     name = "provable_safety"
-    definition = "서면 안전 근거가 덮는 범위 안의 지적은 FP. 밖은 판정 불가."
+    definition = (
+        "서면 안전 근거가 덮는 범위 안의 **결함 주장**은 FP. "
+        "범위 밖이거나 관례 주장이면 판정 불가."
+    )
     emits = frozenset({Outcome.TRUE_POSITIVE, Outcome.FALSE_POSITIVE, Outcome.UNDECIDABLE})
     uses_llm_judge = False
 
@@ -60,6 +63,23 @@ class ProvableSafetyGrader:
         assert sample.safety is not None  # is_proven_safe 가 보장
         loc = o.finding.location
         covered = sample.safety.covered_lines
+
+        # 🔴 관례 주장은 안전 근거가 **반박할 수 없다.**
+        #    근거는 "이 결함처럼 보이는 것이 왜 결함이 아닌가"를 말한다.
+        #    "docstring 이 없다"는 그 범위 밖이고, 더구나 **사실이다**.
+        #    [실측] 이 구분을 빼먹었을 때 FP 66건 중 45건이 D103 이었다 -
+        #    맞는 지적을 오답으로 채점한 것이고, 그건 우리가 비판하는 오류다.
+        if not o.finding.category.is_defect_claim:
+            return Judgment(
+                finding_key=o.finding.fingerprint,
+                outcome=Outcome.UNDECIDABLE,
+                grader=self.name,
+                rationale=(
+                    f"{o.finding.rule_id} 는 관례 주장이다 "
+                    f"({o.finding.category.value}) - 안전 근거는 결함 주장만 "
+                    "반박할 수 있으므로 이 채점자의 정의로는 판정할 수 없다"
+                ),
+            )
 
         if covered is not None and sample.safety.covered_path == loc.path:
             lo = max(1, covered[0] - self.overlap_slack)

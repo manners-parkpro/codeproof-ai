@@ -54,6 +54,12 @@ if TYPE_CHECKING:
 
 PROOF_FILE = "proof.py"
 ATTACK = "attack"
+ATTEMPTS = "ATTEMPTS"
+
+DEFAULT_ATTEMPTS = 1
+MAX_ATTEMPTS = 20
+"""🔴 상한을 둔다. 무한정 시도하면 **어떤 공격이든 언젠가는 성공**하고,
+그러면 twin 조건이 아무것도 보장하지 않게 된다."""
 
 
 class Attack(Protocol):
@@ -78,6 +84,9 @@ class ProofResult:
 
     broke_twin: bool
     """False 면 공격이 무능하다 - 결함을 못 잡는 공격은 증거가 아니다."""
+
+    attempts: int = 1
+    """각 쪽에 시도한 횟수. 비결정적 공격(경쟁·난수)은 여러 번 시도한다."""
 
     @property
     def ok(self) -> bool:
@@ -136,13 +145,54 @@ def run_proof(pair_dir: Path) -> ProofResult:
     """한 쌍에 반증을 시도한다.
 
     🔴 decoy 를 먼저 친다. twin 이 먼저 터지면 그 예외가 decoy 결과를 가릴 수 있다.
+
+    ## 비결정적 공격은 여러 번 시도한다
+
+    경쟁이나 난수에 기대는 공격은 한 번에 재현되지 않을 수 있다.
+    [실측] D042 의 경쟁 공격이 단독 실행에서는 5/5 통과했는데 전체 테스트
+    부하에서 twin 을 못 깨 **flaky** 했다. flaky 한 관문은 느린 관문보다 나쁘다 -
+    사람이 재실행으로 넘기기 시작한다.
+
+    반증은 애초에 **시도**이므로 여러 번 시도하는 것이 정의에 맞는다.
+    `proof.py` 가 `ATTEMPTS = N` 을 선언하면 양쪽 모두 최대 N회 시도한다:
+
+      · decoy - **한 번이라도** 깨지면 라벨이 거짓이다 (시도가 늘수록 엄격해진다)
+      · twin  - **한 번이라도** 깨지면 공격이 유능하다 (시도가 늘수록 덜 flaky)
+
+    🔴 두 방향이 같은 부등호를 쓴다는 점이 중요하다. 시도를 늘려도 decoy 쪽이
+       느슨해지지 않으므로 **완화가 아니라 강화**다. 상한은 MAX_ATTEMPTS 다.
     """
     attack = load_attack(pair_dir)
+    attempts = _declared_attempts(pair_dir)
     name = pair_dir.name.replace("-", "_")
-    broke_decoy = _attempt(attack, pair_dir / "decoy.py", f"_decoy_{name}")
-    broke_twin = _attempt(attack, pair_dir / "twin.py", f"_twin_{name}")
+    broke_decoy = _any_attempt(
+        attack, pair_dir / "decoy.py", f"_decoy_{name}", attempts
+    )
+    broke_twin = _any_attempt(attack, pair_dir / "twin.py", f"_twin_{name}", attempts)
     return ProofResult(
-        decoy_id=pair_dir.name, broke_decoy=broke_decoy, broke_twin=broke_twin
+        decoy_id=pair_dir.name,
+        broke_decoy=broke_decoy,
+        broke_twin=broke_twin,
+        attempts=attempts,
+    )
+
+
+def _declared_attempts(pair_dir: Path) -> int:
+    """`proof.py` 가 선언한 시도 횟수. 없으면 1회."""
+    mod = load_module(
+        pair_dir / PROOF_FILE, f"_proof_{pair_dir.name.replace('-', '_')}"
+    )
+    raw = getattr(mod, ATTEMPTS, DEFAULT_ATTEMPTS)
+    if not isinstance(raw, int) or raw < 1:
+        msg = f"{pair_dir.name}: {ATTEMPTS} 는 1 이상의 정수다 (지금 {raw!r})"
+        raise ProofError(msg)
+    return min(raw, MAX_ATTEMPTS)
+
+
+def _any_attempt(attack: Attack, path: Path, alias: str, attempts: int) -> bool:
+    """최대 attempts 회 시도해 한 번이라도 깨지면 True. 깨지면 즉시 멈춘다."""
+    return any(
+        _attempt(attack, path, f"{alias}_{i}") for i in range(attempts)
     )
 
 

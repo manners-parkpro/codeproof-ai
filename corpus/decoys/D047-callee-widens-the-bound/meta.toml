@@ -1,0 +1,28 @@
+decoy_id = "D047-callee-widens-the-bound"
+trap_kind = "bounded_input"
+
+[bait]
+apparent_defect = """
+delay_for 가 호출자에게 받은 attempt 를 검사 없이 그대로 넘긴다. 지수 계산에
+들어가는 값에 상한이 없는 형태라 큰 수가 들어오면 대기 시간이 폭발하고
+재시도가 사실상 영원히 멈추는 자원 문제로 읽힌다.
+"""
+lure_lines = [10, 11]
+
+[safety]
+claim = "delay_for 의 반환값은 30초를 넘을 수 없다"
+justification = """
+delay_for 가 부르는 _backoff 가 지수 계산 결과를 그대로 돌려주지 않고 min 으로
+_MAX_DELAY 와 비교해 작은 쪽을 고르기 때문에, attempt 가 아무리 커도 반환값이
+30.0 을 넘지 않는다. 즉 상한은 호출부가 아니라 피호출부에 있고 그것으로 충분
+하다. 양쪽에 상한을 두면 경계값이 두 곳에 흩어져 한쪽만 고쳤을 때 조용히
+어긋난다.
+"""
+guard_symbol = "_backoff"
+guard_lines = [6, 11]
+
+[twin]
+defect = """
+_backoff 의 min 이 사라져 지수 계산 결과가 그대로 나간다.
+attempt 가 커지면 대기 시간이 기하급수로 늘어 재시도가 멈춘다.
+"""

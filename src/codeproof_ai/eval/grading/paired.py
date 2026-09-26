@@ -38,7 +38,8 @@ class PairedFixGrader:
     name = "paired_fix"
     definition = (
         "짝에 없는 지적이 결함 위치와 겹치면 TP. "
-        "짝에도 있으면 변별력 없음(판정 불가). 음성 위의 지적은 FP."
+        "짝에도 있으면 변별력 없음(판정 불가). "
+        "음성 위의 **결함 주장**은 FP, 관례 주장은 판정 불가."
     )
     emits = frozenset({Outcome.TRUE_POSITIVE, Outcome.FALSE_POSITIVE, Outcome.UNDECIDABLE})
     uses_llm_judge = False
@@ -85,12 +86,25 @@ class PairedFixGrader:
         loc = o.finding.location
 
         if sample.is_negative:
-            # 안전한 코드 위의 지적은 짝과 무관하게 거짓 경보다.
+            # 🔴 관례 주장은 거짓 경보가 아니다 - "docstring 이 없다"는 사실이다.
+            #    이 구분 없이 세면 룰 선택이 곧 FP 수가 된다 (provable_safety 와
+            #    같은 결함이었다: FP 66건 중 45건이 D103).
+            if not o.finding.category.is_defect_claim:
+                return Judgment(
+                    finding_key=key,
+                    outcome=Outcome.UNDECIDABLE,
+                    grader=self.name,
+                    rationale=(
+                        f"{o.finding.rule_id} 는 관례 주장이다 - "
+                        "안전한 코드 위에 나와도 틀린 지적이 아니다"
+                    ),
+                )
+            # 안전한 코드 위의 결함 주장은 짝과 무관하게 거짓 경보다.
             return Judgment(
                 finding_key=key,
                 outcome=Outcome.FALSE_POSITIVE,
                 grader=self.name,
-                rationale="증명된 음성 위의 지적",
+                rationale="증명된 음성 위의 결함 주장",
             )
 
         matched = self._matching_defect(sample, loc)
