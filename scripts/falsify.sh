@@ -15,8 +15,16 @@
 # 아이디어는 `corpus/decoys/*/proof.py` 와 같다. 거기서는 decoy 의 안전 주장을
 # 공격으로 반증하고, 여기서는 **가드의 주장**을 위반으로 반증한다. 한 층 위다.
 #
-#   proof.py    : attack(twin) is True   - 공격이 결함을 잡을 수 있음을 증명
-#   falsify.sh  : 깨뜨리면 가드가 운다   - 가드가 위반을 잡을 수 있음을 증명
+# 🔴 그러니 계약도 **두 줄**이어야 한다. proof.py 가 한 줄(attack(decoy) is False)
+#    만으로는 부족해서 두 번째 줄(attack(twin) is True)을 둔 것과 같은 이유다.
+#
+#      guard(깨끗한 트리) == 0   - 가드가 정상 상태를 통과시킨다
+#      guard(깨뜨린 트리) != 0   - 🔴 가드가 위반을 **잡을 수 있다**
+#
+#    [실측] 처음엔 두 번째 줄만 있었다. 그러면 가드 테스트 파일을 **이름만 바꿔도**
+#    pytest 가 `exit=4`(file not found)를 내고, 스크립트가 그걸 「가드가 울었다」로
+#    읽어 **통과**한다. 가드가 통째로 사라졌는데 초록불이 켜지는 것이다 -
+#    proof.py 에서 `return False` 만 적어도 통과하던 것과 정확히 같은 구멍이다.
 #
 # 용법:
 #   scripts/falsify.sh              전부
@@ -40,7 +48,7 @@ PASS=0; FAIL=0; FAILED_NAMES=()
 # 각 시나리오는 셋을 선언한다:
 #   claim_X   가드가 지킨다고 주장하는 불변식
 #   break_X   그 불변식을 깨는 최소 변경
-#   guard_X   가드. **실패해야(exit≠0) 성공**이다.
+#   guard_X   가드. 깨끗한 트리에서 **통과**하고 깨뜨린 뒤 **실패**해야 한다.
 
 SCENARIOS=(layering runner registry proof-label proof-vacuous convention docs-tree generated)
 
@@ -130,6 +138,15 @@ run_one() {
   printf '%s─── %s ───%s\n' "$BOLD" "$name" "$OFF"
   printf '  주장 : %s\n' "$("claim_$name")"
 
+  # ① 🔴 깨끗한 트리에서 가드가 **통과**하는가.
+  #    이 줄이 없으면 가드가 사라져 생긴 에러(pytest exit=4 등)를
+  #    「가드가 울었다」로 잘못 읽는다.
+  if ! "guard_$name" > /dev/null 2>&1; then
+    printf '  결과 : %s깨끗한 트리에서도 운다 — 가드가 고장났거나 시나리오가 낡았다%s\n\n' "$RED" "$OFF"
+    ((FAIL++)); FAILED_NAMES+=("$name"); restore; return
+  fi
+
+  # ② 불변식을 깬다.
   "break_$name" || { echo "  ${RED}깨뜨리지 못했다${OFF} — 시나리오가 낡았다"; ((FAIL++)); FAILED_NAMES+=("$name"); restore; return; }
 
   local out rc

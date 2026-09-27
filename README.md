@@ -889,7 +889,7 @@ codeproof report                  # docs/MEASUREMENTS.md
 codeproof report --check          # 낡았으면 exit 1 (CI 용)
 
 # ── 코퍼스 ──────────────────────────────────────────────
-codeproof decoy validate --strict # 규격 13종
+codeproof decoy validate --strict # 규격 12종
 codeproof decoy stats             # 미끼가 실제로 물리는지
 codeproof decoy new D0XX-짧은-설명
 

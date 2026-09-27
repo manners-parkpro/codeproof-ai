@@ -9,9 +9,11 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import re
 import tomllib
 from pathlib import Path
+from typing import ClassVar
 
 import pytest
 
@@ -21,6 +23,7 @@ from codeproof_ai.corpus.decoy import TrapKind
 ROOT = Path(__file__).resolve().parents[2]
 MEASUREMENTS = ROOT / "docs" / "MEASUREMENTS.md"
 DECOYS = ROOT / "corpus" / "decoys"
+SRC_DECOY = ROOT / "src" / "codeproof_ai" / "corpus" / "decoy.py"
 DOCS = {
     "README.md": ROOT / "README.md",
     "CLAUDE.md": ROOT / "CLAUDE.md",
@@ -363,6 +366,85 @@ class TestCliSurfaceMatchesDocs:
         assert self._real_commands() == set(_COMMANDS), (
             "--help 에 있는데 핸들러가 없는 명령이 있다 - "
             "구현하든지 파서에서 빼든지 한다"
+        )
+
+
+class TestCountedStructuresMatchTheCode:
+    """🔴 산문이 구조를 세면 반드시 낡는다 - 세는 일은 코드가 한다.
+
+    [실측] 이 클래스의 두 검사는 각각 **실제로 틀린 숫자**를 잡고 태어났다.
+    DESIGN 이 「층이 넷이다」 아래 다섯 줄 표를 달고 있었고, 검증 규칙 수는
+    12 인데 13 이라고 적혀 있었다(V1·V8 이 없어 번호가 연속이 아니다).
+    """
+
+    KOREAN_COUNT: ClassVar[dict[str, int]] = {
+        "둘": 2, "셋": 3, "넷": 4, "다섯": 5,
+        "여섯": 6, "일곱": 7, "여덟": 8, "아홉": 9,
+    }
+
+    def test_counted_headings_match_their_table(self) -> None:
+        """🔴 「층이 넷이다」 같은 제목의 수가 바로 아래 표와 맞아야 한다.
+
+        [실측] DESIGN 이 「층이 넷이다」라고 써 놓고 **다섯 줄**짜리 표를 달고
+        있었다. V13 을 추가하면서 제목을 안 고친 것이다. 같은 종류로 「12규칙」이
+        13이 된 적도 있다 - **구조를 산문이 세면 반드시 낡는다.**
+
+        패키지 트리 검사와 같은 원리다. 숫자를 손으로 적는 자리는 전부
+        세어 주는 검사를 붙인다.
+        """
+        pattern = re.compile(
+            r"####?\s*\S+이?\s*(" + "|".join(self.KOREAN_COUNT) + r")이다\s*\n+"
+            r"((?:\|[^\n]*\n)+)"
+        )
+        checked = 0
+        wrong: list[str] = []
+        for name, path in DOCS.items():
+            for m in pattern.finditer(path.read_text(encoding="utf-8")):
+                claimed = self.KOREAN_COUNT[m.group(1)]
+                rows = [r for r in m.group(2).strip().splitlines() if r.startswith("|")]
+                # 헤더 + 구분선 두 줄을 뺀다
+                actual = max(0, len(rows) - 2)
+                checked += 1
+                if claimed != actual:
+                    wrong.append(f"{name}: 「{m.group(1)}이다」인데 표는 {actual}줄")
+        assert checked, "세어야 할 제목을 하나도 못 찾았다 - 정규식이 낡았다"
+        assert not wrong, "제목의 수가 표와 다르다:\n  " + "\n  ".join(wrong)
+
+    def test_validator_rule_count_matches_the_code(self) -> None:
+        """🔴 문서가 말하는 decoy 검증 규칙 수를 **코드에서 세어** 대조한다.
+
+        [실측] 이걸 손으로 세다가 틀렸다. DESIGN 감사 때 `12규칙` 을 `13규칙` 으로
+        "고쳤는데", **V1 과 V8 이 없으므로** V2~V13 은 11개다(+W2 = 12).
+        번호가 연속이라고 가정한 것이 원인이다. 그때 README 는 12 라고 맞게
+        적고 있었으므로 **문서끼리 어긋난 상태**가 됐는데 아무도 못 잡았다.
+
+        구조를 산문이 세면 반드시 틀린다 - 세는 일은 코드가 한다.
+        """
+        tree = ast.parse(
+            (SRC_DECOY).read_text(encoding="utf-8")
+        )
+        codes: set[str] = set()
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.Call) and node.args):
+                continue
+            if getattr(node.func, "id", "") != "Violation":
+                continue
+            first = node.args[0]
+            if isinstance(first, ast.Constant) and isinstance(first.value, str):
+                codes.add(first.value)
+        assert len(codes) > 5, f"검증 규칙을 제대로 세지 못했다: {codes}"
+
+        claimed: list[tuple[str, int]] = []
+        for name, path in DOCS.items():
+            text = path.read_text(encoding="utf-8")
+            for m in re.finditer(r"(\d+)규칙|(?:규격|형식)\s*(\d+)종", text):
+                claimed.append((name, int(m.group(1) or m.group(2))))
+        assert claimed, "문서가 규칙 수를 하나도 말하지 않는다 - 대조가 공허하다"
+
+        wrong = [f"{n}: {c}" for n, c in claimed if c != len(codes)]
+        assert not wrong, (
+            f"검증기는 {len(codes)}종({sorted(codes)})인데 문서는 다르게 말한다: "
+            + ", ".join(wrong)
         )
 
 
