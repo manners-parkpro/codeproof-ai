@@ -433,6 +433,12 @@ PR Diff
 
 **[1]–[4] 는 제품, [5]–[6] 은 실험이다.** 패키지가 분리돼 있다 (`verify/` vs `eval/`).
 
+> ⚠️ **런타임 경로에는 CLI 진입점이 없다.** `[1]`–`[4]` 의 구성요소는 전부
+> 있고 테스트도 돌지만(결과 4 가 그 측정이다), 「PR 하나를 리뷰하는 명령」은
+> **일부러 만들지 않았다.** 이 저장소의 논지는 오프라인 측정 경로이고,
+> 안 되는 것을 `--help` 에 올려 두면 쓰는 사람이 속는다.
+> `--help` 의 7개 명령은 전부 실제로 동작하며, 테스트가 그것을 강제한다.
+
 ---
 
 ## 측정 설계
@@ -694,7 +700,7 @@ TTFT 가 구조적으로 정의되지 않으며, 결과가 **임의 순서**로 
 - **코드 도메인의 판정자 일치도가 전 도메인 최악** — pairwise κ **0.159**, Fleiss κ **0.070**.
 - **일관성 ≠ 타당성** — test-retest 0.99 와 위치편향 0.19 가 공존한다.
 
-→ 채점자은 **비-LLM 증거 기반**으로 설계한다.
+→ 채점자는 **비-LLM 증거 기반**으로 설계한다.
 
 ---
 
@@ -831,26 +837,51 @@ Python 3.14 이상이 필요하다 (`.python-version` 에 고정).
 ### 코퍼스 구축 환경은 별도다
 
 ```bash
-cd corpus && uv sync    # 별도 lock · 느슨한 핀 · Docker 필요
+cd corpus && uv sync    # 별도 lock · 느슨한 핀 · Docker 필요  ← v2 계획
 ```
 
-벤치마크 툴체인(cosmic-ray · SWE-smith · c-CRAB)이 더 낮은 인터프리터를 고정하기 때문에
-본 패키지와 **의도적으로 분리**돼 있다. uv workspace 가 아니다 —
-workspace 는 resolution 을 통합해서 같은 충돌을 되살린다.
+⚠️ **아직 없다.** 지금 `corpus/` 에는 손으로 쓴 decoy 만 있고 별도 환경이
+필요 없다. 마이닝 툴체인(cosmic-ray · SWE-smith · c-CRAB)을 붙일 때
+분리하는데, 그것들이 더 낮은 인터프리터를 고정하기 때문이다.
+uv workspace 로 묶지 않는다 — workspace 는 resolution 을 통합해서
+같은 충돌을 되살린다.
 
 ---
 
 ## 사용법
 
-> 구현 진행 중. 확정된 CLI 표면은 아래와 같다.
+```bash
+# ── 준비 상태 ───────────────────────────────────────────
+codeproof doctor
+
+# ── 측정 (자격증명 불필요) ──────────────────────────────
+codeproof measure --analyzers ruff,mypy              # 기본 룰 선택
+codeproof measure --analyzers ruff --ruff-select ALL # 손잡이를 바꿔 본다
+codeproof history --limit 5                          # 저장된 실행
+codeproof history --repro <config-hash>              # 같은 설정끼리 재현성
+
+# ── 측정값 문서 생성 ────────────────────────────────────
+codeproof report                  # docs/MEASUREMENTS.md
+codeproof report --check          # 낡았으면 exit 1 (CI 용)
+
+# ── 코퍼스 ──────────────────────────────────────────────
+codeproof decoy validate --strict # 규격 13종
+codeproof decoy stats             # 미끼가 실제로 물리는지
+codeproof decoy new D0XX-짧은-설명
+
+# ── 외부 리뷰어 가져오기 (자격증명 불필요) ──────────────
+codeproof import --from out --name semgrep --identity "1.2.3"
+codeproof import --from out --name codex-cli --identity "0.155.1" --kind agent
+
+# ── 모델 (자격증명 필요) ────────────────────────────────
+codeproof eval --providers claude,codex --effort high --samples 8
+```
+
+🔴 **안전 근거가 참인지는 `decoy validate` 가 못 본다.** 그건 쌍마다 있는
+`proof.py` 를 돌리는 테스트가 본다:
 
 ```bash
-
-# 실험 실행 (오프라인 경로)
-codeproof eval --corpus corpus/v1 --providers claude,codex --samples 8
-
-# 채점 기준 편차 리포트 — 이 프로젝트의 헤드라인
-codeproof report --run <run-id> --by-oracle
+uv run pytest tests/corpus/test_proofs.py
 ```
 
 ---

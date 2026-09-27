@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import argparse
 import re
 import tomllib
 from pathlib import Path
@@ -53,6 +54,27 @@ class TestReferencedFilesExist:
                 if not (path.parent / link).resolve().exists():
                     missing.add(f"{name} → {link}")
         assert not missing, f"깨진 내부 링크: {sorted(missing)}"
+
+    def test_citations_are_well_formed_arxiv_ids(self) -> None:
+        """🔴 인용이 실재하는지는 **사람이 확인한다.** 여기서는 모양만 본다.
+
+        포트폴리오에서 존재하지 않는 인용은 치명적이다. 네트워크에 의존하는
+        테스트는 오프라인에서 깨지므로 두지 않고, 대신 형식이 어긋난 것을
+        잡는다 - arXiv ID 는 `YYMM.NNNNN` 이다.
+
+        [확인 · 2026-09-27] 인용 19건의 URL 을 전부 열어 200 을 확인했고,
+        핵심 4건(c-CRAB · PrimeVul · CR-Bench · 합의 감사)은 제목과 수치까지
+        대조했다. PrimeVul 의 F1 68.26% -> 3.09% 도 원문에서 확인했다.
+        """
+        ids = re.findall(r"arxiv\.org/(?:abs|html)/(\d{4})\.(\d{4,5})", _all_docs())
+        assert ids, "arXiv 인용을 찾지 못했다 - 패턴이 바뀌었나"
+
+        bad = [
+            f"{yy}.{nn}"
+            for yy, nn in ids
+            if not ("01" <= yy[2:] <= "12" and yy[:2].isdigit())
+        ]
+        assert not bad, f"arXiv ID 형식이 아니다: {bad}"
 
 
 class TestGeneratedMeasurementsAreCurrent:
@@ -234,6 +256,42 @@ class TestCliSurfaceMatchesDocs:
         documented = set(re.findall(r"codeproof ([a-z]+)", _all_docs()))
         unknown = documented - self._real_commands()
         assert not unknown, f"문서에만 있는 명령: {sorted(unknown)}"
+
+    def test_documented_flags_exist(self) -> None:
+        """🔴 문서에 적힌 플래그가 **실재해야** 한다.
+
+        [실측] README 사용법이 `report --run <id> --by-oracle` 을 적고 있었다.
+        그런 플래그는 없다 - 설계 초안에 있던 표면이 그대로 남아 있었고,
+        명령이 실재하는지만 보던 기존 검사는 그걸 놓쳤다.
+
+        베껴 쓴 사람이 바로 막히는 종류의 거짓말이라 특히 나쁘다.
+        """
+        parser = build_parser()
+        subs = next(
+            a
+            for a in parser._actions
+            if isinstance(a, argparse._SubParsersAction)
+        )
+        real = {
+            name: {
+                opt
+                for action in sub._actions
+                for opt in action.option_strings
+                if opt.startswith("--")
+            }
+            for name, sub in subs.choices.items()
+        }
+
+        bad: list[str] = []
+        for cmd, flags in re.findall(
+            r"codeproof (\w+)((?:\s+--?[\w-]+(?:[ =][^\s]+)?)*)", _all_docs()
+        ):
+            if cmd not in real:
+                continue
+            for flag in re.findall(r"(--[\w-]+)", flags):
+                if flag not in real[cmd]:
+                    bad.append(f"codeproof {cmd} {flag}")
+        assert not bad, f"문서에만 있는 플래그: {sorted(set(bad))}"
 
     def test_every_advertised_command_actually_runs(self) -> None:
         """🔴 `--help` 에 올린 명령은 **전부 동작한다.**
