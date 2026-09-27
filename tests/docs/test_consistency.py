@@ -25,6 +25,9 @@ DOCS = {
     "README.md": ROOT / "README.md",
     "CLAUDE.md": ROOT / "CLAUDE.md",
     "docs/DESIGN.md": ROOT / "docs" / "DESIGN.md",
+    # 🔴 검증 프로토콜도 여기 든다. 베껴 쓰는 사람이 바로 막히는 문서라
+    #    낡은 명령·깨진 링크가 특히 나쁘다.
+    "docs/VERIFY.md": ROOT / "docs" / "VERIFY.md",
 }
 
 
@@ -40,7 +43,9 @@ class TestReferencedFilesExist:
     """🔴 문서가 가리키는 파일이 사라지면 독자가 헛걸음한다."""
 
     def test_source_paths_resolve(self) -> None:
-        pattern = re.compile(r"(?:src/codeproof_ai|\.claude|tests)/[\w/]+\.(?:py|sh)")
+        pattern = re.compile(
+            r"(?:src/codeproof_ai|\.claude|tests|scripts)/[\w/]+\.(?:py|sh)"
+        )
         missing = {
             m for m in pattern.findall(_all_docs()) if not (ROOT / m).is_file()
         }
@@ -191,6 +196,37 @@ class TestProseDoesNotContradictTheGeneratedFile:
         assert not offenders, (
             "채점자를 밝히지 않은 구별 성공률이 있다 - "
             f"정의마다 다른 숫자가 나온다: {offenders}"
+        )
+
+    def test_grader_comparisons_name_the_rule_selection(self) -> None:
+        """🔴 편차는 (채점자 x **룰 선택**)의 성질이다 - 어느 선택인지 적는다.
+
+        [실측] 검증 프로토콜(docs/VERIFY.md)을 쓰다가 발견했다. 헤드라인
+        「정의만 바꿔도 FP 가 34배」는 `--ruff-select ALL` 에서만 성립한다.
+        `S`(보안 룰) 로 좁히면 두 정의가 **정확히 일치해** 편차가 1.0배가 되고,
+        짝 채점의 11 vs 0 도 **둘 다 0** 이 되어 사라진다.
+
+        편차의 정체가 「판정 불가로 둘 것을 오답으로 세느냐」이기 때문이다 -
+        보안 룰은 전부 근거 범위 안의 결함 주장이라 이견이 생길 자리가 없다.
+
+        이건 바로 위 테스트가 막는 오류의 **두 번째 축**이다. 거기서는
+        「구별 성공률은 (리뷰어 x 채점자)」를 배웠는데, 같은 규율을 룰 선택에는
+        적용하지 않고 있었다. 축이 하나 남아 있으면 그 축으로 다시 틀린다.
+        """
+        readme = _text("README.md")
+        sites = list(re.finditer(r"injected_defect", readme))
+        assert len(sites) >= 3, (
+            f"채점자 비교 지점이 {len(sites)}곳뿐이다 - 대조가 공허하다"
+        )
+        offenders: list[str] = []
+        for m in sites:
+            window = readme[max(0, m.start() - 700) : m.end() + 700]
+            if "ALL" not in window:
+                offenders.append(window[650:790].replace("\n", " ").strip())
+        assert not offenders, (
+            "룰 선택을 밝히지 않은 채점자 비교가 있다 - "
+            "`S` 로 좁히면 두 정의가 일치해 편차가 사라진다:\n  "
+            + "\n  ".join(f"...{o}..." for o in offenders)
         )
 
 
