@@ -51,9 +51,16 @@ def render_measurements(
 ) -> str:
     """측정값 문서 전체.
 
-    🔴 시각·run_id 를 넣지 않는다. 넣으면 코퍼스가 그대로여도 파일이
-       매번 달라져 「최신인가」를 확인할 수 없다. 재현에 필요한 설정은
-       `config_hash` 로 충분하다.
+    🔴 **내용에 영향 없는 변화에는 바뀌지 않아야 한다.** 그래야 「최신인가」를
+       물을 수 있다. 그래서 넣지 않는 것:
+
+       · 시각 · `run_id` - 매 실행마다 달라진다
+       · `config_hash` - **하네스 커밋**이 들어 있어 무관한 커밋마다 달라진다
+         [실측] harness_sha 를 진짜 SHA 로 고친 직후 이 파일이 커밋마다
+         낡은 것으로 잡혔다. 내 수정이 만든 2차 문제였다.
+
+       대신 `corpus_hash` 를 싣는다 - 샘플 내용에서 나오므로 **코퍼스가
+       바뀔 때만** 바뀐다. 실행 단위 추적은 `runs.db` 와 `measure` 출력이 한다.
     """
     negatives = sum(1 for s in samples if s.is_proven_safe)
     parts = [
@@ -64,7 +71,7 @@ def render_measurements(
         f"리뷰어 `{run.reviewer}` ({run.manifest.model_id}) · "
         f"설정 `{run.manifest.params_sent.get('reviewer_config', '?')}`",
         "",
-        f"코퍼스 **{negatives}쌍** · `config_hash` `{run.manifest.config_hash}`",
+        f"코퍼스 **{negatives}쌍** · `corpus_hash` `{run.manifest.corpus_hash}`",
         "",
         _spread_section(run, graders),
         _pairs_section(run),

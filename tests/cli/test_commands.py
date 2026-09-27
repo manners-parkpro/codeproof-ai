@@ -369,6 +369,29 @@ class TestReport:
         main(["report", "--corpus", str(small_corpus), "--out", str(b)])
         assert a.read_text(encoding="utf-8") == b.read_text(encoding="utf-8")
 
+    def test_it_does_not_change_with_the_harness_commit(
+        self, small_corpus: Path, tmp_path: Path
+    ) -> None:
+        """🔴 생성물은 **내용에 영향 없는 변화**에는 바뀌지 않아야 한다.
+
+        [실측] harness_sha 를 진짜 git SHA 로 고친 직후, 그것이 들어간
+        `config_hash` 를 문서에 싣고 있던 탓에 **커밋마다** 이 파일이
+        낡은 것으로 잡혔다. 클린 클론에서 `report --check` 가 바로 실패했다.
+
+        그래서 `config_hash`(실행 비교용 DB 키) 대신 `corpus_hash`(샘플 내용
+        지문)를 싣는다. 실행 단위 추적은 runs.db 가 한다.
+        """
+        out = tmp_path / "M.md"
+        main(["report", "--corpus", str(small_corpus), "--out", str(out)])
+        body = out.read_text(encoding="utf-8")
+
+        assert "config_hash" not in body, (
+            "config_hash 에는 harness_sha 가 들어 있어 무관한 커밋마다 달라진다"
+        )
+        assert "corpus_hash" in body, "무엇으로 만든 숫자인지는 남아야 한다"
+        assert "run_id" not in body
+        assert "created_at" not in body
+
     def test_check_detects_a_stale_file(
         self, small_corpus: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
