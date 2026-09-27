@@ -172,21 +172,17 @@ class TestCliSurfaceMatchesDocs:
         unknown = documented - self._real_commands()
         assert not unknown, f"문서에만 있는 명령: {sorted(unknown)}"
 
-    def test_unimplemented_commands_are_not_advertised_as_working(self) -> None:
-        """🔴 `[미구현]` 을 내는 명령을 「지금 동작한다」 절에 두지 않는다."""
-        parser = build_parser()
-        all_cmds = self._real_commands()
-        unimplemented = all_cmds - set(_COMMANDS)
-        assert unimplemented, "미구현 명령이 사라졌다면 이 테스트를 지운다"
+    def test_every_advertised_command_actually_runs(self) -> None:
+        """🔴 `--help` 에 올린 명령은 **전부 동작한다.**
 
-        readme = _text("README.md")
-        start = readme.find("### 지금 동작하는 것")
-        if start == -1:
-            return
-        section = readme[start : readme.find("###", start + 10)]
-        leaked = {c for c in unimplemented if f"codeproof {c}" in section}
-        assert not leaked, f"미구현 명령이 「지금 동작」 절에 있다: {sorted(leaked)}"
-        assert parser is not None
+        전에는 `review` 가 `--help` 에 있으면서 `[미구현]` 을 냈다. 쓰는
+        사람이 속는다. 안 되는 것은 광고하지 않는 쪽으로 바꿨고, 그 상태를
+        여기서 고정한다.
+        """
+        assert self._real_commands() == set(_COMMANDS), (
+            "--help 에 있는데 핸들러가 없는 명령이 있다 - "
+            "구현하든지 파서에서 빼든지 한다"
+        )
 
 
 class TestMeasuredClaimsAreLabelled:

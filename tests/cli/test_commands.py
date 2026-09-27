@@ -348,22 +348,6 @@ class TestImport:
         assert "섞어서 집계하지 않는다" in capsys.readouterr().out
 
 
-class TestUnimplementedCommands:
-    """🔴 미구현은 조용히 성공하지 않아야 한다."""
-
-    @pytest.mark.parametrize("cmd", ["review"])
-    def test_returns_nonzero(
-        self, cmd: str, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        args = {
-            "review": [
-                "review", "--diff", "x", "--provider", "claude", "--effort", "low"
-            ],
-        }[cmd]
-        assert main(args) == 1
-        assert "미구현" in capsys.readouterr().err
-
-
 class TestReport:
     """🔴 측정값을 **생성**한다 - 문서가 숫자를 베끼면 반드시 낡는다."""
 

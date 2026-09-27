@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING
 from codeproof_ai.domain.observation import FingerprintGrouper, group_runs
 from codeproof_ai.domain.run import RunManifest
 from codeproof_ai.eval.metrics import GraderResult, summarize
+from codeproof_ai.eval.provenance import harness_sha as current_sha
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -202,7 +203,7 @@ def run_reviewer(
     *,
     sample_n: int = 1,
     grouper: FindingGrouper | None = None,
-    harness_sha: str = "uncommitted",
+    harness_sha: str | None = None,
     prompt_hash: str = "n/a",
 ) -> ReviewerRun:
     """🔴 통합 경로 - Reviewer 면 무엇이든 같은 하네스로 돈다.
@@ -282,7 +283,8 @@ def run_reviewer(
         sample_n=sample_n,
         cache_policy=declared.get("cache_policy", "cold_only"),
         grouper=policy.name,
-        harness_sha=harness_sha,
+        # 🔴 짐작하지 않는다 - 알 수 있으면 알아낸다 (E01 과 같은 원칙).
+        harness_sha=harness_sha if harness_sha is not None else current_sha(),
         created_at=datetime.now(UTC),
         params_sent={
             "reviewer_config": reviewer.config_signature(),

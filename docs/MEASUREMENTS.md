@@ -4,7 +4,7 @@
 
 리뷰어 `ruff` (ruff/0.16.8) · 설정 `ruff(select=ALL,ignore-noqa,cat=tool)`
 
-코퍼스 **60쌍** · `config_hash` `2e1afb8e6534aa12ce8b62f1`
+코퍼스 **60쌍** · `config_hash` `8220551afad81e6ec6d463cb`
 
 ## 채점 기준 편차 — 헤드라인
 

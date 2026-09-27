@@ -835,8 +835,6 @@ workspace 는 resolution 을 통합해서 같은 충돌을 되살린다.
 > 구현 진행 중. 확정된 CLI 표면은 아래와 같다.
 
 ```bash
-# 단일 PR 리뷰 (런타임 경로)
-codeproof review --diff PR.diff --provider claude
 
 # 실험 실행 (오프라인 경로)
 codeproof eval --corpus corpus/v1 --providers claude,codex --samples 8

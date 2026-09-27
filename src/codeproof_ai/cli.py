@@ -76,14 +76,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    review = sub.add_parser("review", help="단일 PR 리뷰 (런타임 경로)")
-    review.add_argument("--diff", required=True, help="unified diff 파일")
-    review.add_argument("--provider", required=True, help="claude | codex")
-    review.add_argument(
-        "--effort",
-        required=True,
-        help="🔴 필수 — 기본값이 모델마다 다르다 (claude-opus-5-5=medium, claude-sonnet-5=high)",
-    )
+    # 🔴 `review`(단일 PR 런타임 경로)는 **일부러 없다.**
+    #    안 되는 것을 --help 에 올려 두면 쓰는 사람이 속는다. 이 저장소의
+    #    논지는 오프라인 측정 경로(measure·eval·report)이고, 런타임 리뷰는
+    #    그 논지를 보이는 데 필요하지 않다. docs/DESIGN.md 의 범위 표를 본다.
 
     ev = sub.add_parser("eval", help="모델을 리뷰어로 돌린다 (자격증명 필요)")
     ev.add_argument("--corpus", default="corpus/decoys")
@@ -554,7 +550,7 @@ def _cmd_import(
 
     graders = _graders_for(name, slack, labeled)
     run = run_reviewer(
-        reviewer, labeled, graders, sample_n=runs, harness_sha="uncommitted"
+        reviewer, labeled, graders, sample_n=runs
     )
 
     print("=" * 74)
@@ -853,9 +849,9 @@ _COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     handler = _COMMANDS.get(args.command)
-    if handler is None:
-        print(f"[미구현] {args.command}", file=sys.stderr)
-        return 1
+    if handler is None:  # pragma: no cover - argparse 가 먼저 거른다
+        print(f"알 수 없는 명령: {args.command}", file=sys.stderr)
+        return 2
     return handler(args)
 
 
