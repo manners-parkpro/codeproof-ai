@@ -55,6 +55,30 @@ class TestReferencedFilesExist:
                     missing.add(f"{name} → {link}")
         assert not missing, f"깨진 내부 링크: {sorted(missing)}"
 
+    def test_the_package_tree_lists_every_module(self) -> None:
+        """🔴 DESIGN 의 패키지 트리에 **빠진 모듈이 없어야** 한다.
+
+        [실측] 트리가 `paired.py` · `mix.py` · `provenance.py` · `report.py` ·
+        registry 둘을 빠뜨리고 있었다. 문서가 코드 구조를 베끼는 한 반드시
+        낡으므로, 「빠진 것이 없는가」만 기계로 본다.
+
+        ⚠ 반대 방향(트리에 있는데 코드에 없는 것)은 `test_source_paths_resolve`
+          가 이미 본다. 여기서는 누락만 본다 - 트리는 요약이므로 모든 파일을
+          한 줄씩 적을 필요는 없지만, **이름조차 안 나오는 모듈은 없어야** 한다.
+        """
+        design = _text("docs/DESIGN.md")
+        start = design.index("src/codeproof_ai/")
+        tree = design[start : design.index("```", start)]
+        pkg = ROOT / "src" / "codeproof_ai"
+        missing = sorted(
+            str(f.relative_to(pkg))
+            for f in pkg.rglob("*.py")
+            if f.name != "__init__.py" and f.stem not in tree
+        )
+        assert not missing, (
+            f"패키지 트리에 이름조차 없는 모듈: {missing}"
+        )
+
     def test_citations_are_well_formed_arxiv_ids(self) -> None:
         """🔴 인용이 실재하는지는 **사람이 확인한다.** 여기서는 모양만 본다.
 

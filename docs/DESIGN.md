@@ -155,18 +155,20 @@ B+C+D 합계 **150개**가 목표. 구조 목표는 양성:음성 ≈ **50:50** 
 집계 FPR 의 CI 를 좁히는 것만이 이유가 아니다. 더 큰 이유가 측정하다 드러났다.
 
 D층 집계 FPR 은 「이 도구의 오탐률」이 아니라 **「내가 고른 미끼 분류 구성비에서의
-오탐률」**이다. 분류마다 물리는 정도가 다르기 때문이다 — [실측 · 37쌍]:
+오탐률」**이다. 분류마다 물리는 정도가 다르기 때문이다 — [실측 · 60쌍]:
 
 ```
-constant_only_sink    53.8%  [29.1%, 76.8%]     <- 가장 잘 문다
+idempotent_retry      14.3%  [ 4.0%, 39.9%]     <- 가장 잘 문다
+constant_only_sink    13.6%  [ 4.7%, 33.3%]
 ...
-type_narrowed          0.0%  [ 0.0%, 20.4%]     <- 전혀 안 문다
+type_narrowed          0.0%  [ 0.0%, 14.9%]     <- 전혀 안 문다 (11종이 0.0%)
 
-현재 구성비 : 34.8%   ·   균등 구성비 : 35.1%
-🔴 구성비만 바꿔 도달 가능 : 0.0% ~ 53.8%
+현재 구성비 :  2.9%   ·   균등 구성비 : 2.7%
+🔴 구성비만 바꿔 도달 가능 : 0.0% ~ 14.3%
 ```
 
-**코드도 도구도 채점자도 바꾸지 않고 구성비만 바꿔** 0% 도 55.6% 도 보고할 수 있다.
+**코드도 도구도 채점자도 바꾸지 않고 구성비만 바꿔** 0% 도 14.3% 도 보고할 수 있다.
+(전체 표는 [MEASUREMENTS](MEASUREMENTS.md) 에 있다.)
 채점 기준 편차와 같은 종류의 손잡이인데, 자기 코퍼스의 구성비를 손잡이로 선언한
 벤치마크를 보지 못했다.
 
@@ -191,7 +193,7 @@ type_narrowed          0.0%  [ 0.0%, 20.4%]     <- 전혀 안 문다
 > `module` 45.2%)를 실측으로 적었다. **그 숫자는 틀렸다.** 채점자가 `D103`
 > (docstring 누락) 같은 **관례 주장**까지 오탐으로 세고 있었고, 함수가 많은
 > decoy 가 그런 지적을 더 받았을 뿐이다. 고친 뒤 순서가 **반대로** 뒤집혔다
-> (`caller` 0.0% → `local` 6.5%). 아래 「관례 주장」 절을 보라.
+> (`caller` 0.0% → `local`, 49쌍 시점). 아래 「관례 주장」 절을 보라.
 > 현재 수치는 [MEASUREMENTS](MEASUREMENTS.md) 에 있다.
 
 #### 🔴 관례 주장은 거짓 경보가 아니다 — 이 프로젝트가 저지를 뻔한 오류
@@ -444,11 +446,13 @@ src/codeproof_ai/
 ├── analysis/                # [1] 정적분석 — 언어 플러그인
 │   ├── base.py              #   Analyzer · materialize · materialize_many
 │   ├── toolchain.py         #   도구 실행 (uv run 우회)             ← §6.7
+│   ├── registry.py          #   ANALYZERS - cli 는 구현체를 직접 만들지 않는다
 │   └── python/{ruff,mypy_,ast_index}.py
 │
 ├── llm/                     # [2] 모델 호출 — 얇은 어댑터
 │   ├── base.py · schema.py · render.py · parse.py
 │   ├── anthropic_.py · openai_.py · replay.py
+│   ├── registry.py          #   PROVIDERS · CREDENTIAL_OF
 │   ├── credentials.py       #   무엇이 준비됐는지만 보고
 │   └── prompts/review_v1.md #   프롬프트는 데이터
 │
@@ -458,23 +462,26 @@ src/codeproof_ai/
 │   └── formats.py           #   SARIF · bandit · native 파서
 │
 ├── verify/                  # [3][4] 런타임 · 라벨 불필요
-│   └── {citation,guard,corroboration,reachability,confidence}.py
+│   └── base.py · {citation,guard,corroboration,reachability,confidence}.py
 │
 ├── eval/                    # [5][6] 오프라인 · 라벨 필수
 │   ├── sample.py · loader.py       #   LabeledSample · 코퍼스 → 샘플
-│   ├── grading/{safety,injected,corroboration}.py
+│   ├── grading/{base,safety,injected,corroboration,paired}.py
 │   ├── spread.py            #   🔴 채점 기준 편차 = 헤드라인
 │   ├── pairing.py           #   PrimeVul P-C/P-V/P-B/P-R
 │   ├── sensitivity.py       #   매칭 민감도 스윕
+│   ├── mix.py               #   구성비 민감도 — 두 축 (§3.5)
 │   ├── bait.py              #   미끼 효과 측정
 │   ├── metrics.py           #   Wilson CI
+│   ├── provenance.py        #   하네스 git SHA — 짐작하지 않는다
+│   ├── report.py            #   측정값 생성 — 산문에 베끼지 않는다
 │   └── runner.py            #   🔴 run_reviewer **하나뿐** (§4.1b)
 │
-├── corpus/decoy.py          # decoy 작성·검증 12규칙 (실험을 모른다)
+├── corpus/decoy.py          # decoy 작성·검증 13규칙 (실험을 모른다)
 ├── corpus/proof.py          #   🔴 실행 가능한 안전 근거 (§7.7a)
 ├── corpus/shape.py          #   가드 위치 축 — 도출한다 (§3.5)
 ├── store/{schema,sqlite}.py # SQLite — 외래키로 E1 강제
-└── cli.py                   # measure · eval · import · doctor · history · decoy
+└── cli.py                   # measure · eval · import · doctor · history · report · decoy
 ```
 
 ### 6.3 리뷰어는 하나의 개념이다
@@ -539,22 +546,28 @@ SARIF 나 다른 JSON 을 내는 도구면 `ImportedReviewer` + 포맷 파서 �
 Ruff 의 `INP001` 이 사라져 일괄과 개별이 다른 숫자를 냈다. mypy 만 모듈명 해소에
 필요하므로 `as_packages` 로 **선택적**이다. 테스트가 「일괄 == 개별」을 강제한다.
 
-### 6.8 🔴 코퍼스 구축은 별도 프로젝트
+### 6.8 🔴 코퍼스 **마이닝**은 별도 프로젝트가 된다 *(v2 · 아직 없다)*
+
+지금 `corpus/` 에는 **손으로 쓴 decoy 만** 있다. 외부 의존성이 없으므로
+별도 환경도 없고, 본 패키지의 테스트가 그대로 돌린다.
+
+A·B·C 층(변이 주입 · 마이닝)을 붙이는 시점에 이렇게 나눈다:
 
 ```
 codeproof-ai/
 ├── pyproject.toml          # 플랫폼 — requires-python = ">=3.14"
 ├── src/codeproof_ai/
 └── corpus/
-    ├── pyproject.toml      # 🔴 별도 프로젝트 · 별도 lock · 느슨한 핀
-    ├── .python-version     #    Docker 필요
+    ├── decoys/             # ← 지금 있는 것. D층, 의존성 없음
+    ├── pyproject.toml      # ← v2. 별도 프로젝트 · 별도 lock · 느슨한 핀
     └── src/codeproof_corpus/
 ```
 
 이유: `>=3.14` 가 벤치마크 툴체인 대부분과 충돌한다 —
 cosmic-ray, SWE-smith, c-CRAB 는 더 낮은 인터프리터를 고정하고 Docker 를 요구한다.
 
-uv workspace 가 아니라 **완전히 분리된 두 프로젝트**로 둔다.
+uv workspace 가 아니라 **완전히 분리된 두 프로젝트**로 둔다 —
+workspace 는 resolution 을 통합해서 같은 충돌을 되살린다.
 workspace 는 resolution 을 통합해서 같은 충돌을 되살린다.
 
 ---
@@ -781,15 +794,16 @@ True 가 되어 걸린다 — **11개 형식 규칙이 놓친 것을 잡는다.*
 
 ### 7.8 미끼 효과는 리뷰어 설정에 의존한다
 
-[실측] 같은 코퍼스인데 `--select ALL` 은 9/10, 좁은 선택은 훨씬 적게 물린다.
+[실측 · 60쌍] 같은 코퍼스에서 `--ruff-select ALL` 은 **6/60**, `--ruff-select F`
+는 **0/60** 이다. 룰 선택 하나로 시험률이 0 이 된다.
 **단일 설정으로 decoy 품질을 판정하면 안 된다.**
 
 그리고 「안 물림 = 나쁨」이 아니다. 셋으로 갈린다 — 물림(시험됨) ·
 안 물림이지만 추론 대상(미시험) · 안 물림이고 미끼가 약함(나쁨).
 **뒤의 둘은 정적분석기만으로 구별할 수 없고**, 도구가 구별했다고 말하지 않는다.
 
-[실측] `type_narrowed` 는 0/2 다 — Ruff 에 그런 룰이 없고 mypy 는 좁힘을
-**정당하다고 인정**한다. 구조적 사실이지 decoy 결함이 아니다.
+[실측 · 60쌍] `type_narrowed` 는 **0/5** 다 — Ruff 에 그런 룰이 없고 mypy 는
+좁힘을 **정당하다고 인정**한다. 구조적 사실이지 decoy 결함이 아니다.
 
 ### 7.9 매칭 정밀도는 도구 의존적이다
 
