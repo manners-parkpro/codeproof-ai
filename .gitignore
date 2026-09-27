@@ -12,3 +12,9 @@ wheels/
 # 실행 결과 저장소 (로컬)
 runs.db
 *.db-journal
+
+# 에디터 · 커버리지
+.idea/
+.vscode/
+.coverage
+htmlcov/
