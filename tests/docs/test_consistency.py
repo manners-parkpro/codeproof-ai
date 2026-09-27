@@ -85,6 +85,69 @@ class TestGeneratedMeasurementsAreCurrent:
         )
 
 
+class TestProseDoesNotContradictTheGeneratedFile:
+    """🔴 산문이 생성물과 다른 숫자를 말하면 둘 중 하나는 거짓이다.
+
+    [실측] README 가 「Ruff 의 구별 성공은 0/60」이라고 적고 있었는데
+    생성물은 11/60 이었다. **구별 성공률은 리뷰어의 성질이 아니라
+    (리뷰어 x 채점자)의 성질**인데 채점자를 빼고 적은 탓이다.
+    0/60 은 `injected_defect` 의 숫자이고 `provable_safety` 로는 11/60 이다.
+
+    같은 실행에서 한 쪽은 「11건 갈라냈다」, 다른 쪽은 「하나도 못 갈랐다」고
+    말한다 - 그게 이 프로젝트의 논지이므로 **어느 정의인지 반드시 적는다.**
+    """
+
+    def test_grader_fp_counts_match_the_generated_file(self) -> None:
+        """🔴 산문의 채점자별 FP 수가 생성물과 같아야 한다.
+
+        [실측] 이 검사를 넣기 전까지 README 의 편차 표가 **두 번** 낡았다 -
+        한 번은 코퍼스가 자라서, 한 번은 관례 주장 수정으로 FP 66 -> 6 이
+        되면서. 사람 눈으로 잡다가 놓쳤고 둘 다 헤드라인 숫자였다.
+
+        생성물(`docs/MEASUREMENTS.md`)은 `report --check` 가 최신을 보장하므로,
+        산문이 거기 적힌 수를 인용하는지만 보면 된다.
+        """
+        generated = MEASUREMENTS.read_text(encoding="utf-8")
+        # | `provable_safety` | 0 | 7 | 231 | o |   ->   FP 는 세 번째 칸
+        truth = {
+            m.group("grader"): m.group("fp")
+            for m in re.finditer(
+                r"\|\s*`(?P<grader>\w+)`\s*\|\s*\d+\s*\|\s*(?P<fp>\d+)\s*\|",
+                generated,
+            )
+        }
+        assert truth, "생성물에서 편차 표를 읽지 못했다"
+        assert len(truth) >= 2, f"채점자가 하나뿐이면 대조가 공허하다: {truth}"
+
+        readme = _text("README.md")
+        wrong: list[str] = []
+        for grader, fp in truth.items():
+            for m in re.finditer(rf"^{grader}\s+\d+\s+(\d+)\s", readme, re.M):
+                if m.group(1) != fp:
+                    wrong.append(f"{grader}: README {m.group(1)} vs 생성물 {fp}")
+        assert not wrong, (
+            "산문의 FP 수가 생성물과 다르다 - "
+            "`uv run codeproof report` 를 보고 고친다:\n  " + "\n  ".join(wrong)
+        )
+
+    def test_prose_does_not_quote_a_bare_discrimination_rate(self) -> None:
+        """산문의 구별 성공 숫자는 **채점자 이름과 같은 문단**에 있어야 한다."""
+        readme = _text("README.md")
+        offenders: list[str] = []
+        for m in re.finditer(r"구별 성공[^\n]*?(\d+/\d+)", readme):
+            window = readme[max(0, m.start() - 400) : m.end() + 400]
+            named = any(
+                g in window
+                for g in ("provable_safety", "injected_defect", "채점 정의", "채점자")
+            )
+            if not named:
+                offenders.append(m.group(0).strip())
+        assert not offenders, (
+            "채점자를 밝히지 않은 구별 성공률이 있다 - "
+            f"정의마다 다른 숫자가 나온다: {offenders}"
+        )
+
+
 class TestCorpusCountIsCurrent:
     """decoy 수는 자주 바뀐다 - 문서가 따라가는지 본다."""
 
