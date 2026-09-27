@@ -1,0 +1,28 @@
+decoy_id = "D056-context-manager-reraises"
+trap_kind = "exception_absorbed"
+
+[bait]
+apparent_defect = """
+컨텍스트 매니저가 except Exception 으로 모든 예외를 받아 리스트에 담는다.
+계측 코드가 업무 예외를 가로채는 형태라 오류를 조용히 삼키는 것으로 읽히고,
+린터의 광범위 예외 룰도 이 모양을 잡는다.
+"""
+lure_lines = [12, 14]
+
+[safety]
+claim = "이 계측은 예외를 감출 수 없다"
+justification = """
+except 절의 마지막 문장이 bare raise 라서 잡았던 예외가 원래 타입과 트레이스백
+그대로 다시 올라가기 때문에, 호출자는 계측이 없을 때와 완전히 같은 예외를
+받는다. 즉 여기서 잡는 것은 삼키기 위해서가 아니라 실패를 기록하기 위해서이고,
+기록이 끝나면 흐름을 그대로 돌려준다. bare raise 를 빼면 그때부터 삼킴이 된다.
+"""
+guard_symbol = "span"
+guard_lines = [12, 15]
+
+[twin]
+defect = """
+except 절의 bare raise 가 사라져 예외가 거기서 끝난다.
+with 블록 안의 return 이 실행되지 않아 measured 가 조용히 None 을 돌려주고,
+호출자는 실패를 성공으로 받는다.
+"""

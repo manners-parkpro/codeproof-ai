@@ -1,0 +1,28 @@
+decoy_id = "D055-conditional-request-is-idempotent"
+trap_kind = "idempotent_retry"
+
+[bait]
+apparent_defect = """
+update 가 성공 여부를 보지 않고 최대 세 번 _apply 를 다시 부른다. 쓰기 연산을
+조건 없이 반복하는 형태라 같은 갱신이 여러 번 기록되는 중복 쓰기로 읽히고,
+백오프도 없어 저장소를 두드리는 것처럼 보인다.
+"""
+lure_lines = [16, 19]
+
+[safety]
+claim = "재시도가 중복 쓰기를 만들 수 없다"
+justification = """
+_apply 가 첫 줄에서 현재 버전이 호출자가 기대한 버전과 같은지 보고 다르면
+아무 일도 하지 않고 False 를 돌려주는데, 한 번 성공하면 버전이 올라가기
+때문에 같은 expected_version 으로 들어온 두 번째 이후 호출은 반드시 조건에서
+걸러진다. 따라서 루프가 세 번 돌아도 _writes 에 남는 기록은 최대 한 건이고,
+이건 조건부 요청의 표준적인 멱등 보장이다.
+"""
+guard_symbol = "_apply"
+guard_lines = [7, 9]
+
+[twin]
+defect = """
+버전 조건 검사가 사라져 _apply 가 호출될 때마다 무조건 쓴다.
+재시도가 없어도 같은 값이 여러 번 기록되고, 동시에 온 갱신이 서로를 덮는다.
+"""

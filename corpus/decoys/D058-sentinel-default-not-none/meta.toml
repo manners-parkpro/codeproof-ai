@@ -1,0 +1,28 @@
+decoy_id = "D058-sentinel-default-not-none"
+trap_kind = "type_narrowed"
+
+[bait]
+apparent_defect = """
+_read 가 dict.get 에 기본값으로 정체불명의 object() 를 넘기고, has 는 그것과
+is 비교를 한다. 파이썬에서 부재를 뜻하는 관용 표현은 None 인데 굳이 다른
+객체를 쓰는 형태라 불필요하게 복잡하거나 잘못된 관용구로 읽힌다.
+"""
+lure_lines = [9, 13]
+
+[safety]
+claim = "has 는 값이 None 인 키와 없는 키를 구별한다"
+justification = """
+_settings 에는 값 자체가 None 인 키가 실제로 있기 때문에 기본값을 None 으로
+두면 "값이 None 이다"와 "키가 없다"가 같은 결과로 접혀 구별이 불가능해진다.
+_MISSING 은 이 모듈에서만 만들어진 고유 객체라 설정 값으로 들어올 수 없고,
+따라서 is 비교가 부재만을 정확히 가려낸다. 센티널은 관용구를 벗어난 것이
+아니라 None 이 유효한 값일 때 필요한 표준 수단이다.
+"""
+guard_symbol = "_MISSING"
+guard_lines = [5, 13]
+
+[twin]
+defect = """
+센티널이 사라져 기본값이 None 이 되고 has 도 None 과 비교한다.
+값이 None 인 retries 키가 "없는 키"로 잘못 판정된다.
+"""

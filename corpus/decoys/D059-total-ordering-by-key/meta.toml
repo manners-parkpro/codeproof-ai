@@ -1,0 +1,28 @@
+decoy_id = "D059-total-ordering-by-key"
+trap_kind = "misleading_name"
+
+[bait]
+apparent_defect = """
+힙 항목에 payload 와 무관한 정수가 끼어 있고 pop 은 인덱스 2 로 꺼낸다.
+쓰이지도 않는 값을 튜플에 넣고 매직 인덱스로 접근하는 형태라 불필요한
+복잡도이거나 잘못된 인덱스로 읽힌다. _seq 라는 이름도 용도를 말하지 않는다.
+"""
+lure_lines = [10, 11]
+
+[safety]
+claim = "이 순번은 군더더기가 아니며 빼면 비교가 깨진다"
+justification = """
+heapq 는 튜플을 왼쪽부터 비교하는데 priority 가 같으면 다음 원소인 payload 로
+넘어가고, payload 가 문자열이면 사전순 비교가 되어 삽입 순서가 아니라 내용
+순서로 나온다. next(_seq) 는 단조 증가하는 고유 정수라 같은 우선순위 안에서
+항상 삽입 순서를 결정하고, 값이 겹치지 않으므로 세 번째 원소까지 비교가
+내려갈 일도 없다. 즉 안정 정렬을 만드는 tie-breaker 이지 잉여 값이 아니다.
+"""
+guard_symbol = "_seq"
+guard_lines = [6, 11]
+
+[twin]
+defect = """
+순번이 빠져 동점 우선순위에서 payload 문자열이 직접 비교된다.
+삽입 순서가 아니라 사전순으로 나와 같은 우선순위의 선입선출이 깨진다.
+"""

@@ -1,0 +1,28 @@
+decoy_id = "D057-parameterized-query-builder"
+trap_kind = "constant_only_sink"
+
+[bait]
+apparent_defect = """
+사용자가 준 email 이 SQL 을 만드는 함수로 곧장 들어가고, 그 결과가 execute 에
+전달된다. 외부 입력이 쿼리 생성 경로에 닿는 형태라 SQL 인젝션으로 읽히고,
+쿼리 문자열을 조립하는 헬퍼가 따로 있다는 점이 의심을 키운다.
+"""
+lure_lines = [6, 7]
+
+[safety]
+claim = "email 은 SQL 문법에 영향을 줄 수 없다"
+justification = """
+_bind 가 돌려주는 SQL 은 모듈 상수 _SQL 그 자체이고 포매팅도 연결도 치환도
+일어나지 않기 때문에, email 은 쿼리 문자열이 아니라 두 번째 반환값인 파라미터
+튜플에만 들어간다. DB 드라이버는 파라미터를 문법이 아니라 값으로 취급하므로
+따옴표를 닫거나 구문을 추가할 방법이 없다. 즉 값이 지나가는 통로가 문법
+통로와 분리되어 있다는 것이 근거다.
+"""
+guard_symbol = "_SQL"
+guard_lines = [3, 7]
+
+[twin]
+defect = """
+_SQL 이 포맷 문자열이 되고 _bind 가 email 을 그 안에 끼워 넣는다.
+파라미터 튜플은 비고, 따옴표를 닫는 입력이 쿼리 문법을 바꾼다.
+"""
