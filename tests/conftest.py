@@ -109,6 +109,42 @@ class AnalyzedCorpus:
         return self._cache[key]
 
 
+# 🔴 CLI 배관 시험용 대표 표본. **지적이 나오는 쌍을 반드시 넣는다** (H2) -
+#    아니면 「둘 다 0건」으로 공허하게 통과한다.
+SMALL_CORPUS_PAIRS = (
+    "D002-shell-true-constant-command",  # 미끼가 물린다 (S602)
+    "D013-eval-on-literal",              # 미끼가 물린다 (S307)
+    "D001-upstream-validated-dict-access",  # 미끼 밖만 지적
+    "D006-emptiness-narrowed",           # 지적이 거의 없다
+)
+
+
+@pytest.fixture(scope="session")
+def small_corpus(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """CLI 배관 시험용 4쌍짜리 코퍼스.
+
+    🔴 CLI 테스트 대부분은 **배관**을 본다 - 종료 코드 · 출력 절 · 저장.
+       그걸 위해 코퍼스 전체를 다시 분석할 이유가 없다 (H2).
+
+    [실측] 코퍼스가 25 -> 60쌍으로 자라자 전체 스위트가 20초 -> 36초가 됐고
+    그중 14초가 CLI 테스트였다. 140쌍이면 80초에 육박한다 -
+    **느린 테스트는 결국 안 돌린다** (H1).
+
+    ⚠ 코퍼스 **내용**에 대한 주장(편차 · 짝 채점 수치)은 여기서 하지 않는다.
+      그건 `analyzed` 픽스처로 전체 코퍼스에서 본다.
+    """
+    root = tmp_path_factory.mktemp("small-corpus")
+    for name in SMALL_CORPUS_PAIRS:
+        src = DECOYS / name
+        dst = root / name
+        dst.mkdir()
+        for f in ("decoy.py", "twin.py", "meta.toml", "proof.py"):
+            (dst / f).write_text(
+                (src / f).read_text(encoding="utf-8"), encoding="utf-8"
+            )
+    return root
+
+
 @pytest.fixture(scope="session")
 def shipped_samples() -> list[LabeledSample]:
     """저장소의 decoy 코퍼스. 읽기 전용이라 공유해도 안전하다."""

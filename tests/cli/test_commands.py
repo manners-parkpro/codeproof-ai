@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 from pathlib import Path
 
@@ -30,11 +31,19 @@ def db(tmp_path: Path) -> str:
 class TestExitCodes:
     """종료 코드는 CI 가 읽는 유일한 신호다."""
 
-    def test_measure_succeeds(self, db: str) -> None:
-        assert main(["measure", "--analyzers", "ruff", "--store", db]) == 0
+    def test_measure_succeeds(self, small_corpus: Path, db: str) -> None:
+        assert main([
+            "measure", "--corpus", str(small_corpus),
+            "--analyzers", "ruff", "--store",
+            db,
+        ]) == 0
 
-    def test_unknown_analyzer_is_rejected(self, db: str) -> None:
-        assert main(["measure", "--analyzers", "nope", "--store", db]) == 2
+    def test_unknown_analyzer_is_rejected(self, small_corpus: Path, db: str) -> None:
+        assert main([
+            "measure", "--corpus", str(small_corpus),
+            "--analyzers", "nope", "--store",
+            db,
+        ]) == 2
 
     def test_unknown_provider_is_rejected(self, db: str) -> None:
         code = main(
@@ -78,69 +87,133 @@ class TestCredentialGate:
 
 class TestMeasureOutput:
     def test_reports_spread_pairing_and_sensitivity(
-        self, db: str, capsys: pytest.CaptureFixture[str]
+        self, small_corpus: Path, db: str, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        main(["measure", "--analyzers", "ruff", "--ruff-select", "ALL", "--store", db])
+        main([
+            "measure", "--corpus", str(small_corpus),
+            "--analyzers", "ruff", "--ruff-select",
+            "ALL", "--store", db,
+        ])
         out = capsys.readouterr().out
         for section in ("채점 기준 편차", "짝 채점", "매칭 민감도", "구별 성공"):
             assert section in out, f"'{section}' 절이 사라졌다"
 
     def test_excludes_non_fp_grader_from_spread(
-        self, db: str, capsys: pytest.CaptureFixture[str]
+        self, small_corpus: Path, db: str, capsys: pytest.CaptureFixture[str]
     ) -> None:
         """🔴 범주 차이를 편차로 오해하지 않는다."""
-        main(["measure", "--analyzers", "ruff", "--ruff-select", "ALL", "--store", db])
+        main([
+            "measure", "--corpus", str(small_corpus),
+            "--analyzers", "ruff", "--ruff-select",
+            "ALL", "--store", db,
+        ])
         out = capsys.readouterr().out
         assert "구조적으로 FP 를 낼 수 없다" in out
 
     def test_warns_when_negatives_are_too_few(
-        self, db: str, capsys: pytest.CaptureFixture[str]
+        self, small_corpus: Path, db: str, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        main(["measure", "--analyzers", "ruff", "--store", db])
+        main(["measure", "--corpus", str(small_corpus), "--analyzers", "ruff", "--store", db])
         err = capsys.readouterr().err
         assert "100건 미만" in err, "표본 부족 경고가 사라졌다"
 
     def test_rule_selection_changes_the_numbers(
-        self, db: str, capsys: pytest.CaptureFixture[str]
+        self, small_corpus: Path, db: str, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        """[실측] 룰 선택만 바꿔도 FP 가 움직인다 - 논지의 핵심."""
-        main(["measure", "--analyzers", "ruff", "--ruff-select", "F", "--store", db])
-        narrow = capsys.readouterr().out
-        main(["measure", "--analyzers", "ruff", "--ruff-select", "ALL", "--store", db])
-        wide = capsys.readouterr().out
-        assert narrow != wide
+        """[실측] 룰 선택만 바꿔도 FP 가 움직인다 - 논지의 핵심.
+
+        🔴 출력이 다르다는 것만으로는 부족하다 - 설정 줄만 달라도 통과한다.
+           **FP 수가 실제로 움직였는지**를 본다.
+        """
+        main([
+            "measure", "--corpus", str(small_corpus),
+            "--analyzers", "ruff", "--ruff-select", "F", "--store", db,
+        ])
+        narrow = _fp_counts(capsys.readouterr().out)
+        main([
+            "measure", "--corpus", str(small_corpus),
+            "--analyzers", "ruff", "--ruff-select", "ALL", "--store", db,
+        ])
+        wide = _fp_counts(capsys.readouterr().out)
+
+        # `--select F` 는 이 표본에서 지적이 0이라 편차 표 자체가 나오지 않는다.
+        # 그게 바로 논지다 - 룰 선택 하나로 FP 가 있음/없음으로 갈린다.
+        assert wide, "넓은 선택에서도 편차 표가 없다 - 표본이 공허하다 (H2)"
+        assert any(v > 0 for v in wide.values()), f"FP 가 0이다: {wide}"
+        assert narrow != wide, (
+            f"룰 선택이 FP 를 움직이지 않았다: {narrow} vs {wide}"
+        )
+
+
+# 편차 표의 한 줄: "    provable_safety          0    7      231  o"
+_SPREAD_ROW = re.compile(r"^\s{4}(\w+)\s+(\d+)\s+(\d+)\s+(\d+)\s+[ox]\s*$")
+
+
+def _fp_counts(out: str) -> dict[str, int]:
+    """편차 표에서 채점자별 FP 수를 뽑는다.
+
+    🔴 형식이 바뀌면 빈 dict 가 나오고 호출부가 그걸 실패로 본다 -
+       조용히 통과하지 않게 한다.
+    """
+    return {
+        m.group(1): int(m.group(3))
+        for m in (_SPREAD_ROW.match(line) for line in out.splitlines())
+        if m is not None
+    }
+
+
+class TestTheSmallCorpusIsNotVacuous:
+    """🔴 배관 시험용 표본이 조용히 비어 버리는 것을 막는다 (H2).
+
+    「지적이 나오는 decoy 를 반드시 포함」이 지켜지지 않으면 위 시험들이
+    「둘 다 0건」으로 공허하게 통과한다. 그래서 따로 강제한다.
+    """
+
+    def test_it_produces_findings(
+        self, small_corpus: Path, db: str, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        main([
+            "measure", "--corpus", str(small_corpus),
+            "--analyzers", "ruff", "--ruff-select", "ALL", "--store", db,
+        ])
+        counts = _fp_counts(capsys.readouterr().out)
+        assert counts, "편차 표가 없다"
+        assert any(v > 0 for v in counts.values()), (
+            f"표본에서 FP 가 하나도 안 나온다: {counts}. "
+            "SMALL_CORPUS_PAIRS 에 미끼가 물리는 쌍을 넣어야 한다"
+        )
 
 
 class TestPersistence:
-    def test_results_are_stored(self, db: str) -> None:
-        main(["measure", "--analyzers", "ruff", "--store", db])
+    def test_results_are_stored(self, small_corpus: Path, db: str) -> None:
+        main(["measure", "--corpus", str(small_corpus), "--analyzers", "ruff", "--store", db])
         with Store(db) as store:
             runs = store.runs()
         assert len(runs) == 1
         assert runs[0].reviewer == "ruff"
 
     def test_store_none_skips_and_warns(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+        self, small_corpus: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        main(["measure", "--analyzers", "ruff", "--store", "none"])
+        main(["measure", "--corpus", str(small_corpus), "--analyzers", "ruff", "--store", "none"])
         assert "재현할 수 없다" in capsys.readouterr().out
         assert not list(tmp_path.glob("*.db"))
 
     def test_repeat_run_reports_reproducibility(
-        self, db: str, capsys: pytest.CaptureFixture[str]
+        self, small_corpus: Path, db: str, capsys: pytest.CaptureFixture[str]
     ) -> None:
         """🔴 정적분석기는 같은 설정에서 같은 결과를 내야 한다."""
-        main(["measure", "--analyzers", "ruff", "--store", db])
+        main(["measure", "--corpus", str(small_corpus), "--analyzers", "ruff", "--store", db])
         capsys.readouterr()
-        main(["measure", "--analyzers", "ruff", "--store", db])
+        main(["measure", "--corpus", str(small_corpus), "--analyzers", "ruff", "--store", db])
         assert "지적 집합 **동일**" in capsys.readouterr().out
 
 
 class TestHistory:
     def test_lists_stored_runs(
-        self, db: str, capsys: pytest.CaptureFixture[str]
+        self, small_corpus: Path, db: str, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        main(["measure", "--analyzers", "ruff", "--store", db])
+        main(["measure", "--corpus", str(small_corpus), "--analyzers", "ruff", "--store", db])
         capsys.readouterr()
         assert main(["history", "--store", db]) == 0
         assert "ruff" in capsys.readouterr().out
@@ -151,8 +224,8 @@ class TestHistory:
         assert main(["history", "--store", db]) == 0
         assert "없다" in capsys.readouterr().out
 
-    def test_unknown_config_hash_is_rejected(self, db: str) -> None:
-        main(["measure", "--analyzers", "ruff", "--store", db])
+    def test_unknown_config_hash_is_rejected(self, small_corpus: Path, db: str) -> None:
+        main(["measure", "--corpus", str(small_corpus), "--analyzers", "ruff", "--store", db])
         assert main(["history", "--store", db, "--repro", "없는해시"]) == 2
 
 
@@ -295,45 +368,49 @@ class TestReport:
     """🔴 측정값을 **생성**한다 - 문서가 숫자를 베끼면 반드시 낡는다."""
 
     def test_writes_a_generated_file(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+        self, small_corpus: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         out = tmp_path / "M.md"
-        assert main(["report", "--out", str(out)]) == 0
+        assert main(["report", "--corpus", str(small_corpus), "--out", str(out)]) == 0
         body = out.read_text(encoding="utf-8")
         assert "생성된 파일" in body.splitlines()[0]
         assert "codeproof report" in body.splitlines()[0]
         assert "채점 기준 편차" in body
         capsys.readouterr()
 
-    def test_output_is_stable_across_runs(self, tmp_path: Path) -> None:
+    def test_output_is_stable_across_runs(self, small_corpus: Path, tmp_path: Path) -> None:
         """🔴 시각·run_id 를 넣지 않는다 - 넣으면 「최신인가」를 물을 수 없다."""
         a, b = tmp_path / "a.md", tmp_path / "b.md"
-        main(["report", "--out", str(a)])
-        main(["report", "--out", str(b)])
+        main(["report", "--corpus", str(small_corpus), "--out", str(a)])
+        main(["report", "--corpus", str(small_corpus), "--out", str(b)])
         assert a.read_text(encoding="utf-8") == b.read_text(encoding="utf-8")
 
     def test_check_detects_a_stale_file(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+        self, small_corpus: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         out = tmp_path / "M.md"
         out.write_text("낡은 내용\n", encoding="utf-8")
-        assert main(["report", "--out", str(out), "--check"]) == 1
+        assert main(["report", "--corpus", str(small_corpus), "--out", str(out), "--check"]) == 1
         assert "낡았다" in capsys.readouterr().err
 
-    def test_check_passes_on_a_fresh_file(self, tmp_path: Path) -> None:
+    def test_check_passes_on_a_fresh_file(self, small_corpus: Path, tmp_path: Path) -> None:
         out = tmp_path / "M.md"
-        main(["report", "--out", str(out)])
-        assert main(["report", "--out", str(out), "--check"]) == 0
+        main(["report", "--corpus", str(small_corpus), "--out", str(out)])
+        assert main(["report", "--corpus", str(small_corpus), "--out", str(out), "--check"]) == 0
 
     def test_missing_corpus_is_exit_2(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        assert main(["report", "--corpus", str(tmp_path / "none"), "--out", "-"]) == 2
+        missing = str(tmp_path / "none")
+        assert main(["report", "--corpus", missing, "--out", "-"]) == 2
         assert "샘플이 없다" in capsys.readouterr().err
 
     def test_unknown_analyzer_is_exit_2(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+        self, small_corpus: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        code = main(["report", "--analyzer", "nope", "--out", str(tmp_path / "x.md")])
+        code = main([
+            "report", "--corpus", str(small_corpus),
+            "--analyzer", "nope", "--out", str(tmp_path / "x.md"),
+        ])
         assert code == 2
         capsys.readouterr()

@@ -21,6 +21,15 @@ if TYPE_CHECKING:
 # 음성 100건 미만이면 FPR 의 Wilson 95% CI 반폭이 ±6pp 를 넘는다.
 MIN_CREDIBLE_NEGATIVES = 100
 
+TARGET_NEGATIVES = 150
+"""숫자를 **발표**할 때 필요한 표본 크기.
+
+🔴 지금 코퍼스는 이보다 작다. 그건 미완성이 아니라 **선언된 상태**다 -
+   현재 크기는 「측정 선택이 숫자를 얼마나 움직이는가」라는 논지를 보이기에
+   충분하고, 「이 도구의 오탐률은 X% 다」를 발표하려면 여기까지 채워야 한다.
+   둘은 다른 주장이고 필요한 표본도 다르다.
+"""
+
 Z_95 = 1.959963984540054
 
 
@@ -110,7 +119,13 @@ def summarize(
 
 
 def credibility_warning(negatives: int) -> str | None:
-    """표본이 숫자로 취급될 만한지."""
+    """표본이 숫자로 취급될 만한지.
+
+    🔴 이 경고는 **끄지 않는다.** 코퍼스가 목표에 못 미치는 것은 알려진
+       사실이고, 그 사실이 매 실행마다 보이는 것이 맞다. 경고를 없애려고
+       임계값을 낮추면 그 순간 이 프로젝트가 비판하는 일을 하게 된다 -
+       기준을 결과에 맞추는 것.
+    """
     if negatives >= MIN_CREDIBLE_NEGATIVES:
         return None
     p = Proportion(int(negatives * 0.3), negatives) if negatives else Proportion(0, 0)
@@ -118,5 +133,5 @@ def credibility_warning(negatives: int) -> str | None:
     detail = f" (p=0.30 에서 반폭 ±{hw:.1%})" if hw is not None else ""
     return (
         f"음성 {negatives}건은 {MIN_CREDIBLE_NEGATIVES}건 미만이다{detail}. "
-        "이 구간에서 FPR 은 숫자가 아니라 느낌이다 - 목표 150건."
+        f"이 구간에서 FPR 은 숫자가 아니라 느낌이다 - 목표 {TARGET_NEGATIVES}건."
     )
