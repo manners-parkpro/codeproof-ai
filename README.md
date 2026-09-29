@@ -908,6 +908,15 @@ codeproof eval --providers claude,codex --effort high --samples 8
 uv run pytest tests/corpus/test_proofs.py
 ```
 
+### 처음 받았다면 — 한 줄로 재현 확인
+
+```bash
+./scripts/verify.sh   # 30초 · API 키 불필요 · 재현 안 되면 exit 1
+```
+
+헤드라인이 이 기계에서 재현되는지, 그게 **설정의 함수**인지, 가드가 공허하지
+않은지를 순서대로 검사한다. 전체 절차와 해설은 [docs/VERIFY.md](docs/VERIFY.md).
+
 ### 가드가 공허하지 않은지 확인한다
 
 ```bash
