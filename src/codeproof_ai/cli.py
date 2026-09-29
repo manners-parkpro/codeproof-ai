@@ -249,7 +249,13 @@ def _cmd_decoy_new(corpus: Path, decoy_id: str) -> int:
     target = corpus / decoy_id
 
     if not template.is_dir():
+        # 🔴 새 코퍼스를 만들 때 반드시 막히는 자리다 - 무엇을 하라는지 말한다.
         print(f"템플릿이 없다: {template}", file=sys.stderr)
+        print(
+            "  내려받은 코퍼스에서 복사한다: "
+            f"cp -R corpus/decoys/_TEMPLATE {template}",
+            file=sys.stderr,
+        )
         return 2
     if target.exists():
         print(f"이미 있다: {target}", file=sys.stderr)
