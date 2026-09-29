@@ -20,6 +20,7 @@ from codeproof_ai.analysis.registry import available as analyzer_available
 from codeproof_ai.corpus.decoy import validate_corpus
 from codeproof_ai.domain.reviewer import ReviewerKind
 from codeproof_ai.eval.bait import BaitStatus, measure
+from codeproof_ai.eval.export import export_for_agent
 from codeproof_ai.eval.grading.base import Outcome
 from codeproof_ai.eval.grading.corroboration import StaticCorroborationGrader
 from codeproof_ai.eval.grading.injected import InjectedDefectGrader
@@ -121,6 +122,11 @@ def build_parser() -> argparse.ArgumentParser:
     im.add_argument(
         "--format", dest="fmt", choices=("sarif", "bandit", "native"), default="sarif"
     )
+    im.add_argument(
+        "--allow-partial",
+        action="store_true",
+        help="🔴 결과가 없는 샘플이 있어도 집계한다 - 미측정이 미탐지로 둔갑함을 알고 쓴다",
+    )
     im.add_argument("--slack", type=int, default=0)
     im.add_argument("--store", default="runs.db")
 
@@ -179,6 +185,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     _add_report_parser(sub)
+    _add_export_parser(sub)
 
     return parser
 
@@ -202,6 +209,36 @@ def _add_report_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser])
         action="store_true",
         help="쓰지 않고 최신인지만 확인한다 (다르면 exit 1)",
     )
+
+
+def _add_export_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    """🔴 에이전트 층을 여는 자리 - 자격증명 없이 모델 숫자를 낼 수 있는 유일한 경로."""
+    ex = sub.add_parser(
+        "export",
+        help="코퍼스를 에이전트가 리뷰할 형태로 내보낸다 (자격증명 불필요)",
+    )
+    ex.add_argument("--corpus", default="corpus/decoys")
+    ex.add_argument("--out", required=True, help="내보낼 디렉터리")
+    ex.add_argument(
+        "--prompt",
+        default="review_v1",
+        help="리뷰 지시. 🔴 model_api 와 같은 것을 써야 같은 과제다",
+    )
+
+
+def _cmd_export(corpus: Path, out: Path, prompt_name: str) -> int:
+    samples = load_decoy_samples(corpus)
+    if not samples:
+        print(f"샘플이 없다: {corpus}", file=sys.stderr)
+        return 2
+    manifest = export_for_agent(samples, out, prompt_name=prompt_name)
+    n = len(manifest["samples"])  # type: ignore[arg-type]
+    print(f"{out} 에 샘플 {n}개를 썼다 (prompt_hash={manifest['prompt_hash']})")
+    print("  다음: ./scripts/review-with-agent.sh <claude|codex> "
+          f"{out} <출력디렉터리>")
+    print("  그다음: codeproof import --from <출력디렉터리> --kind agent "
+          "--name <이름> --identity <버전>")
+    return 0
 
 
 def _cmd_decoy_validate(corpus: Path, *, strict: bool) -> int:
@@ -526,6 +563,7 @@ def _cmd_import(
     fmt: str,
     slack: int,
     store_path: str,
+    allow_partial: bool = False,
 ) -> int:
     """외부 지적을 리뷰어로 가져온다.
 
@@ -547,6 +585,49 @@ def _cmd_import(
     if runs == 0:
         print(f"{src} 에 <sample_id>.json 이 하나도 없다", file=sys.stderr)
         return 2
+
+    # 🔴 결과 파일이 없는 샘플은 「지적 0건」으로 들어온다 (ImportedReviewer.review).
+    #    SARIF 도구라면 그게 맞다 - 돌았는데 아무것도 못 찾은 것이다. 그러나
+    #    에이전트 실행이 중간에 끊긴 경우엔 **미측정이 미탐지로 둔갑**한다.
+    #    그러면 P-B(둘 다 미지적)가 부풀어 리뷰어가 실제보다 나쁘게 나온다 -
+    #    증거의 부재를 오답으로 세는 F4 와 같은 종류의 오류다.
+    missing = [s.sample_id for s in labeled if reviewer.available_runs(s.sample_id) == 0]
+    if missing:
+        covered = len(labeled) - len(missing)
+        print(
+            f"결과가 없는 샘플이 {len(missing)}개다 "
+            f"(적용 범위 {covered}/{len(labeled)}). 예: {missing[:3]}",
+            file=sys.stderr,
+        )
+        if not allow_partial:
+            print(
+                "  🔴 이대로 집계하면 **미측정이 미탐지로 둔갑**한다.\n"
+                "     전부 채우거나, 그 사실을 알고 있다면 --allow-partial 을 준다.",
+                file=sys.stderr,
+            )
+            return 2
+        # 🔴 경고만으로는 부족하다. 숫자 자체가 거짓이 된다.
+        #    [실측] 120개 중 2개만 채우고 집계했더니 `P-B 미탐지 60` 이 나왔다 -
+        #    한 쌍만 측정했는데 60쌍을 놓친 것처럼 보인다.
+        #    → 측정된 **완전한 짝**만 남긴다. 반쪽짜리 짝도 버린다 -
+        #      한쪽 지적만으로는 P-C/P-V/P-B/P-R 을 가를 수 없다 (F5).
+        have = {
+            s.sample_id for s in labeled if reviewer.available_runs(s.sample_id) > 0
+        }
+        labeled = [
+            s for s in labeled if s.sample_id in have and s.paired_with in have
+        ]
+        if not labeled:
+            print(
+                "  완전한 짝이 하나도 없다 - 짝의 양쪽이 모두 있어야 채점된다.",
+                file=sys.stderr,
+            )
+            return 2
+        print(
+            f"  ⚠ --allow-partial - 완전한 짝 {len(labeled) // 2}쌍만 집계한다 "
+            f"(결과가 있던 샘플 {covered}개 중).",
+            file=sys.stderr,
+        )
 
     if kind is ReviewerKind.AGENT:
         print(
@@ -836,6 +917,7 @@ _COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
     "report": lambda a: _cmd_report(
         Path(a.corpus), a.analyzer, a.ruff_select, a.out, check=a.check
     ),
+    "export": lambda a: _cmd_export(Path(a.corpus), Path(a.out), a.prompt),
     "doctor": lambda _a: _cmd_doctor(),
     "history": lambda a: _cmd_history(a.store, a.limit, a.repro),
     "import": lambda a: _cmd_import(
@@ -846,6 +928,7 @@ _COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
         kind=ReviewerKind(a.kind),
         fmt=a.fmt,
         slack=a.slack,
+        allow_partial=a.allow_partial,
         store_path=a.store,
     ),
     "decoy": _dispatch_decoy,

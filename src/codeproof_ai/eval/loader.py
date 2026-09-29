@@ -35,6 +35,23 @@ if TYPE_CHECKING:
 
 DECOY_FILENAME = "decoy.py"
 TWIN_FILENAME = "twin.py"
+"""저장소 안의 파일명. **리뷰어에게 보여주는 이름이 아니다.**"""
+
+PRESENTED_FILENAME = "module.py"
+"""🔴 리뷰어가 보는 파일명 - decoy 와 twin 이 **같은 이름**이어야 한다.
+
+파일명이 `decoy.py` / `twin.py` 로 갈리면 그 자체가 **정답 라벨의 유출**이다.
+정적분석기는 파일명을 거의 안 보지만 LLM 은 반드시 본다 - `twin.py` 를 받은
+모델은 「이건 고장난 쪽이구나」를 읽고 없는 결함을 찾아내려 한다.
+
+[실측] 에이전트 층(`ReviewerKind.AGENT`)을 열면서 코퍼스를 내보내다 발견했다.
+정적분석기만 돌리던 동안에는 드러나지 않았다 - **리뷰어 종류가 늘어야 보이는
+종류의 편향**이고, 그래서 층을 늘리는 일이 코퍼스 검증이기도 하다.
+
+⚠ 이 이름은 합성 티가 난다. 그걸 감수하는 이유: 짝의 두 쪽이 **반드시 같아야**
+  하는데, decoy 마다 다른 이름을 붙이려면 그 이름을 meta.toml 에 적게 되고
+  (손으로 적는 축은 틀린다, F5a), 한쪽만 고쳐도 아무도 모른다.
+"""
 
 
 def _twin_id(decoy_id: str) -> str:
@@ -52,7 +69,7 @@ def decoy_to_samples(rec: DecoyRecord) -> tuple[LabeledSample, LabeledSample]:
        리뷰어에게 decoy 와 twin 을 같이 보여주면 정답을 알려주는 것이다.
     """
     guard_loc = Location(
-        path=DECOY_FILENAME,
+        path=PRESENTED_FILENAME,
         span=Span(
             start=Position(line=rec.guard.start, column=0),
             end=Position(line=rec.guard.end, column=0),
@@ -63,7 +80,7 @@ def decoy_to_samples(rec: DecoyRecord) -> tuple[LabeledSample, LabeledSample]:
     negative = LabeledSample(
         target=ReviewTarget(
             target_id=rec.decoy_id,
-            files=(SourceFile(path=DECOY_FILENAME, content=rec.decoy_source),),
+            files=(SourceFile(path=PRESENTED_FILENAME, content=rec.decoy_source),),
         ),
         stratum=Stratum.DECOY,
         safety=SafetyRationale(
@@ -73,7 +90,7 @@ def decoy_to_samples(rec: DecoyRecord) -> tuple[LabeledSample, LabeledSample]:
             buggy_twin_id=_twin_id(rec.decoy_id),
             # 주장이 덮는 범위 = 미끼 구간 + 가드 구간.
             # 미끼는 "무엇이 결함처럼 보이는가", 가드는 "왜 아닌가" 다.
-            covered_path=DECOY_FILENAME,
+            covered_path=PRESENTED_FILENAME,
             covered_lines=(
                 min(rec.lure.start, rec.guard.start),
                 max(rec.lure.end, rec.guard.end),
@@ -97,13 +114,13 @@ def decoy_to_samples(rec: DecoyRecord) -> tuple[LabeledSample, LabeledSample]:
     positive = LabeledSample(
         target=ReviewTarget(
             target_id=_twin_id(rec.decoy_id),
-            files=(SourceFile(path=TWIN_FILENAME, content=rec.twin_source),),
+            files=(SourceFile(path=PRESENTED_FILENAME, content=rec.twin_source),),
         ),
         stratum=Stratum.DECOY,
         defects=(
             Defect(
                 location=Location(
-                    path=TWIN_FILENAME,
+                    path=PRESENTED_FILENAME,
                     span=Span(
                         start=Position(line=twin_start, column=0),
                         end=Position(line=twin_end, column=0),

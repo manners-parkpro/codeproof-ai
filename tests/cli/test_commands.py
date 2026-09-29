@@ -17,6 +17,7 @@ from pathlib import Path
 import pytest
 
 from codeproof_ai.cli import main
+from codeproof_ai.eval.loader import PRESENTED_FILENAME
 from codeproof_ai.store.sqlite import Store
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -280,7 +281,7 @@ class TestImport:
                             "locations": [
                                 {
                                     "physicalLocation": {
-                                        "artifactLocation": {"uri": "decoy.py"},
+                                        "artifactLocation": {"uri": PRESENTED_FILENAME},
                                         "region": {"startLine": 1, "startColumn": 1},
                                     }
                                 }
@@ -291,23 +292,34 @@ class TestImport:
             ]
         }
 
+    def _write_pair(self, tmp_path: Path) -> Path:
+        """짝의 **양쪽**을 채운다 - 반쪽만 두면 짝 채점이 성립하지 않는다."""
+        src = tmp_path / "out"
+        src.mkdir(exist_ok=True)
+        sid = "D001-upstream-validated-dict-access"
+        for name in (sid, f"{sid}#twin"):
+            (src / f"{name}.json").write_text(
+                json.dumps(self._sarif()), encoding="utf-8"
+            )
+        return src
+
     def test_imports_external_findings(
         self, tmp_path: Path, db: str, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        src = tmp_path / "out"
-        src.mkdir()
-        sid = "D001-upstream-validated-dict-access"
-        (src / f"{sid}.json").write_text(
-            json.dumps(self._sarif()), encoding="utf-8"
-        )
+        src = self._write_pair(tmp_path)
         code = main(
             [
                 "import", "--from", str(src), "--name", "fake",
-                "--identity", "v1", "--store", db,
+                "--identity", "v1", "--store", db, "--allow-partial",
             ]
         )
+        out = capsys.readouterr().out
         assert code == 0
-        assert "fake" in capsys.readouterr().out
+        assert "fake" in out
+        # 🔴 exit 0 만 보면 약하다 - 지적이 실제로 들어왔는지 본다.
+        #    [실측] 제시 파일명이 바뀌었을 때 이 단언이 없었으면
+        #    지적이 전부 버려진 채로 통과했을 것이다.
+        assert "지적 1건" in out, f"가져온 지적이 없다:\n{out}"
 
     def test_missing_source_directory_is_rejected(self, db: str) -> None:
         code = main(
@@ -333,19 +345,64 @@ class TestImport:
         self, tmp_path: Path, db: str, capsys: pytest.CaptureFixture[str]
     ) -> None:
         """🔴 에이전트는 model_api 와 층이 다르다 - 섞지 말라고 말해야 한다."""
-        src = tmp_path / "out"
-        src.mkdir()
-        sid = "D001-upstream-validated-dict-access"
-        (src / f"{sid}.json").write_text(
-            json.dumps(self._sarif()), encoding="utf-8"
-        )
+        src = self._write_pair(tmp_path)
         main(
             [
                 "import", "--from", str(src), "--name", "codex-cli",
                 "--identity", "0.1", "--kind", "agent", "--store", db,
+                "--allow-partial",
             ]
         )
         assert "섞어서 집계하지 않는다" in capsys.readouterr().out
+
+    def test_partial_coverage_is_refused_by_default(
+        self, tmp_path: Path, db: str, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """🔴 결과가 없는 샘플은 「지적 0건」으로 들어온다 - 미측정이 미탐지가 된다.
+
+        [실측] 120개 중 2개만 채우고 집계했더니 `P-B 미탐지 60` 이 나왔다.
+        한 쌍만 측정했는데 60쌍을 놓친 것처럼 보인다 - 증거의 부재를
+        오답으로 세는 F4 와 같은 종류다.
+        """
+        src = self._write_pair(tmp_path)
+        code = main(
+            [
+                "import", "--from", str(src), "--name", "fake",
+                "--identity", "v1", "--store", db,
+            ]
+        )
+        assert code == 2
+        assert "미측정이 미탐지로 둔갑" in capsys.readouterr().err
+
+    def test_partial_coverage_scores_only_complete_pairs(
+        self, tmp_path: Path, db: str, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """--allow-partial 이어도 **측정된 짝만** 센다 - 경고만으로는 부족하다."""
+        src = self._write_pair(tmp_path)
+        main(
+            [
+                "import", "--from", str(src), "--name", "fake",
+                "--identity", "v1", "--store", db, "--allow-partial",
+            ]
+        )
+        cap = capsys.readouterr()
+        assert "완전한 짝 1쌍만 집계한다" in cap.err
+        assert "/1" in cap.out, "짝 수가 코퍼스 전체로 부풀었다"
+
+    def test_half_a_pair_is_not_scored(self, tmp_path: Path, db: str) -> None:
+        """🔴 반쪽짜리 짝은 버린다 - 한쪽만으로는 P-C/P-V/P-B/P-R 을 못 가른다 (F5)."""
+        src = tmp_path / "half"
+        src.mkdir()
+        (src / "D001-upstream-validated-dict-access.json").write_text(
+            json.dumps(self._sarif()), encoding="utf-8"
+        )
+        code = main(
+            [
+                "import", "--from", str(src), "--name", "fake",
+                "--identity", "v1", "--store", db, "--allow-partial",
+            ]
+        )
+        assert code == 2
 
 
 class TestReport:

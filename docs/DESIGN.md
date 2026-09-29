@@ -475,6 +475,7 @@ src/codeproof_ai/
 │   ├── metrics.py           #   Wilson CI
 │   ├── provenance.py        #   하네스 git SHA — 짐작하지 않는다
 │   ├── report.py            #   측정값 생성 — 산문에 베끼지 않는다
+│   ├── export.py            #   코퍼스 → 에이전트 입력 (§7.9)
 │   └── runner.py            #   🔴 run_reviewer **하나뿐** (§4.1b)
 │
 ├── corpus/decoy.py          # decoy 작성·검증 12규칙 (실험을 모른다)

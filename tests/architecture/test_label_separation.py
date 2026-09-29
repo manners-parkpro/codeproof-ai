@@ -132,8 +132,48 @@ class TestDecoyToSamples:
         """🔴 리뷰어에게 decoy 와 twin 을 같이 보여주면 정답을 알려주는 것이다."""
         for s in load_decoy_samples(DECOYS):
             assert len(s.target.files) == 1
-            expected = "twin.py" if s.sample_id.endswith("#twin") else "decoy.py"
-            assert s.target.visible_paths == (expected,)
+
+    def test_the_filename_does_not_say_which_side_it_is(self) -> None:
+        """🔴 짝의 두 쪽이 **같은 파일명**을 보여야 한다.
+
+        [실측] 전에는 `decoy.py` / `twin.py` 로 갈렸고, **바로 위 테스트가
+        그걸 옳다고 고정**하고 있었다(`expected = "twin.py" if ... else "decoy.py"`).
+        정적분석기는 파일명을 거의 안 보므로 숫자로는 드러나지 않았지만,
+        `twin.py` 를 받은 LLM 은 「고장난 쪽」임을 읽고 없는 결함을 찾는다.
+
+        에이전트 층을 열면서 드러났다 - **리뷰어 종류가 늘어야 보이는 편향**이다.
+
+        🔴 상수 하나를 확인하는 것으로는 부족하다. 한쪽이 다른 상수를 쓰도록
+           바뀌어도 통과하기 때문이다. **짝마다 서로 비교**한다.
+        """
+        by_id = {s.sample_id: s for s in load_decoy_samples(DECOYS)}
+        assert by_id, "샘플이 없다 - 대조가 공허하다"
+
+        mismatched: list[str] = []
+        for s in by_id.values():
+            assert s.paired_with is not None, f"{s.sample_id}: 짝이 없다"
+            other = by_id[s.paired_with]
+            if s.target.visible_paths != other.target.visible_paths:
+                mismatched.append(
+                    f"{s.sample_id}: {s.target.visible_paths} vs "
+                    f"{other.target.visible_paths}"
+                )
+        assert not mismatched, (
+            "짝의 두 쪽이 다른 파일명을 보여준다 - 파일명이 정답을 흘린다:\n  "
+            + "\n  ".join(mismatched)
+        )
+
+        # 같기만 해서는 안 된다 - 이름 자체가 라벨을 암시하면 안 된다.
+        leaky = ("decoy", "twin", "safe", "buggy", "good", "bad", "vuln", "fixed")
+        offenders = [
+            f"{s.sample_id}: {path}"
+            for s in by_id.values()
+            for path in s.target.visible_paths
+            if any(w in path.lower() for w in leaky)
+        ]
+        assert not offenders, (
+            f"파일명이 정답을 암시한다 (금칙어 {leaky}):\n  " + "\n  ".join(offenders)
+        )
 
     def test_guard_is_inside_the_visible_file(self) -> None:
         """V4 의 타입 수준 대응 - 가드가 제시된 파일 안에 있어야 한다."""
