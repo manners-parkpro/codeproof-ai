@@ -475,7 +475,7 @@ src/codeproof_ai/
 │   ├── metrics.py           #   Wilson CI
 │   ├── provenance.py        #   하네스 git SHA — 짐작하지 않는다
 │   ├── report.py            #   측정값 생성 — 산문에 베끼지 않는다
-│   ├── export.py            #   코퍼스 → 에이전트 입력 (§7.9)
+│   ├── export.py            #   코퍼스 → 에이전트 입력 (§7.10)
 │   └── runner.py            #   🔴 run_reviewer **하나뿐** (§4.1b)
 │
 ├── corpus/decoy.py          # decoy 작성·검증 12규칙 (실험을 모른다)
@@ -835,6 +835,40 @@ True 가 되어 걸린다 — **11개 형식 규칙이 놓친 것을 잡는다.*
 → 단일 slack 값으로 낸 숫자를 결론으로 쓰지 않는다. 스윕해서 **흔들리는지**를
   같이 낸다. 스윕은 **채점만** 다시 한다 — 리뷰어를 다시 돌리면 slack 효과와
   실행 변동이 섞인다.
+
+### 7.10 🔴 에이전트 층 — 격리 · 고정 · 기록 없이는 숫자가 아니다
+
+`export` → `scripts/review-with-agent.sh` → `import --kind agent`.
+API 키 없이 로그인된 CLI(Claude Code · Codex CLI)로 돈다.
+
+[실측] 첫 전체 실행은 네 군데서 **조용히** 틀려 있었다. 예외도 경고도 없었다.
+
+| 틀린 곳 | 무슨 일이 | 지금 막는 것 |
+|---|---|---|
+| 출력 규격 | 손으로 적은 규격에 `quoted_code` · `failure_mode` 가 없었다. 지시는 인용하라는데 칸이 없었고, 지문이 `(category, 파일)` 로 수렴해 **D005#twin 의 서로 다른 결함 2건이 관측 1건**이 됐다 | 규격 문장도, CLI 에 강제하는 `SCHEMA.json` 도 `review_schema()` 하나에서 나온다 — model_api 가 보내는 그 스키마다 |
+| effort · 모델 | 「제품 기본값끼리」라고 여긴 비교가 **개인 설정끼리**였다 (claude `xhigh` · codex `max`). codex 모델의 제품 기본값은 `low` 였다 | `--effort` 필수 (D4). 모델은 **시작 때 한 번** 해석해 모든 호출에 고정하고 `RUN.json` 에 적는다 |
+| 호스트 설정 | `claude -p` 가 전역 CLAUDE.md · 플러그인 · 훅 · MCP · auto 권한 모드를 싣고 리뷰했다. codex 도 사용자 config 를 물려받았다 — §C1a 와 같은 종류 | claude `--safe-mode --strict-mcp-config` · codex `--ignore-user-config --ignore-rules` |
+| 가져오기 | 기본 포맷(sarif)으로 읽으면 전 샘플이 「지적 0건」이 된다. 매니페스트엔 러너의 정적 도구용 기본값(`effort=n/a(static)`)이 실릴 뻔했다 | `RUN.json` 이 정본이다 — 포맷·identity·effort 를 거기서 읽고, 손으로 준 값이 어긋나면 거부. 포맷 모양이 아닌 파일이 하나라도 있으면 저장하지 않는다 |
+
+**「최상위 모델」은 벤더가 정한다.** claude 는 CLI 의 `best` 별칭, codex 는
+`codex debug models` 의 공개 모델 중 `priority` 최상위. 우리가 순위를 매기지
+않는다. 다만 해석은 **한 번**이다 — 호출마다 해석하면 실행 도중 모델이 나올 때
+한 실행이 두 모델로 갈린다. claude 는 호출마다 응답의 `modelUsage` 를 대조해
+다른 모델이 답했으면 실패로 센다(D5 의 `fallbacks` 금지와 같은 이유).
+
+⚠ **권한이 비대칭이다.** codex 는 read-only 샌드박스 안에서 명령을 **실행**할 수
+  있고, claude 는 `dontAsk` 로 Read · Grep · Glob 만 쓴다. 제품이 주는 도구가
+  달라 맞출 수 없다 — `RUN.json` 에 적고 결과를 말할 때 같이 말한다.
+
+⚠ **캐시는 통제되지 않는다** (`cache_policy=uncontrolled`). CLI 의 시스템
+  프롬프트가 우리 프롬프트 앞에 오므로 §7.3a 의 맨 앞 nonce 가 불가능하고,
+  캐시 적중도 실제로 관측됐다. 정확도 비교에는 영향이 없지만 **비용 비교에는
+  쓰지 않는다.**
+
+⚠ **라벨에 닿았는지는 사후에 본다.** 상자(무작위 임시 디렉터리)에는 파일
+  하나뿐이지만 에이전트는 파일시스템을 탐색할 수 있다. codex 는 JSONL 에
+  실행한 명령이, claude 는 거부된 접근이 남는다 — 실행기가 끝에 감사해
+  `RUN.json` 의 `audit` 에 싣는다.
 
 ## 7bis. 측정 프로토콜
 

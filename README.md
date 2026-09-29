@@ -61,9 +61,11 @@ uv run codeproof import --from out --name semgrep --identity "1.2.3"
 bandit -f json -o out/<sample_id>.json -r .
 uv run codeproof import --from out --name bandit --format bandit --identity "1.8"
 
-# 에이전트 출력도 - 다만 층을 명시한다
-uv run codeproof import --from codex-out --name codex-cli \
-    --identity "0.155.1" --kind agent
+# 에이전트 CLI - 격리·모델 고정·기록은 실행기가 한다 (DESIGN §7.10)
+uv run codeproof export --out agent-in
+./scripts/review-with-agent.sh codex agent-in codex-out --effort low   # effort 는 필수
+uv run codeproof import --from codex-out --name codex-cli --kind agent
+#   포맷·identity·effort 는 실행기가 남긴 RUN.json 에서 읽는다 - 손으로 준 값이 다르면 거부
 ```
 
 ⚠️ **`agent` 와 `model_api` 는 섞어서 집계하지 않는다.** 에이전트는 파일 탐색·다회 턴·
@@ -895,7 +897,9 @@ codeproof decoy new D0XX-짧은-설명
 
 # ── 외부 리뷰어 가져오기 (자격증명 불필요) ──────────────
 codeproof import --from out --name semgrep --identity "1.2.3"
-codeproof import --from out --name codex-cli --identity "0.155.1" --kind agent
+codeproof export --out agent-in                      # 에이전트 입력 (프롬프트 + 스키마)
+scripts/review-with-agent.sh claude agent-in claude-out --effort low
+codeproof import --from claude-out --name claude-code --kind agent   # RUN.json 이 정본
 
 # ── 모델 (자격증명 필요) ────────────────────────────────
 codeproof eval --providers claude,codex --effort high --samples 8

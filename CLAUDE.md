@@ -79,6 +79,22 @@ store    → domain·eval         cli      → 전부
 
 → 스윕은 **채점만 다시 한다.** 리뷰어를 다시 돌리면 slack 효과와 실행 변동이 섞인다.
 
+### A2b. 에이전트 층은 격리 · 고정 · 기록해서 잰다 🔴
+
+`export` → `scripts/review-with-agent.sh` → `import --kind agent`. 근거는 DESIGN §7.10.
+
+[실측] 첫 전체 실행이 네 군데서 조용히 틀려 있었다 — 규격에 인용 칸이 없었고,
+「제품 기본값끼리」가 개인 설정(xhigh · max)끼리였고, 전역 CLAUDE.md · 훅 · MCP 가
+실렸고, 기본 포맷(sarif)으로 가져오면 전 샘플이 「지적 0건」이 됐다.
+
+- `--effort` 없이 돌리지 않는다 (D4). 모델은 **시작 때 한 번** 해석해 고정하고 `RUN.json` 에 적는다.
+- CLI 를 호스트 설정에서 격리한다 — claude `--safe-mode`, codex `--ignore-user-config`.
+  `--bare` 는 OAuth 를 읽지 않아 구독 로그인에서는 실패한다.
+- 출력 규격을 손으로 적지 않는다 — `review_schema()` 에서 뽑고 같은 스키마를 CLI 에 강제한다.
+- `import` 는 `RUN.json` 을 정본으로 읽는다. 손으로 준 identity 가 다르면 거부한다.
+- 🔴 **돌고 있는 실행기를 제자리에서 고치지 않는다.** bash 는 스크립트를 실행하면서
+  읽고, `agent_output.py` 는 호출마다 다시 읽힌다. 새 파일에 쓰고 `mv` 로 바꾼다.
+
 ### A3. 확장점 — registry 가 맞는 자리와 아닌 자리
 
 | Protocol | registry | 새 구현 |
@@ -756,6 +772,7 @@ pytest 가 `exit=4`(file not found)를 내고 그걸 「가드가 울었다」�
 | `cli.py` 에서 구현체 직접 생성 | A3 — registry 를 거친다 |
 | 결정적 리뷰어를 N회 반복 | A2 |
 | 단일 slack 값으로 결론 | A2a |
+| effort 없이 · 격리 없이 에이전트 실행 | A2b — 개인 설정이 측정 조건이 된다 |
 | 런타임에서 `eval/` import | A1 |
 | 지적 식별자에 라인 번호 | B2 |
 | `ast.walk` 로 중첩 추출 | B3 |

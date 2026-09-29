@@ -52,7 +52,7 @@ from codeproof_ai.llm.registry import (
 from codeproof_ai.llm.registry import available as provider_available
 from codeproof_ai.llm.render import load_prompt
 from codeproof_ai.llm.render import prompt_hash as prompt_hash_of
-from codeproof_ai.reviewers.imported import ImportedReviewer
+from codeproof_ai.reviewers.imported import ImportedReviewer, read_run_record
 from codeproof_ai.reviewers.wrap import AnalyzerReviewer, ProviderReviewer
 from codeproof_ai.store.sqlite import ReproCheck, Store
 
@@ -112,7 +112,10 @@ def build_parser() -> argparse.ArgumentParser:
     im.add_argument("--corpus", default="corpus/decoys")
     im.add_argument("--from", dest="src", required=True, help="<sample_id>.json 이 있는 디렉터리")
     im.add_argument("--name", required=True, help="리뷰어 이름")
-    im.add_argument("--identity", required=True, help="재현용 식별자 (도구 버전 · 모델 ID)")
+    im.add_argument(
+        "--identity",
+        help="재현용 식별자 (도구 버전 · 모델 ID). --from 에 RUN.json 이 있으면 거기서 읽는다",
+    )
     im.add_argument(
         "--kind",
         choices=("imported", "agent", "human"),
@@ -120,7 +123,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="🔴 층. 에이전트 출력이면 agent - model_api 와 섞어 집계하면 안 된다",
     )
     im.add_argument(
-        "--format", dest="fmt", choices=("sarif", "bandit", "native"), default="sarif"
+        "--format",
+        dest="fmt",
+        choices=("sarif", "bandit", "native"),
+        default=None,
+        help="생략하면 RUN.json 이 있을 때 native(에이전트 실행기), 없으면 sarif",
     )
     im.add_argument(
         "--allow-partial",
@@ -553,14 +560,92 @@ def _cmd_eval(
     return 0
 
 
+def _import_source(
+    src: Path, identity: str | None, fmt: str | None
+) -> tuple[str, str] | None:
+    """가져올 디렉터리를 확인하고 (identity, 포맷) 을 정한다. 안 되면 이유를 말하고 None.
+
+    🔴 실행기가 남긴 기록(RUN.json)이 있으면 그것이 정본이다.
+       - identity: 손으로 친 값이 다르면 매니페스트가 거짓이 된다 (E01).
+         [실측] 커밋 메시지의 예시 `--identity 2.1.250` 은 다음 날 실제 CLI
+         (2.1.284)와 이미 달랐다.
+       - 포맷: 실행기는 native 를 쓴다. 기본값(sarif)으로 읽으면 전 샘플이
+         「지적 0건」이 된다 - 안내된 명령에 `--format native` 가 빠져 있었다.
+    """
+    if not src.is_dir():
+        print(f"가져올 디렉터리가 없다: {src}", file=sys.stderr)
+        return None
+    run = read_run_record(src)
+    recorded = str(run["identity"]) if run and run.get("identity") else None
+    fmt = fmt or ("native" if run is not None else "sarif")
+    if identity is None:
+        if recorded is None:
+            print("--identity 가 필요하다 - RUN.json 이 없어 알 수 없다", file=sys.stderr)
+            return None
+        return recorded, fmt
+    if recorded is not None and identity != recorded:
+        print(
+            f"🔴 --identity 가 실행 기록과 다르다: 준 값={identity!r} · RUN.json={recorded!r}\n"
+            "   이대로 저장하면 매니페스트가 거짓이 된다 (E01). 생략하면 기록을 쓴다.",
+            file=sys.stderr,
+        )
+        return None
+    return identity, fmt
+
+
+def _measured_pairs(
+    labeled: list[LabeledSample], reviewer: ImportedReviewer, *, allow_partial: bool
+) -> list[LabeledSample] | None:
+    """결과가 있는 샘플만 남긴다. 못 하면 이유를 말하고 None.
+
+    🔴 결과 파일이 없는 샘플은 「지적 0건」으로 들어온다 (ImportedReviewer.review).
+       SARIF 도구라면 그게 맞다 - 돌았는데 아무것도 못 찾은 것이다. 그러나
+       에이전트 실행이 중간에 끊긴 경우엔 **미측정이 미탐지로 둔갑**한다.
+       그러면 P-B(둘 다 미지적)가 부풀어 리뷰어가 실제보다 나쁘게 나온다 -
+       증거의 부재를 오답으로 세는 F4 와 같은 종류의 오류다.
+    """
+    missing = [s.sample_id for s in labeled if reviewer.available_runs(s.sample_id) == 0]
+    if not missing:
+        return labeled
+    covered = len(labeled) - len(missing)
+    print(
+        f"결과가 없는 샘플이 {len(missing)}개다 "
+        f"(적용 범위 {covered}/{len(labeled)}). 예: {missing[:3]}",
+        file=sys.stderr,
+    )
+    if not allow_partial:
+        print(
+            "  🔴 이대로 집계하면 **미측정이 미탐지로 둔갑**한다.\n"
+            "     전부 채우거나, 그 사실을 알고 있다면 --allow-partial 을 준다.",
+            file=sys.stderr,
+        )
+        return None
+    # 🔴 경고만으로는 부족하다. 숫자 자체가 거짓이 된다.
+    #    [실측] 120개 중 2개만 채우고 집계했더니 `P-B 미탐지 60` 이 나왔다 -
+    #    한 쌍만 측정했는데 60쌍을 놓친 것처럼 보인다.
+    #    → 측정된 **완전한 짝**만 남긴다. 반쪽짜리 짝도 버린다 -
+    #      한쪽 지적만으로는 P-C/P-V/P-B/P-R 을 가를 수 없다 (F5).
+    have = {s.sample_id for s in labeled if reviewer.available_runs(s.sample_id) > 0}
+    kept = [s for s in labeled if s.sample_id in have and s.paired_with in have]
+    if not kept:
+        print("  완전한 짝이 하나도 없다 - 짝의 양쪽이 모두 있어야 채점된다.", file=sys.stderr)
+        return None
+    print(
+        f"  ⚠ --allow-partial - 완전한 짝 {len(kept) // 2}쌍만 집계한다 "
+        f"(결과가 있던 샘플 {covered}개 중).",
+        file=sys.stderr,
+    )
+    return kept
+
+
 def _cmd_import(
     corpus: Path,
     src: Path,
     *,
     name: str,
-    identity: str,
+    identity: str | None,
     kind: ReviewerKind,
-    fmt: str,
+    fmt: str | None,
     slack: int,
     store_path: str,
     allow_partial: bool = False,
@@ -574,60 +659,21 @@ def _cmd_import(
     if not labeled:
         print(f"평가 샘플이 없다: {corpus}", file=sys.stderr)
         return 2
-    if not src.is_dir():
-        print(f"가져올 디렉터리가 없다: {src}", file=sys.stderr)
+    source = _import_source(src, identity, fmt)
+    if source is None:
         return 2
 
     reviewer = ImportedReviewer(
-        src, name=name, identity=identity, kind=kind, fmt=fmt
+        src, name=name, identity=source[0], kind=kind, fmt=source[1]
     )
     runs = max((reviewer.available_runs(s.sample_id) for s in labeled), default=0)
     if runs == 0:
         print(f"{src} 에 <sample_id>.json 이 하나도 없다", file=sys.stderr)
         return 2
-
-    # 🔴 결과 파일이 없는 샘플은 「지적 0건」으로 들어온다 (ImportedReviewer.review).
-    #    SARIF 도구라면 그게 맞다 - 돌았는데 아무것도 못 찾은 것이다. 그러나
-    #    에이전트 실행이 중간에 끊긴 경우엔 **미측정이 미탐지로 둔갑**한다.
-    #    그러면 P-B(둘 다 미지적)가 부풀어 리뷰어가 실제보다 나쁘게 나온다 -
-    #    증거의 부재를 오답으로 세는 F4 와 같은 종류의 오류다.
-    missing = [s.sample_id for s in labeled if reviewer.available_runs(s.sample_id) == 0]
-    if missing:
-        covered = len(labeled) - len(missing)
-        print(
-            f"결과가 없는 샘플이 {len(missing)}개다 "
-            f"(적용 범위 {covered}/{len(labeled)}). 예: {missing[:3]}",
-            file=sys.stderr,
-        )
-        if not allow_partial:
-            print(
-                "  🔴 이대로 집계하면 **미측정이 미탐지로 둔갑**한다.\n"
-                "     전부 채우거나, 그 사실을 알고 있다면 --allow-partial 을 준다.",
-                file=sys.stderr,
-            )
-            return 2
-        # 🔴 경고만으로는 부족하다. 숫자 자체가 거짓이 된다.
-        #    [실측] 120개 중 2개만 채우고 집계했더니 `P-B 미탐지 60` 이 나왔다 -
-        #    한 쌍만 측정했는데 60쌍을 놓친 것처럼 보인다.
-        #    → 측정된 **완전한 짝**만 남긴다. 반쪽짜리 짝도 버린다 -
-        #      한쪽 지적만으로는 P-C/P-V/P-B/P-R 을 가를 수 없다 (F5).
-        have = {
-            s.sample_id for s in labeled if reviewer.available_runs(s.sample_id) > 0
-        }
-        labeled = [
-            s for s in labeled if s.sample_id in have and s.paired_with in have
-        ]
-        if not labeled:
-            print(
-                "  완전한 짝이 하나도 없다 - 짝의 양쪽이 모두 있어야 채점된다.",
-                file=sys.stderr,
-            )
-            return 2
-        print(
-            f"  ⚠ --allow-partial - 완전한 짝 {len(labeled) // 2}쌍만 집계한다 "
-            f"(결과가 있던 샘플 {covered}개 중).",
-            file=sys.stderr,
-        )
+    measured = _measured_pairs(labeled, reviewer, allow_partial=allow_partial)
+    if measured is None:
+        return 2
+    labeled = measured
 
     if kind is ReviewerKind.AGENT:
         print(
@@ -637,14 +683,32 @@ def _cmd_import(
 
     graders = _graders_for(name, slack, labeled)
     run = run_reviewer(
-        reviewer, labeled, graders, sample_n=runs
+        reviewer, labeled, graders, sample_n=runs,
+        prompt_hash=reviewer.prompt_hash or "n/a",
     )
+    if reviewer.unrecognized:
+        # 🔴 저장하지 않는다 - 모르는 모양을 「지적 0건」으로 센 숫자다.
+        print(
+            f"🔴 --format {reviewer.fmt} 의 모양이 아닌 파일이 "
+            f"{len(reviewer.unrecognized)}개다. 예: {reviewer.unrecognized[:2]}\n"
+            "   이대로면 형식 착오가 「지적 0건」(미탐지)으로 채점된다. 저장하지 않는다.",
+            file=sys.stderr,
+        )
+        return 2
 
     print("=" * 74)
     print(f"리뷰어: {run.reviewer}  ({reviewer.identity})  [{kind.value}]")
     print("-" * 74)
     print(run.manifest.disclosure_block())
     print("-" * 74)
+    if reviewer.rejected:
+        # 🔴 버린 지적은 미탐지와 구별되지 않는다 - 세어서 보인다.
+        print(
+            f"\n  ⚠ 파서가 버린 지적 {len(reviewer.rejected)}건 "
+            "(제시되지 않은 파일 · 범위 밖 줄). 미탐지로 읽히지 않게 확인한다:"
+        )
+        for r in reviewer.rejected[:5]:
+            print(f"      {r}")
     _print_observations(run)
     _print_spread(run, graders)
     _print_pairs(run, graders)

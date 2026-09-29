@@ -24,10 +24,23 @@ class FindingFormat(Protocol):
 
     name: str
 
+    def recognizes(self, payload: Any) -> bool:
+        """🔴 이 포맷의 모양인가.
+
+        파서는 모르는 모양을 받아도 예외 없이 빈 튜플을 낸다 - 그러면
+        **형식 착오가 「지적 0건」으로 둔갑**한다. [실측] 에이전트 출력(native)을
+        기본 포맷(sarif)으로 가져오면 전 샘플이 미탐지로 채점될 뻔했다.
+        """
+        ...
+
     def parse(
         self, payload: Any, source: str, target: ReviewTarget
     ) -> tuple[Finding, ...]:
         ...
+
+
+def _has_list(payload: Any, key: str) -> bool:
+    return isinstance(payload, dict) and isinstance(payload.get(key), list)
 
 
 def _match_path(uri: str, target: ReviewTarget) -> str | None:
@@ -57,6 +70,9 @@ class SarifFormat:
     """SARIF 2.1.0. CodeQL · semgrep · Snyk · Trivy · Ruff 등."""
 
     name = "sarif"
+
+    def recognizes(self, payload: Any) -> bool:
+        return _has_list(payload, "runs")
 
     def parse(
         self, payload: Any, source: str, target: ReviewTarget
@@ -137,6 +153,9 @@ class BanditFormat:
 
     name = "bandit"
 
+    def recognizes(self, payload: Any) -> bool:
+        return _has_list(payload, "results")
+
     def parse(
         self, payload: Any, source: str, target: ReviewTarget
     ) -> tuple[Finding, ...]:
@@ -183,6 +202,9 @@ class NativeFormat:
     """이 플랫폼의 출력 스키마. 에이전트 출력을 손으로 맞출 때 쓴다."""
 
     name = "native"
+
+    def recognizes(self, payload: Any) -> bool:
+        return _has_list(payload, "findings")
 
     def parse(
         self, payload: Any, source: str, target: ReviewTarget

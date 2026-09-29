@@ -41,7 +41,11 @@ class RunManifest:
         params_sent: 실제로 보낸 파라미터.
         params_omitted: 🔴 **의도적으로 생략한** 파라미터.
             리뷰어는 보낸 것만큼 안 보낸 것도 알아야 한다.
-        cache_policy: "nonce" | "cold_only". 캐싱 비대칭 대응 (L3).
+        cache_policy: "nonce" | "cold_only" | "uncontrolled". 캐싱 비대칭 대응 (L3).
+            🔴 `uncontrolled` 는 에이전트 CLI 용이다. CLI 의 시스템 프롬프트가
+            우리 프롬프트 **앞에** 오므로 맨 앞 nonce 가 불가능하고, 캐시 적중도
+            실제로 관측됐다 - 앞의 둘 중 무엇으로 적어도 거짓이다.
+            호출별 캐시 토큰은 원본 응답에 남는다.
         grouper: 🔴 "같은 지적인가" 판정 정책. 이것 자체가 측정 선택이다 -
             정책이 느슨하면 출현율이 올라간다. 기록하지 않으면
             다회 샘플링 결과를 재현할 수 없다.
@@ -71,8 +75,8 @@ class RunManifest:
         if self.sample_n < 1:
             msg = f"sample_n 은 1 이상이다: {self.sample_n}"
             raise ValueError(msg)
-        if self.cache_policy not in {"nonce", "cold_only"}:
-            msg = f"cache_policy 는 nonce|cold_only 다: {self.cache_policy}"
+        if self.cache_policy not in {"nonce", "cold_only", "uncontrolled"}:
+            msg = f"cache_policy 는 nonce|cold_only|uncontrolled 다: {self.cache_policy}"
             raise ValueError(msg)
         if not self.grouper:
             msg = "grouper 는 명시해야 한다 - 출현율이 이 정책에 달려 있다"

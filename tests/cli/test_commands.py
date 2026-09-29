@@ -389,6 +389,92 @@ class TestImport:
         assert "완전한 짝 1쌍만 집계한다" in cap.err
         assert "/1" in cap.out, "짝 수가 코퍼스 전체로 부풀었다"
 
+    def _write_agent_run(self, tmp_path: Path) -> Path:
+        """실행기(review-with-agent.sh) 출력의 모양 - native 지적 + RUN.json."""
+        src = tmp_path / "agent"
+        src.mkdir(exist_ok=True)
+        sid = "D001-upstream-validated-dict-access"
+        finding = {
+            "file": PRESENTED_FILENAME, "line_start": 1, "line_end": 1,
+            "category": "correctness", "severity": "error", "quoted_code": "x",
+            "message": "planted", "failure_mode": "f",
+        }
+        for name in (sid, f"{sid}#twin"):
+            (src / f"{name}.0.json").write_text(
+                json.dumps({"findings": [finding]}), encoding="utf-8"
+            )
+        run = {
+            "agent": "claude", "cli_version": "9.9.9", "model": "m-1", "effort": "low",
+            "identity": "claude-code 9.9.9 · m-1 · effort=low", "prompt_hash": "p" * 24,
+        }
+        (src / "RUN.json").write_text(json.dumps(run), encoding="utf-8")
+        return src
+
+    def _import_agent(self, src: Path, db: str, *extra: str) -> int:
+        return main(
+            [
+                "import", "--from", str(src), "--name", "claude-code",
+                "--kind", "agent", "--store", db, "--allow-partial", *extra,
+            ]
+        )
+
+    def test_run_record_is_the_manifest(
+        self, tmp_path: Path, db: str, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """🔴 E01 - 러너의 정적 도구용 기본값(effort=n/a(static))이 실리면 안 된다.
+
+        에이전트는 effort 를 받고 돌았다. 기록이 있으면 리뷰어가 그대로 신고한다.
+        """
+        src = self._write_agent_run(tmp_path)
+        assert self._import_agent(src, db) == 0
+        out = capsys.readouterr().out
+        assert "effort        : low" in out
+        # 에이전트 CLI 는 캐시를 끌 수단이 없다 - nonce 도 cold_only 도 거짓이다.
+        assert "cache_policy  : uncontrolled" in out
+        assert "claude-cli==9.9.9" in out
+        assert f"prompt_hash   : {'p' * 24}" in out
+        assert "claude-code 9.9.9 · m-1 · effort=low" in out, "identity 를 기록에서 읽지 않았다"
+        # 🔴 포맷을 안 줬다 - 기록이 있으면 native 로 읽어야 지적이 들어온다.
+        assert "고유 1건" in out, f"지적이 들어오지 않았다:\n{out}"
+
+    def test_identity_contradicting_the_record_is_refused(
+        self, tmp_path: Path, db: str, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """[실측] 커밋 메시지 예시의 `--identity 2.1.250` 은 다음 날 실제와 달랐다."""
+        src = self._write_agent_run(tmp_path)
+        assert self._import_agent(src, db, "--identity", "claude-code 2.1.250") == 2
+        assert "실행 기록과 다르다" in capsys.readouterr().err
+
+    def test_matching_identity_is_accepted(self, tmp_path: Path, db: str) -> None:
+        src = self._write_agent_run(tmp_path)
+        code = self._import_agent(src, db, "--identity", "claude-code 9.9.9 · m-1 · effort=low")
+        assert code == 0
+
+    def test_wrong_format_is_not_read_as_zero_findings(
+        self, tmp_path: Path, db: str, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """🔴 native 출력을 sarif 로 읽으면 파서는 예외 없이 「지적 0건」을 낸다.
+
+        그러면 전 샘플이 미탐지(P-B)로 채점된다. 저장하지 않고 거부한다.
+        """
+        src = self._write_agent_run(tmp_path)
+        assert self._import_agent(src, db, "--format", "sarif") == 2
+        assert "모양이 아닌 파일" in capsys.readouterr().err
+
+    def test_rejected_findings_are_counted(
+        self, tmp_path: Path, db: str, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """제시되지 않은 파일을 가리킨 지적은 버려진다 - 미탐지와 구별이 안 되므로 센다."""
+        src = self._write_agent_run(tmp_path)
+        bad = {"findings": [{"file": "./elsewhere.py", "line_start": 1, "line_end": 1,
+                             "category": "correctness", "severity": "error",
+                             "quoted_code": "x", "message": "m", "failure_mode": "f"}]}
+        (src / "D001-upstream-validated-dict-access#twin.0.json").write_text(
+            json.dumps(bad), encoding="utf-8"
+        )
+        assert self._import_agent(src, db) == 0
+        assert "파서가 버린 지적 1건" in capsys.readouterr().out
+
     def test_half_a_pair_is_not_scored(self, tmp_path: Path, db: str) -> None:
         """🔴 반쪽짜리 짝은 버린다 - 한쪽만으로는 P-C/P-V/P-B/P-R 을 못 가른다 (F5)."""
         src = tmp_path / "half"

@@ -50,7 +50,8 @@ PASS=0; FAIL=0; FAILED_NAMES=()
 #   break_X   그 불변식을 깨는 최소 변경
 #   guard_X   가드. 깨끗한 트리에서 **통과**하고 깨뜨린 뒤 **실패**해야 한다.
 
-SCENARIOS=(layering runner registry proof-label proof-vacuous convention docs-tree generated)
+SCENARIOS=(layering runner registry proof-label proof-vacuous convention docs-tree generated
+           agent-contract import-format import-manifest model-pin)
 
 claim_layering() { echo "런타임(analysis)은 정답 라벨(eval)을 볼 수 없다 — A1"; }
 break_layering() {
@@ -101,6 +102,35 @@ guard_docs-tree() { uv run pytest tests/docs/test_consistency.py -q -k package_t
 claim_generated() { echo "생성물을 손으로 고치면 --check 가 잡는다 — F5b"; }
 break_generated() { perl -0pi -e 's/코퍼스 \*\*(\d+)쌍\*\*/코퍼스 **999쌍**/' docs/MEASUREMENTS.md; }
 guard_generated() { uv run codeproof report --check; }
+
+# ── 에이전트 층 (A2b · DESIGN §7.10) - 첫 전체 실행에서 조용히 틀렸던 자리들 ──
+
+claim_agent-contract() { echo "에이전트 출력 규격은 model_api 스키마의 칸을 전부 싣는다 — A2b"; }
+break_agent-contract() {
+  perl -0pi -e 's/    names = item\["required"\]\n/    names = [n for n in item["required"] if n != "quoted_code"]  # falsify.sh\n/' \
+    src/codeproof_ai/eval/export.py
+}
+guard_agent-contract() { uv run pytest tests/eval/test_export.py -q; }
+
+claim_import-format() { echo "형식 착오를 「지적 0건」으로 읽지 않는다 — A2b"; }
+break_import-format() {
+  perl -0pi -e 's/        if not self\._parser\.recognizes\(payload\):\n/        if False:  # falsify.sh\n/' \
+    src/codeproof_ai/reviewers/imported.py
+}
+guard_import-format() { uv run pytest tests/cli/test_commands.py -q -k wrong_format; }
+
+claim_import-manifest() { echo "가져온 에이전트 실행의 effort 를 리뷰어가 신고한다 — E01"; }
+break_import-manifest() {
+  perl -0pi -e 's/    def manifest_fields\(self\)/    def _manifest_fields_off(self)/' \
+    src/codeproof_ai/reviewers/imported.py
+}
+guard_import-manifest() { uv run pytest tests/cli/test_commands.py -q -k run_record_is_the_manifest; }
+
+claim_model-pin() { echo "고정한 모델이 아닌 모델의 답은 실패로 센다 — A2b"; }
+break_model-pin() {
+  perl -0pi -e 's/    if model not in seen:\n/    if False:  # falsify.sh\n/' scripts/agent_output.py
+}
+guard_model-pin() { uv run pytest tests/scripts -q -k substituted; }
 
 # 🔴 이건 가드 테스트가 아니라 **회귀 재현**이다. 관례 주장을 결함 주장으로
 #    세면 FP 가 폭발한다 - 발표했던 결론 두 개를 철회하게 만든 바로 그 버그다.

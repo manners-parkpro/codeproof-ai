@@ -1,0 +1,121 @@
+"""에이전트용 내보내기 - 에이전트가 model_api 와 **같은 과제**를 받는가."""
+
+from __future__ import annotations
+
+import dataclasses
+import json
+import re
+from typing import TYPE_CHECKING
+
+import pytest
+
+from codeproof_ai.domain.target import SourceFile
+from codeproof_ai.eval.export import (
+    MANIFEST_FILE,
+    PROMPT_FILE,
+    SCHEMA_FILE,
+    build_prompt,
+    export_for_agent,
+)
+from codeproof_ai.llm.render import load_prompt, prompt_hash
+from codeproof_ai.llm.schema import review_schema
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from codeproof_ai.eval.sample import LabeledSample
+
+
+def _required() -> list[str]:
+    return list(review_schema()["properties"]["findings"]["items"]["required"])
+
+
+def _contract_fields(prompt: str) -> list[str]:
+    block = prompt.split("## Output", 1)[1]
+    return re.findall(r'"(\w+)":', block.split("]}", 1)[0])
+
+
+class TestContractMatchesModelApiSchema:
+    """🔴 [실측] 손으로 적은 규격에서 `quoted_code`·`failure_mode` 가 빠져 있었다.
+
+    인용이 없으면 LLM 지적의 지문이 (category, 파일) 로 수렴해 같은 파일의
+    서로 다른 지적이 한 관측으로 뭉쳤다. 칸 하나하나를 적는 대신
+    **스키마와 같은 집합인가**를 본다 - 칸이 늘어도 이 테스트는 낡지 않는다.
+    """
+
+    def test_every_schema_field_is_in_the_contract(
+        self, shipped_samples: list[LabeledSample]
+    ) -> None:
+        fields = _contract_fields(build_prompt(shipped_samples))
+        assert fields[0] == "findings"
+        assert fields[1:] == _required()
+
+    def test_the_fields_that_went_missing_are_there(
+        self, shipped_samples: list[LabeledSample]
+    ) -> None:
+        # 위 테스트가 공허하지 않다는 확인 - 빠졌던 두 칸을 이름으로 본다.
+        fields = _contract_fields(build_prompt(shipped_samples))
+        assert "quoted_code" in fields
+        assert "failure_mode" in fields
+
+    def test_enums_come_from_the_schema_not_the_domain(
+        self, shipped_samples: list[LabeledSample]
+    ) -> None:
+        # 도메인 Severity 에는 fatal 이 있지만 model_api 스키마에는 없다.
+        # 에이전트에게 더 넓은 집합을 주면 과제가 달라진다.
+        props = review_schema()["properties"]["findings"]["items"]["properties"]
+        prompt = build_prompt(shipped_samples)
+        assert f"severity: {' | '.join(props['severity']['enum'])}\n" in prompt
+        assert f"category: {' | '.join(props['category']['enum'])}\n" in prompt
+
+    def test_instruction_is_the_model_api_instruction(
+        self, shipped_samples: list[LabeledSample]
+    ) -> None:
+        assert build_prompt(shipped_samples).startswith(load_prompt("review_v1"))
+
+
+class TestFilesListedBelow:
+    """지시가 "every file listed below" 라고 하므로 실제로 나열해야 한다."""
+
+    def test_presented_files_are_listed(
+        self, shipped_samples: list[LabeledSample]
+    ) -> None:
+        prompt = build_prompt(shipped_samples)
+        section = prompt.split("## Files", 1)[1].split("## Output", 1)[0]
+        for f in shipped_samples[0].target.files:
+            assert f"- {f.path}\n" in section
+
+    def test_rejects_samples_with_different_file_lists(
+        self, shipped_samples: list[LabeledSample]
+    ) -> None:
+        a, b = shipped_samples[0], shipped_samples[1]
+        other = dataclasses.replace(
+            b,
+            target=dataclasses.replace(
+                b.target, files=(SourceFile(path="other.py", content="x = 1\n"),)
+            ),
+        )
+        with pytest.raises(ValueError, match="제시 파일 목록"):
+            build_prompt([a, other])
+
+
+class TestExportedFiles:
+    def test_schema_file_is_the_model_api_schema(
+        self, shipped_samples: list[LabeledSample], tmp_path: Path
+    ) -> None:
+        export_for_agent(shipped_samples[:2], tmp_path)
+        written = json.loads((tmp_path / SCHEMA_FILE).read_text(encoding="utf-8"))
+        assert written == review_schema()
+
+    def test_manifest_hashes(
+        self, shipped_samples: list[LabeledSample], tmp_path: Path
+    ) -> None:
+        m = export_for_agent(shipped_samples[:2], tmp_path)
+        on_disk = json.loads((tmp_path / MANIFEST_FILE).read_text(encoding="utf-8"))
+        assert on_disk == m
+        # 🔴 model_api 는 지시만 해싱한다 (cli: prompt_hash_of(load_prompt())).
+        #    비교용 해시가 그것과 같아야 「같은 지시」라고 말할 수 있다.
+        assert m["instruction_hash"] == prompt_hash(load_prompt("review_v1"))
+        prompt = (tmp_path / PROMPT_FILE).read_text(encoding="utf-8")
+        assert m["prompt_hash"] == prompt_hash(prompt)
+        assert m["instruction_hash"] != m["prompt_hash"]
