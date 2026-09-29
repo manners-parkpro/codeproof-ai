@@ -122,13 +122,23 @@ guard_convention() {
 # ── 하네스 ─────────────────────────────────────────────────────────────────
 
 restore() { git checkout -- . 2>/dev/null; }
-trap 'restore' EXIT INT TERM
+# 🔴 trap 은 여기서 걸지 않는다 - require_clean_tree 를 통과한 **뒤**에 건다 (아래).
+#    [실측] 여기 걸려 있을 때 `--list` 가 끝나며 EXIT trap 이 `git checkout -- .` 를
+#    돌려 **커밋 안 된 작업이 전부 지워졌다.** 목록만 보려던 명령이었다.
+#    깨끗한 트리 검사는 소스를 고치는 경로에만 있었고, 되돌리기는 모든 경로에 있었다.
 
 require_clean_tree() {
   if ! git diff --quiet || ! git diff --cached --quiet; then
     echo "${RED}거부한다${OFF} — 커밋되지 않은 변경이 있다." >&2
     echo "이 스크립트는 소스를 일부러 고쳤다가 ${BOLD}git checkout${OFF} 으로 되돌린다." >&2
     echo "그 되돌리기가 당신의 변경을 지운다. 커밋하거나 stash 하고 다시 돌려라." >&2
+    exit 2
+  fi
+  # 🔴 미추적 파일도 본다 - `git checkout` 은 그것을 되돌리지 못한다.
+  #    시나리오가 미추적 파일을 깨뜨리면 깨진 채로 남는다.
+  if [[ -n $(git status --porcelain --untracked-files=all -- src scripts tests docs) ]]; then
+    echo "${RED}거부한다${OFF} — 추적되지 않는 파일이 있다 (git checkout 이 되돌리지 못한다)." >&2
+    git status --porcelain --untracked-files=all -- src scripts tests docs | head -5 >&2
     exit 2
   fi
 }
@@ -174,6 +184,7 @@ case "${1-}" in
 esac
 
 require_clean_tree
+trap 'restore' EXIT INT TERM   # 🔴 깨끗함을 확인한 뒤에만 - 지울 것이 없을 때만 되돌린다
 
 TARGETS=("${SCENARIOS[@]}")
 [[ $# -gt 0 ]] && TARGETS=("$@")
