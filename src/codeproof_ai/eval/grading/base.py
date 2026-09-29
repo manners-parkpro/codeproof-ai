@@ -17,6 +17,12 @@ if TYPE_CHECKING:
     from codeproof_ai.domain.observation import ObservedFinding
     from codeproof_ai.eval.sample import LabeledSample
 
+MATCH_POLICY = "span"
+"""위치 매칭 정책 - 지적의 **보고 범위**가 구간과 겹치면 같은 자리다 (`Span.overlaps`).
+
+채점자 `config_signature()` 에 실린다. 측정 손잡이이므로 기록한다 (F2).
+"""
+
 
 class UnboundGraderError(RuntimeError):
     """실행 문맥이 필요한 채점자를 문맥 없이 돌렸다.

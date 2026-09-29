@@ -21,7 +21,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from codeproof_ai.eval.grading.base import Judgment, Outcome, UnboundGraderError
+from codeproof_ai.eval.grading.base import (
+    MATCH_POLICY,
+    Judgment,
+    Outcome,
+    UnboundGraderError,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -55,7 +60,7 @@ class PairedFixGrader:
         self._by_sample: dict[str, tuple[Finding, ...]] | None = None
 
     def config_signature(self) -> str:
-        return f"{self.name}(slack={self.line_slack})"
+        return f"{self.name}(slack={self.line_slack},match={MATCH_POLICY})"
 
     def bind_run(self, findings_by_sample: Mapping[str, Sequence[Finding]]) -> None:
         """🔴 실행 전체의 지적을 받는다 (runner 가 채점 직전에 호출).
@@ -150,7 +155,7 @@ class PairedFixGrader:
             hi = (
                 d.span.end.line if d.span.end else d.span.start.line
             ) + self.line_slack
-            if lo <= loc.line <= hi:
+            if loc.span.overlaps(lo, hi):
                 return f"{sample.sample_id}#d{i}"
         return None
 
@@ -159,9 +164,17 @@ class PairedFixGrader:
     ) -> str | None:
         """같은 지적이 짝에도 있는가.
 
-        경로가 다르므로(decoy.py vs twin.py) fingerprint 로 비교할 수 없다 -
         **룰과 둘러싼 심볼**로 본다. 같은 룰이 같은 함수에서 양쪽 다 나오면
         그 지적은 두 버전을 구별하지 못한 것이다.
+
+        fingerprint 로 비교하지 않는 이유: 인용문이 들어 있어서, twin 이 **바꾼 줄**을
+        인용한 같은 주장이 다른 지적으로 갈린다 (codex D032 - `neutralize_cell` vs
+        `quote_cell`, 같은 함수의 같은 주장).
+
+        🔴 LLM 지적은 룰 대신 category 를 쓰고 심볼이 없이 들어온다. 러너가 심볼을
+           붙이기 전에는 이 비교가 `(category, None)` 이 되어 **파일 안 같은
+           category 면 전부 같은 지적**이었다 - claude D005 는 다른 함수·다른
+           인용인데 탐지가 지워졌다 (`runner._with_symbols`).
         """
         want = (finding.rule_id, finding.location.symbol)
         for other in counterpart:

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from codeproof_ai.eval.grading.base import Judgment, Outcome
+from codeproof_ai.eval.grading.base import MATCH_POLICY, Judgment, Outcome
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -47,7 +47,7 @@ class ProvableSafetyGrader:
         self.overlap_slack = overlap_slack
 
     def config_signature(self) -> str:
-        return f"{self.name}(slack={self.overlap_slack})"
+        return f"{self.name}(slack={self.overlap_slack},match={MATCH_POLICY})"
 
     def judge(
         self, sample: LabeledSample, observed: Sequence[ObservedFinding]
@@ -84,7 +84,7 @@ class ProvableSafetyGrader:
         if covered is not None and sample.safety.covered_path == loc.path:
             lo = max(1, covered[0] - self.overlap_slack)
             hi = covered[1] + self.overlap_slack
-            if lo <= loc.line <= hi:
+            if loc.span.overlaps(lo, hi):
                 return Judgment(
                     finding_key=o.finding.fingerprint,
                     outcome=Outcome.FALSE_POSITIVE,
@@ -117,7 +117,7 @@ class ProvableSafetyGrader:
                 continue
             lo = max(1, d.span.start.line - self.overlap_slack)
             hi = (d.span.end.line if d.span.end else d.span.start.line) + self.overlap_slack
-            if lo <= loc.line <= hi:
+            if loc.span.overlaps(lo, hi):
                 return Judgment(
                     finding_key=o.finding.fingerprint,
                     outcome=Outcome.TRUE_POSITIVE,

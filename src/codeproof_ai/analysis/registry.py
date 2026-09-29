@@ -12,18 +12,31 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from codeproof_ai.analysis.python.ast_index import PythonSymbolIndex
 from codeproof_ai.analysis.python.mypy_ import MypyAnalyzer
 from codeproof_ai.analysis.python.ruff import RuffAnalyzer
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from codeproof_ai.analysis.base import Analyzer
+    from codeproof_ai.analysis.base import Analyzer, SymbolIndex
 
 ANALYZERS: dict[str, Callable[..., Analyzer]] = {
     "ruff": RuffAnalyzer,
     "mypy": MypyAnalyzer,
 }
+
+# 확장자 -> 심볼 인덱스. 🔴 러너가 파이썬을 몰라도 되게 한다 - Java 를 넣을 때
+# 여기 한 줄이면 모델·에이전트 지적도 둘러싼 심볼을 얻는다 (A3).
+SYMBOL_INDEXES: dict[str, SymbolIndex] = {
+    ".py": PythonSymbolIndex(),
+}
+
+
+def symbol_index_for(path: str) -> SymbolIndex | None:
+    """경로의 언어에 맞는 심볼 인덱스. 모르는 언어면 None - 심볼 없이 둔다."""
+    dot = path.rfind(".")
+    return SYMBOL_INDEXES.get(path[dot:]) if dot >= 0 else None
 
 
 class UnknownAnalyzerError(ValueError):

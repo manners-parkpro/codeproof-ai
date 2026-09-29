@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from codeproof_ai.eval.grading.base import Judgment, Outcome
+from codeproof_ai.eval.grading.base import MATCH_POLICY, Judgment, Outcome
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -45,7 +45,7 @@ class InjectedDefectGrader:
         self.line_slack = line_slack
 
     def config_signature(self) -> str:
-        return f"{self.name}(slack={self.line_slack})"
+        return f"{self.name}(slack={self.line_slack},match={MATCH_POLICY})"
 
     def judge(
         self, sample: LabeledSample, observed: Sequence[ObservedFinding]
@@ -64,7 +64,7 @@ class InjectedDefectGrader:
             hi = (
                 d.span.end.line if d.span.end else d.span.start.line
             ) + self.line_slack
-            if lo <= loc.line <= hi:
+            if loc.span.overlaps(lo, hi):
                 return Judgment(
                     finding_key=key,
                     outcome=Outcome.TRUE_POSITIVE,

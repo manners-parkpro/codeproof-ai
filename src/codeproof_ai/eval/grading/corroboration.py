@@ -23,7 +23,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from codeproof_ai.eval.grading.base import Judgment, Outcome
+from codeproof_ai.eval.grading.base import MATCH_POLICY, Judgment, Outcome
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -76,7 +76,10 @@ class StaticCorroborationGrader:
         )
 
     def config_signature(self) -> str:
-        return f"{self.name}(ref={self.reference_name},slack={self.line_slack})"
+        return (
+            f"{self.name}(ref={self.reference_name},"
+            f"slack={self.line_slack},match={MATCH_POLICY})"
+        )
 
     def judge(
         self, sample: LabeledSample, observed: Sequence[ObservedFinding]
@@ -102,7 +105,8 @@ class StaticCorroborationGrader:
         near = [
             line
             for path, line in hits
-            if path == loc.path and abs(line - loc.line) <= self.line_slack
+            if path == loc.path
+            and loc.span.overlaps(line - self.line_slack, line + self.line_slack)
         ]
         if near:
             return Judgment(

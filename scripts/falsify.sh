@@ -51,7 +51,7 @@ PASS=0; FAIL=0; FAILED_NAMES=()
 #   guard_X   가드. 깨끗한 트리에서 **통과**하고 깨뜨린 뒤 **실패**해야 한다.
 
 SCENARIOS=(layering runner registry proof-label proof-vacuous convention docs-tree generated
-           agent-contract import-format import-manifest model-pin)
+           agent-contract span-match llm-symbol import-format import-manifest model-pin)
 
 claim_layering() { echo "런타임(analysis)은 정답 라벨(eval)을 볼 수 없다 — A1"; }
 break_layering() {
@@ -111,6 +111,20 @@ break_agent-contract() {
     src/codeproof_ai/eval/export.py
 }
 guard_agent-contract() { uv run pytest tests/eval/test_export.py -q; }
+
+claim_span-match() { echo "위치 매칭은 지적의 보고 범위로 한다 — A2a"; }
+break_span-match() {
+  perl -0pi -e 's/        return self\.start\.line <= hi and max\(self\.start\.line, last\) >= lo\n/        return lo <= self.start.line <= hi  # falsify.sh\n/' \
+    src/codeproof_ai/domain/location.py
+}
+guard_span-match() { uv run pytest tests/eval/test_llm_findings.py -q -k ReportedRange; }
+
+claim_llm-symbol() { echo "모델·에이전트 지적도 둘러싼 함수를 얻는다 — E00"; }
+break_llm-symbol() {
+  perl -0pi -e 's/    if reviewer\.kind is ReviewerKind\.STATIC:\n        return list\(findings\)\n/    return list(findings)  # falsify.sh\n/' \
+    src/codeproof_ai/eval/runner.py
+}
+guard_llm-symbol() { uv run pytest tests/eval/test_llm_findings.py -q -k SameFinding; }
 
 claim_import-format() { echo "형식 착오를 「지적 0건」으로 읽지 않는다 — A2b"; }
 break_import-format() {

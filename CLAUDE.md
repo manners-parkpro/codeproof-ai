@@ -79,6 +79,12 @@ store    → domain·eval         cli      → 전부
 
 → 스윕은 **채점만 다시 한다.** 리뷰어를 다시 돌리면 slack 효과와 실행 변동이 섞인다.
 
+→ 위치는 지적의 **보고 범위**로 맞춘다 (`Span.overlaps`) — 시작 줄만 보지 않는다.
+  claude 는 `def` 줄부터 범위를 잡는다. 시작 줄 기준이면 slack=0 에서
+  [실측 · 34쌍 중 19쌍] 탐지가 빠지고 claude/codex 순위가 뒤집혔다.
+  채점자 · 미끼 통계 · 확인자가 **전부 같은 함수**를 쓴다 — 한 곳만 다르면
+  같은 지적이 곳마다 다른 자리에 있다.
+
 ### A2b. 에이전트 층은 격리 · 고정 · 기록해서 잰다 🔴
 
 `export` → `scripts/review-with-agent.sh` → `import --kind agent`. 근거는 DESIGN §7.10.
@@ -92,6 +98,8 @@ store    → domain·eval         cli      → 전부
   `--bare` 는 OAuth 를 읽지 않아 구독 로그인에서는 실패한다.
 - 출력 규격을 손으로 적지 않는다 — `review_schema()` 에서 뽑고 같은 스키마를 CLI 에 강제한다.
 - `import` 는 `RUN.json` 을 정본으로 읽는다. 손으로 준 identity 가 다르면 거부한다.
+- LLM 지적에도 둘러싼 함수를 붙인다 — `run_reviewer` 한 곳에서 (E00). 없으면 짝 채점의
+  「같은 지적」이 `(category, None)` 이 되어 파일 안 같은 category 가 전부 같은 지적이 된다.
 - 🔴 **돌고 있는 실행기를 제자리에서 고치지 않는다.** bash 는 스크립트를 실행하면서
   읽고, `agent_output.py` 는 호출마다 다시 읽힌다. 새 파일에 쓰고 `mv` 로 바꾼다.
 
@@ -772,6 +780,7 @@ pytest 가 `exit=4`(file not found)를 내고 그걸 「가드가 울었다」�
 | `cli.py` 에서 구현체 직접 생성 | A3 — registry 를 거친다 |
 | 결정적 리뷰어를 N회 반복 | A2 |
 | 단일 slack 값으로 결론 | A2a |
+| 시작 줄만으로 위치 매칭 | A2a — 보고 관례가 순위를 뒤집는다 |
 | effort 없이 · 격리 없이 에이전트 실행 | A2b — 개인 설정이 측정 조건이 된다 |
 | 런타임에서 `eval/` import | A1 |
 | 지적 식별자에 라인 번호 | B2 |

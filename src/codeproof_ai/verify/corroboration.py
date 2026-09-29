@@ -57,7 +57,7 @@ class CorroborationVerifier:
 
     def config_signature(self) -> str:
         who = "+".join(sorted(self._sources)) or "none"
-        return f"corroboration(ref={who},slack={self.line_slack})"
+        return f"corroboration(ref={who},slack={self.line_slack},match=span)"
 
     def verify(self, finding: Finding, target: ReviewTarget) -> Evidence:  # noqa: ARG002
         if finding.source in self._sources:
@@ -71,7 +71,8 @@ class CorroborationVerifier:
         near = [
             (p, ln)
             for p, ln in self._hits
-            if p == loc.path and abs(ln - loc.line) <= self.line_slack
+            if p == loc.path
+            and loc.span.overlaps(ln - self.line_slack, ln + self.line_slack)
         ]
         if near:
             who = "+".join(sorted(self._sources))

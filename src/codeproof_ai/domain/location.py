@@ -87,6 +87,23 @@ class Span:
         last = self.end.line if self.end is not None else self.start.line
         return self.start.line <= line <= last
 
+    def overlaps(self, lo: int, hi: int) -> bool:
+        """보고된 줄 범위가 [lo, hi] 와 겹치는가 - **위치 매칭의 유일한 정의.**
+
+        🔴 시작 줄만 보지 않는다. [실측 · 34쌍] claude 는 결함이 속한 함수의
+           `def` 줄부터 범위를 잡는다 (결함 L16 → 지적 L15-16). 시작 줄만 보면
+           slack=0 에서 그런 탐지 19쌍이 빠지고 **claude/codex 순위가 뒤집혔다** -
+           리뷰 품질이 아니라 보고 관례의 차이였다 (A2a).
+           한 줄 지적(ruff 대부분)은 전과 같다.
+
+        ⚠ 넓게 보고할수록 유리해 보이지만 음성 쪽에도 같은 기준이 걸린다 -
+          넓은 범위는 안전 근거가 덮는 구간에도 닿아 FP 가 된다. 대칭이다.
+        🔴 채점자 · 미끼 통계 · 확인자가 **전부 이것을 쓴다.** 한 곳만 다르면
+           같은 지적이 곳마다 다른 자리에 있게 된다 (F4a 와 같은 교훈).
+        """
+        last = self.end.line if self.end is not None else self.start.line
+        return self.start.line <= hi and max(self.start.line, last) >= lo
+
 
 @dataclass(frozen=True, slots=True)
 class Location:

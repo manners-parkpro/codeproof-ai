@@ -151,7 +151,7 @@ def measure(
             in_bait[label] = sum(
                 1
                 for f in findings
-                if lo <= f.location.line <= hi and f.category.is_defect_claim
+                if f.location.span.overlaps(lo, hi) and f.category.is_defect_claim
             )
 
         stats.append(

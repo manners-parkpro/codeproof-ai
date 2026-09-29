@@ -21,7 +21,9 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+from codeproof_ai.analysis.registry import symbol_index_for
 from codeproof_ai.domain.observation import FingerprintGrouper, group_runs
+from codeproof_ai.domain.reviewer import ReviewerKind
 from codeproof_ai.domain.run import RunManifest
 from codeproof_ai.eval.metrics import GraderResult, summarize
 from codeproof_ai.eval.provenance import harness_sha as current_sha
@@ -33,6 +35,7 @@ if TYPE_CHECKING:
     from codeproof_ai.domain.observation import FindingGrouper, ObservationSet
     from codeproof_ai.domain.reviewer import Reviewer, ReviewResult, ReviewTelemetry
     from codeproof_ai.domain.run import ToolVersion
+    from codeproof_ai.domain.target import ReviewTarget
     from codeproof_ai.eval.grading.base import Grader, Judgment
     from codeproof_ai.eval.sample import LabeledSample
 
@@ -140,6 +143,34 @@ def _bind_run_context(
             bind(by_sample)
 
 
+def _with_symbols(
+    findings: Sequence[Finding], target: ReviewTarget, reviewer: Reviewer
+) -> list[Finding]:
+    """둘러싼 심볼이 없는 지적에 붙인다 - **모든 리뷰어가 같은 경로로.**
+
+    🔴 [실측] 모델·에이전트 지적은 심볼 없이 들어왔다. 그러면 짝 채점의
+       「짝에도 같은 지적인가」가 `(category, None)` 이 되어 **파일 안 같은
+       category 면 전부 같은 지적**이 됐다 - claude D005 는 다른 함수·다른
+       인용인데 탐지가 지워졌다. 지문(B2)도 설계와 달리 심볼 없이 계산됐다.
+
+    여기서 붙이는 이유는 E00 과 같다. 리뷰어마다 붙이면 경로가 갈리고,
+    새 리뷰어가 생길 때 반드시 한쪽이 빠진다.
+    정적분석기 어댑터는 스스로 붙이므로(ruff · mypy) 다시 계산하지 않는다.
+    """
+    if reviewer.kind is ReviewerKind.STATIC:
+        return list(findings)
+    out: list[Finding] = []
+    for f in findings:
+        index = symbol_index_for(f.location.path)
+        src = target.file(f.location.path)
+        if f.location.symbol is not None or index is None or src is None:
+            out.append(f)
+            continue
+        symbol, kind = index.enclosing_symbol(src.content, f.location.line)
+        out.append(f.with_symbol(symbol, kind) if symbol else f)
+    return out
+
+
 def _declared_fields(reviewer: Reviewer) -> Mapping[str, str]:
     """리뷰어가 신고한 매니페스트 항목.
 
@@ -245,7 +276,7 @@ def run_reviewer(
                 if batched is not None
                 else reviewer.review(s.target)
             )
-            runs.append(list(result.findings))
+            runs.append(_with_symbols(result.findings, s.target, reviewer))
             tele.add(result.telemetry)
             if result.raw:
                 raws.append(result.raw)
