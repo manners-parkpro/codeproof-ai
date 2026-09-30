@@ -12,6 +12,8 @@ wheels/
 # 실행 결과 저장소 (로컬)
 runs.db
 *.db-journal
+# 에이전트 실행 출력 - 원본 응답(raw/) 포함, 이어 돌리기용. 생성물에는 results/agent/ 의 묶음이 실린다
+/runs/
 
 # 에디터 · 커버리지
 .idea/
