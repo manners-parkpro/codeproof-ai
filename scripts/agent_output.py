@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -146,6 +147,49 @@ def resolve_codex(catalog: object, effort: str, model: str | None = None) -> str
     if effort not in efforts(top):
         raise RefusedError(f"최상위 모델 {top.get('slug')} 은 effort={effort} 를 지원하지 않는다")
     return str(top["slug"])
+
+
+def describe_codex(catalog: object, slug: str) -> str:
+    """카탈로그에 적힌 그 모델의 설명. 없으면 빈 문자열 - 판정이 아니라 기록용이다."""
+    models = catalog.get("models") if isinstance(catalog, dict) else catalog
+    for m in models if isinstance(models, list) else []:
+        if isinstance(m, dict) and m.get("slug") == slug:
+            return str(m.get("description") or "")
+    return ""
+
+
+def check_model(
+    lock: Path, agent: str, model: str, note: str = "", *, accept: bool = False
+) -> str | None:
+    """🔴 벤더의 최상위가 바뀌면 조용히 따라가지 않는다.
+
+    「최상위 모델」은 벤더가 정하고 우리는 순위를 매기지 않는다(DESIGN §7.10). 대신 새 실행이
+    지난번에 받아들인 모델과 **다른** 모델로 해석되면 멈춘다 - 실험 사이에 측정 대상이
+    바뀌는 것은 사람이 알고 정할 일이다. [실측 2026-09-30] 0.159 클라이언트가 받은
+    카탈로그에서 priority 0 은 일상용 모델("workhorse")이었다 - CLI 를 올리는 순간
+    새 실행이 에러 없이 바뀐다.
+
+    `lock` 은 에이전트별로 받아들인 모델과 그 설명을 적는다. 항목이 없으면 기록하고 통과한다.
+
+    Returns:
+        None 이면 통과. 문자열이면 거부 사유 - 호출부가 멈춘다.
+    """
+    data = json.loads(lock.read_text(encoding="utf-8")) if lock.is_file() else {}
+    prev = data.get(agent)
+    if isinstance(prev, dict) and prev.get("model") != model and not accept:
+        return (
+            f"벤더 최상위가 바뀌었다: {prev.get('model')} ({prev.get('note', '')})"
+            f" -> {model} ({note})\n"
+            f"   기준을 지키려면 --model {prev.get('model')} 로 명시한다.\n"
+            "   받아들이려면 ACCEPT_MODEL_CHANGE=1 로 다시 돌려 기준을 갱신한다."
+        )
+    if not isinstance(prev, dict) or prev.get("model") != model:
+        data[agent] = {"model": model, "note": note}
+        tmp = lock.with_suffix(lock.suffix + ".tmp")
+        body = json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+        tmp.write_text(body, encoding="utf-8")
+        tmp.replace(lock)
+    return None
 
 
 def _session(fields: dict[str, str]) -> dict[str, str]:
@@ -311,6 +355,24 @@ def _kv(args: list[str]) -> dict[str, str]:
     return out
 
 
+def _model_guard_command(cmd: str, rest: list[str]) -> int:
+    """모델 기준 확인 명령. 모르는 명령이면 2. 예외는 main 이 받는다."""
+    if cmd == "describe-codex":
+        catalog = json.loads(Path(rest[1]).read_text(encoding="utf-8"))
+        print(describe_codex(catalog, rest[0]))
+        return 0
+    if cmd == "check-model":
+        lock, agent, model, *note = rest
+        accept = os.environ.get("ACCEPT_MODEL_CHANGE") == "1"
+        reason = check_model(Path(lock), agent, model, note[0] if note else "", accept=accept)
+        if reason:
+            print(reason)
+            return 4
+        return 0
+    print(f"모르는 명령: {cmd}", file=sys.stderr)
+    return 2
+
+
 def main(argv: list[str]) -> int:
     cmd, *rest = argv
     try:
@@ -345,8 +407,7 @@ def main(argv: list[str]) -> int:
             hits = audit(Path(rest[0]))
             print(json.dumps({"files": len(hits), "hits": hits}, ensure_ascii=False))
         else:
-            print(f"모르는 명령: {cmd}", file=sys.stderr)
-            return 2
+            return _model_guard_command(cmd, rest)
     except RefusedError as exc:
         print(str(exc), file=sys.stderr)
         return 1

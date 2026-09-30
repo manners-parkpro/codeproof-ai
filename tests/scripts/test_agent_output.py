@@ -109,6 +109,68 @@ class TestResolve:
         with pytest.raises(ao.RefusedError, match="없는 모델"):
             ao.resolve_codex(self.CATALOG, "low", "nope")
 
+    def test_codex_description_is_read_from_the_catalog(self) -> None:
+        catalog = {"models": [{"slug": "top", "description": "Frontier"}, {"slug": "second"}]}
+        assert ao.describe_codex(catalog, "top") == "Frontier"
+        assert ao.describe_codex(catalog, "second") == ""
+        assert ao.describe_codex(catalog, "nope") == ""
+
+
+class TestModelDriftStops:
+    """🔴 벤더 최상위가 바뀌면 조용히 따라가지 않는다 - 순위는 벤더가, 받아들이는 것은 사람이."""
+
+    def test_first_resolution_is_recorded(self, tmp_path: Path) -> None:
+        lock = tmp_path / "agent-models.json"
+        assert ao.check_model(lock, "codex", "astra", "Frontier") is None
+        entry = json.loads(lock.read_text(encoding="utf-8"))["codex"]
+        assert entry == {"model": "astra", "note": "Frontier"}
+
+    def test_same_model_passes_without_rewriting(self, tmp_path: Path) -> None:
+        lock = tmp_path / "agent-models.json"
+        ao.check_model(lock, "codex", "astra", "Frontier")
+        before = lock.stat().st_mtime_ns
+        assert ao.check_model(lock, "codex", "astra", "Frontier") is None
+        assert lock.stat().st_mtime_ns == before
+
+    def test_a_different_model_stops_and_keeps_the_baseline(self, tmp_path: Path) -> None:
+        # 카탈로그가 바뀌어 priority 최상위가 일상용 모델이 된 경우 [실측 2026-09-30]
+        lock = tmp_path / "agent-models.json"
+        ao.check_model(lock, "codex", "astra", "Frontier")
+        reason = ao.check_model(lock, "codex", "sol", "Latest workhorse")
+        assert reason is not None
+        assert "astra" in reason and "sol" in reason and "ACCEPT_MODEL_CHANGE" in reason
+        # 기준을 지키는 쪽이 그대로 복사해 쓸 수 있는 명령이어야 한다 - 받아들이는 쪽만
+        # 구체적이면 멈춘 자리에서 그쪽으로 기운다.
+        assert "--model astra" in reason
+        assert json.loads(lock.read_text(encoding="utf-8"))["codex"]["model"] == "astra"
+
+    def test_accepting_moves_the_baseline(self, tmp_path: Path) -> None:
+        lock = tmp_path / "agent-models.json"
+        ao.check_model(lock, "codex", "astra", "Frontier")
+        assert ao.check_model(lock, "codex", "sol", "Latest workhorse", accept=True) is None
+        assert json.loads(lock.read_text(encoding="utf-8"))["codex"]["model"] == "sol"
+
+    def test_agents_are_tracked_separately(self, tmp_path: Path) -> None:
+        lock = tmp_path / "agent-models.json"
+        ao.check_model(lock, "claude", "fable", "best 별칭")
+        assert ao.check_model(lock, "codex", "astra", "Frontier") is None
+        assert ao.check_model(lock, "claude", "fable", "best 별칭") is None
+
+    def test_the_cli_refuses_with_exit_4(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        lock = tmp_path / "agent-models.json"
+        assert ao.main(["check-model", str(lock), "codex", "astra", "Frontier"]) == 0
+        assert ao.main(["check-model", str(lock), "codex", "sol", "workhorse"]) == 4
+        assert "벤더 최상위가 바뀌었다" in capsys.readouterr().out
+
+    def test_the_committed_baseline_pins_todays_models(self) -> None:
+        # 기준이 비어 있으면 CLI 를 올린 뒤의 첫 실행이 일상용 모델을 기준으로 삼는다
+        # - 가드가 무력해진다.
+        data = json.loads((SCRIPT.parent / "agent-models.json").read_text(encoding="utf-8"))
+        assert {"claude", "codex"} <= set(data)
+        assert all(entry.get("model") for entry in data.values())
+
 
 class TestRunRecordRefusesMixing:
     """🔴 한 출력 디렉터리에 두 설정이 섞이면 그건 한 실행이 아니다 (F1)."""
@@ -154,6 +216,15 @@ class TestRunRecordRefusesMixing:
         first, second = json.loads(path.read_text(encoding="utf-8"))["sessions"]
         assert first == {"started_at": "2026-09-29T03:20:30Z", "runs": "1", "runner_sha": "unknown"}
         assert second["runs"] == "8"
+
+    def test_model_description_survives_a_resume(self, tmp_path: Path) -> None:
+        # 설명은 조건이 아니라 해석 당시의 기록이다. 이어 쓰는 세션은 모델을 다시
+        # 해석하지 않아 빈 값을 넘기는데, 그게 거부도 덮어쓰기도 하면 안 된다.
+        path = tmp_path / "RUN.json"
+        note = "Frontier intelligence."
+        ao.record(path, dict(self.FIELDS) | {"model_note": note})
+        assert ao.record(path, dict(self.FIELDS) | {"model_note": ""}) == []
+        assert json.loads(path.read_text(encoding="utf-8"))["model_note"] == note
 
     def test_refusal_leaves_the_record_untouched(self, tmp_path: Path) -> None:
         path = tmp_path / "RUN.json"

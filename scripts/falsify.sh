@@ -51,7 +51,8 @@ PASS=0; FAIL=0; FAILED_NAMES=()
 #   guard_X   가드. 깨끗한 트리에서 **통과**하고 깨뜨린 뒤 **실패**해야 한다.
 
 SCENARIOS=(layering runner registry proof-label proof-vacuous convention docs-tree generated
-           agent-contract span-match llm-symbol import-format import-manifest model-pin)
+           agent-contract span-match llm-symbol import-format import-manifest model-pin
+           model-drift)
 
 claim_layering() { echo "런타임(analysis)은 정답 라벨(eval)을 볼 수 없다 — A1"; }
 break_layering() {
@@ -145,6 +146,13 @@ break_model-pin() {
   perl -0pi -e 's/    if model not in seen:\n/    if False:  # falsify.sh\n/' scripts/agent_output.py
 }
 guard_model-pin() { uv run pytest tests/scripts -q -k substituted; }
+
+claim_model-drift() { echo "벤더 최상위가 바뀌면 실행기가 멈춘다 — DESIGN §7.10"; }
+break_model-drift() {
+  perl -0pi -e 's/    if isinstance\(prev, dict\) and prev\.get\("model"\) != model and not accept:\n/    if False:  # falsify.sh\n/' \
+    scripts/agent_output.py
+}
+guard_model-drift() { uv run pytest tests/scripts -q -k ModelDrift; }
 
 # 🔴 이건 가드 테스트가 아니라 **회귀 재현**이다. 관례 주장을 결함 주장으로
 #    세면 FP 가 폭발한다 - 발표했던 결론 두 개를 철회하게 만든 바로 그 버그다.

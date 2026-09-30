@@ -31,6 +31,9 @@
 #    (D6). --model 을 생략하면 벤더가 정한 최상위 모델이다:
 #      claude  `--model best` 로 한 번 호출해 응답의 modelUsage 에서 실제 ID
 #      codex   `codex debug models` 의 공개 모델 중 priority 최상위
+#    그 결과가 agent-models.json 에 받아들인 모델과 다르면 **멈춘다** (DESIGN §7.10) -
+#    ACCEPT_MODEL_CHANGE=1 로 기준을 옮기거나 --model 로 명시한다. 해석된 모델의
+#    설명(codex 는 카탈로그 설명)은 RUN.json 의 model_note 에 남는다.
 #    호출마다 해석하면 실행 도중 새 모델이 나올 때 한 실행이 두 모델로 갈린다.
 #    claude 는 호출마다 modelUsage 를 대조해 다른 모델이 답했으면 실패로 센다.
 #
@@ -143,8 +146,10 @@ resolve_model() {
       python3 "$HELPER" resolve-claude "$probe.claude.json"
       ;;
     codex)
-      timeout 120 codex debug models 2> "$OUT/raw/_resolve.err" \
-        | python3 "$HELPER" resolve-codex "$EFFORT" ${MODEL:+"$MODEL"}
+      # 해석에 쓴 카탈로그를 남긴다 - 같은 CLI 버전에서도 원격 카탈로그는 바뀐다.
+      timeout 120 codex debug models 2> "$OUT/raw/_resolve.err" > "$OUT/raw/_resolve.codex.json" \
+        || return 1
+      python3 "$HELPER" resolve-codex "$EFFORT" ${MODEL:+"$MODEL"} < "$OUT/raw/_resolve.codex.json"
       ;;
   esac
 }
@@ -152,6 +157,7 @@ resolve_model() {
 CLI_VERSION=$(cli_version)
 [[ -n $CLI_VERSION ]] || die "$AGENT --version 에서 버전을 읽지 못했다"
 REQUESTED=${MODEL:-top}
+NOTE=""   # 이어 쓸 때는 해석하지 않는다 - 첫 세션이 남긴 model_note 가 그대로 남는다
 
 if [[ -f $RUN_JSON ]]; then
   # 이어서 돌린다 - 처음 고정한 모델을 그대로 쓴다. 다시 해석하면 그 사이
@@ -162,6 +168,16 @@ else
   printf '%s모델 해석 중 (%s)...%s\n' "$DIM" "$REQUESTED" "$OFF"
   RESOLVED=$(resolve_model) || die "모델을 해석하지 못했다 - $OUT/raw/_resolve.* 를 본다"
   [[ -n $RESOLVED ]] || die "모델을 해석하지 못했다 (빈 값)"
+  case $AGENT in
+    codex)  NOTE=$(python3 "$HELPER" describe-codex "$RESOLVED" "$OUT/raw/_resolve.codex.json") ;;
+    *)      NOTE="${MODEL:-best} 별칭" ;;
+  esac
+  # 🔴 벤더 최상위가 지난번에 받아들인 모델과 다르면 멈춘다 - 조용히 따라가지 않는다 (DESIGN §7.10).
+  #    --model 로 명시했으면 사람이 고른 것이므로 보지 않는다.
+  if [[ -z $MODEL ]]; then
+    reason=$(python3 "$HELPER" check-model "$HERE/agent-models.json" "$AGENT" "$RESOLVED" "$NOTE") \
+      || die "🔴 ${reason:-기준 모델을 확인하지 못했다 - $HERE/agent-models.json}"
+  fi
 fi
 IDENTITY="$NAME $CLI_VERSION · $RESOLVED · effort=$EFFORT"
 
@@ -171,7 +187,7 @@ git -C "$HERE/.." diff --quiet -- scripts src 2>/dev/null || RUNNER_SHA="$RUNNER
 
 diffs=$(python3 "$HELPER" record "$RUN_JSON" \
     runner_version="$RUNNER_VERSION" agent="$AGENT" cli_version="$CLI_VERSION" \
-    model_requested="$REQUESTED" model="$RESOLVED" effort="$EFFORT" runs="$RUNS" \
+    model_requested="$REQUESTED" model="$RESOLVED" model_note="$NOTE" effort="$EFFORT" runs="$RUNS" \
     isolation="$ISOLATION" permission="$PERMISSION" \
     prompt_hash="$(manifest prompt_hash)" instruction_hash="$(manifest instruction_hash)" \
     schema_hash="$(manifest schema_hash)" identity="$IDENTITY" timeout_s="$TIMEOUT" \

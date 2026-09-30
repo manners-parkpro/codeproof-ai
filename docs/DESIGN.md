@@ -857,6 +857,12 @@ API 키 없이 로그인된 CLI(Claude Code · Codex CLI)로 돈다.
 한 실행이 두 모델로 갈린다. claude 는 호출마다 응답의 `modelUsage` 를 대조해
 다른 모델이 답했으면 실패로 센다(D5 의 `fallbacks` 금지와 같은 이유).
 
+⚠ **최상위가 바뀌어도 조용히 따라가지 않는다** — 새 실행이 `scripts/agent-models.json` 에
+받아들인 모델과 다르게 해석되면 실행기가 멈추고(`ACCEPT_MODEL_CHANGE=1` 또는 `--model` 로
+사람이 정한다), 해석된 모델의 설명은 `RUN.json` 의 `model_note` 에, 해석에 쓴 카탈로그는
+`raw/_resolve.codex.json` 에 남긴다
+[실측 2026-09-30: 0.159 클라이언트가 받은 카탈로그에서 `priority` 0 은 일상용 모델("workhorse")이었다].
+
 ⚠ **권한이 비대칭이다.** codex 는 read-only 샌드박스 안에서 명령을 **실행**할 수
   있고, claude 는 `dontAsk` 로 Read · Grep · Glob 만 쓴다. 제품이 주는 도구가
   달라 맞출 수 없다 — `RUN.json` 에 적고 결과를 말할 때 같이 말한다.

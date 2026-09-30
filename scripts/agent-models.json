@@ -1,0 +1,10 @@
+{
+  "claude": {
+    "model": "claude-fable-5-1",
+    "note": "best 별칭"
+  },
+  "codex": {
+    "model": "gpt-6-astra",
+    "note": "Frontier intelligence for the most demanding work."
+  }
+}
