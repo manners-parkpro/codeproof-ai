@@ -21,6 +21,10 @@ from pathlib import Path
 
 # 🔴 실행 설정. 하나라도 다르면 같은 출력 디렉터리에 이어 쓰지 않는다 -
 #    섞이면 한 실행이 아니다 (F1). timeout 은 측정 조건이 아니라 운영 값이라 뺀다.
+#    반복 횟수(runs)도 뺀다 - 조건이 아니라 **표본 크기**다. 같은 조건의 호출은
+#    서로 교환 가능하므로 1회 파일럿을 F8 의 8회로 늘려 이어 쓸 수 있다.
+#    ⚠ 결과를 보고 늘리면 optional stopping 이다 (F5a). 목표는 미리 정한 값이어야
+#      하고, 늘린 이력은 sessions 에 남는다.
 CONFIG_KEYS = (
     "runner_version",
     "agent",
@@ -28,7 +32,6 @@ CONFIG_KEYS = (
     "model_requested",
     "model",
     "effort",
-    "runs",
     "isolation",
     "permission",
     "prompt_hash",
@@ -145,21 +148,44 @@ def resolve_codex(catalog: object, effort: str, model: str | None = None) -> str
     return str(top["slug"])
 
 
+def _session(fields: dict[str, str]) -> dict[str, str]:
+    return {k: fields.get(k, "") for k in ("started_at", "runs", "runner_sha")}
+
+
 def record(path: Path, fields: dict[str, str]) -> list[str]:
-    """실행 기록을 쓴다. 이미 있으면 **설정이 같은지** 확인한다.
+    """실행 기록을 쓴다. 이미 있으면 **설정이 같은지** 확인하고 세션을 덧붙인다.
+
+    이어 쓰기마다 `sessions` 에 (시각 · 목표 반복 횟수 · 실행기 커밋) 을 남긴다 -
+    한 디렉터리의 출력이 언제 어떤 실행기로 쌓였는지 나중에 물을 수 있게.
 
     Returns:
-        불일치 목록. 비어 있지 않으면 호출부가 거부한다.
+        불일치 목록. 비어 있지 않으면 호출부가 거부한다 (파일은 건드리지 않는다).
     """
     if not path.is_file():
-        path.write_text(json.dumps(fields, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        data: dict[str, object] = dict(fields)
+        data["sessions"] = [_session(fields)]
+        path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         return []
     old = json.loads(path.read_text(encoding="utf-8"))
-    return [
+    diffs = [
         f"{k}: 기록={old.get(k)!r} 지금={fields.get(k)!r}"
         for k in CONFIG_KEYS
         if str(old.get(k)) != str(fields.get(k))
     ]
+    if diffs:
+        return diffs
+    sessions = old.get("sessions") or [
+        # 세션 기록이 생기기 전의 실행 - 알던 것만 옮긴다
+        {"started_at": old.get("started_at", ""), "runs": str(old.get("runs", "")),
+         "runner_sha": old.get("runner_sha", "unknown")}
+    ]
+    sessions.append(_session(fields))
+    old["sessions"] = sessions
+    counts = [int(s["runs"]) for s in sessions if str(s.get("runs", "")).isdigit()]
+    if counts:
+        old["runs"] = str(max(counts))
+    path.write_text(json.dumps(old, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return []
 
 
 def finish(path: Path, fields: dict[str, str]) -> None:

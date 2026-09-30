@@ -133,6 +133,35 @@ class TestRunRecordRefusesMixing:
         ao.record(path, dict(self.FIELDS))
         assert ao.record(path, dict(self.FIELDS) | {"timeout_s": "600"}) == []
 
+    def test_more_runs_resume_and_leave_a_session(self, tmp_path: Path) -> None:
+        """반복 횟수는 조건이 아니라 표본 크기다 - 1회 파일럿을 8회로 늘려 이어 쓴다."""
+        path = tmp_path / "RUN.json"
+        ao.record(path, dict(self.FIELDS) | {"runs": "1", "runner_sha": "aaa"})
+        assert ao.record(path, dict(self.FIELDS) | {"runs": "8", "runner_sha": "bbb"}) == []
+        data = json.loads(path.read_text(encoding="utf-8"))
+        assert data["runs"] == "8"
+        assert [(x["runs"], x["runner_sha"]) for x in data["sessions"]] == [
+            ("1", "aaa"),
+            ("8", "bbb"),
+        ]
+
+    def test_record_from_before_sessions_is_carried_over(self, tmp_path: Path) -> None:
+        # 세션 기록이 생기기 전에 만든 RUN.json - 첫 세션을 아는 만큼 옮긴다.
+        path = tmp_path / "RUN.json"
+        legacy = dict(self.FIELDS) | {"runs": "1", "started_at": "2026-09-29T03:20:30Z"}
+        path.write_text(json.dumps(legacy), encoding="utf-8")
+        assert ao.record(path, dict(self.FIELDS) | {"runs": "8", "runner_sha": "bbb"}) == []
+        first, second = json.loads(path.read_text(encoding="utf-8"))["sessions"]
+        assert first == {"started_at": "2026-09-29T03:20:30Z", "runs": "1", "runner_sha": "unknown"}
+        assert second["runs"] == "8"
+
+    def test_refusal_leaves_the_record_untouched(self, tmp_path: Path) -> None:
+        path = tmp_path / "RUN.json"
+        ao.record(path, dict(self.FIELDS))
+        before = path.read_text(encoding="utf-8")
+        assert ao.record(path, dict(self.FIELDS) | {"model": "other"})
+        assert path.read_text(encoding="utf-8") == before
+
     def test_cli_exit_code_is_3_on_mismatch(self, tmp_path: Path) -> None:
         path = tmp_path / "RUN.json"
         args = [f"{k}={v}" for k, v in self.FIELDS.items()]

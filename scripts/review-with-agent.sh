@@ -165,13 +165,17 @@ else
 fi
 IDENTITY="$NAME $CLI_VERSION · $RESOLVED · effort=$EFFORT"
 
+# 이 출력을 만든 실행기의 커밋 - 세션마다 RUN.json 의 sessions 에 남는다.
+RUNNER_SHA=$(git -C "$HERE/.." rev-parse --short=12 HEAD 2>/dev/null || echo unknown)
+git -C "$HERE/.." diff --quiet -- scripts src 2>/dev/null || RUNNER_SHA="$RUNNER_SHA-dirty"
+
 diffs=$(python3 "$HELPER" record "$RUN_JSON" \
     runner_version="$RUNNER_VERSION" agent="$AGENT" cli_version="$CLI_VERSION" \
     model_requested="$REQUESTED" model="$RESOLVED" effort="$EFFORT" runs="$RUNS" \
     isolation="$ISOLATION" permission="$PERMISSION" \
     prompt_hash="$(manifest prompt_hash)" instruction_hash="$(manifest instruction_hash)" \
     schema_hash="$(manifest schema_hash)" identity="$IDENTITY" timeout_s="$TIMEOUT" \
-    started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)")
+    runner_sha="$RUNNER_SHA" started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)")
 case $? in
   0) ;;
   3)
