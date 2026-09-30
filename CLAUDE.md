@@ -589,7 +589,7 @@ Anthropic 에 `seed` 가 없고 `temperature` 도 못 쓴다 → 출력은 환�
 
 ```bash
 uv run codeproof decoy new D00X-짧은-설명
-uv run codeproof decoy validate          # CI 는 --strict
+uv run codeproof decoy validate          # 훅 · 테스트는 --strict (경고도 센다)
 ```
 
 디렉터리 하나가 한 건 — `meta.toml` + `decoy.py`(안전) + `twin.py`(가드만 제거/우회).
@@ -661,7 +661,7 @@ attack(twin)  is True    # 🔴 공격이 실제로 결함을 잡을 수 있다
 
 | 층 | 무엇을 보는가 | 어디서 |
 |---|---|---|
-| V2~V11 | 형식 — 근거 길이 · 가드 가시성 · 짝 구조 | `decoy validate` (훅이 강제) |
+| V2~V11 | 형식 — 근거 길이 · 가드 가시성 · 짝 구조 | `decoy validate` (훅 · 테스트가 강제) |
 | **V12** | **proof.py 존재와 서명** | `decoy validate` |
 | **반증 실행** | **근거가 참인가** | `pytest tests/corpus/test_proofs.py` |
 | AST 구조 증명 | 「경로가 **없다**」류 주장 | `tests/corpus/test_safety_claims.py` |
@@ -714,8 +714,13 @@ uv run codeproof decoy stats
 `.claude/hooks/decoy-validate-guard.sh` 가 `corpus/decoys/` 편집 시
 `decoy validate --strict` 를 돌리고, 위반이면 `decision: "block"` 으로 되돌린다.
 
-🔴 **형식(V2~V11)만 잡는다.** G3a 의 「근거가 참인지」는 여전히 사람 몫이다.
+🔴 **형식(V2~V13)만 잡는다.** G3a 의 「근거가 참인지」는 여전히 사람 몫이다.
    훅이 통과했다고 decoy 가 옳은 것이 아니다 - 바닥선이지 충분조건이 아니다.
+
+🔴 **훅은 Write·Edit 로 고칠 때만 돈다.** Bash·편집기로 고친 decoy 는
+   `test_repo_corpus_is_clean` 이 같은 기준(`--strict`)으로 본다. [실측] 그 테스트가
+   오류만 보던 때는 쓰이지 않는 수용 표기(V11)를 넣어도 통과했다 - 훅과 테스트가
+   「깨끗하다」를 다르게 정의하면 우회로가 곧 통과 경로다.
 
 `_TEMPLATE/` 는 일부러 미완성이므로 검사에서 제외한다.
 

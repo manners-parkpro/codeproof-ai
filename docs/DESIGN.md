@@ -780,7 +780,7 @@ True 가 되어 걸린다 — **11개 형식 규칙이 놓친 것을 잡는다.*
 
 | 층 | 무엇을 보는가 | 어디서 |
 |---|---|---|
-| V2~V11 | 형식 — 근거 길이 · 가드 가시성 · 짝 구조 | `decoy validate` (훅이 강제) |
+| V2~V11 | 형식 — 근거 길이 · 가드 가시성 · 짝 구조 | `decoy validate` (훅 · 테스트가 강제) |
 | **V12** | **proof.py 존재와 서명** | `decoy validate` |
 | **V13** | **`guard_lines` 가 `guard_symbol` 과 관계된 자리인가** | `decoy validate` |
 | **반증 실행** | **근거가 참인가** | `pytest tests/corpus/test_proofs.py` |

@@ -284,9 +284,15 @@ class TestShippedCorpus:
     """저장소에 실제로 들어 있는 decoy 가 규격을 지키는지."""
 
     def test_repo_corpus_is_clean(self) -> None:
+        """🔴 훅과 같은 기준(`--strict`)이다 - 경고도 센다.
+
+        훅은 Write·Edit 로 고칠 때만 돈다. Bash·편집기로 고친 decoy 는 이 테스트만 본다.
+        [실측] 오류만 보던 때는 쓰이지 않는 수용 표기(V11)를 넣어도 통과했다.
+        """
         report = validate_corpus(REPO_DECOYS)
         detail = "\n".join(f"{n}: {v}" for n, v in report.violations)
         assert report.ok, f"코퍼스에 오류가 있다:\n{detail}"
+        assert report.warn_count == 0, f"코퍼스에 경고가 있다 (훅은 --strict):\n{detail}"
 
     def test_template_is_skipped(self) -> None:
         """_TEMPLATE 는 일부러 미완성이라 검사 대상이 아니어야 한다."""

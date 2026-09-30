@@ -50,7 +50,7 @@ PASS=0; FAIL=0; FAILED_NAMES=()
 #   break_X   그 불변식을 깨는 최소 변경
 #   guard_X   가드. 깨끗한 트리에서 **통과**하고 깨뜨린 뒤 **실패**해야 한다.
 
-SCENARIOS=(layering runner registry proof-label proof-vacuous convention docs-tree generated
+SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict convention docs-tree generated
            agent-contract span-match llm-symbol import-format import-manifest model-pin
            model-drift multirun-views view-regrade view-copy multirun-labels run-gap short-runs
            sweep-ladder sensitivity-views report-partial report-labels pack-partial pack-leftover)
@@ -96,6 +96,17 @@ def attack(mod: ModuleType) -> bool:
 EOF
 }
 guard_proof-vacuous() { uv run pytest tests/corpus/test_proofs.py -q; }
+
+# 경고만 내는 위반이어야 한다 - 오류면 엄격하지 않은 테스트도 울어서 이 가드를 시험하지 못한다.
+# 이미 수용 표기가 있는 decoy 는 피한다 (키가 겹치면 TOML 로드 오류가 된다).
+_unacked() { for m in corpus/decoys/D*/meta.toml; do grep -q acknowledged_warnings "$m" || { echo "$m"; return; }; done; }
+
+claim_corpus-strict() { echo "코퍼스 테스트가 훅과 같은 기준(--strict)이다 — 경고도 센다 (G3c)"; }
+break_corpus-strict() {
+  local m; m=$(_unacked)
+  [[ -n $m ]] && perl -0pi -e 's/\A/acknowledged_warnings = ["W2"]  # falsify.sh\n/' "$m"
+}
+guard_corpus-strict() { uv run pytest tests/corpus/test_decoy_validator.py -q -k repo_corpus_is_clean; }
 
 claim_docs-tree() { echo "DESIGN 의 패키지 트리가 실제 모듈을 전부 싣는다 — F5b"; }
 break_docs-tree() { perl -0pi -e 's/^.*mix\.py.*\n//m' docs/DESIGN.md; }
