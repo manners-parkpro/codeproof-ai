@@ -81,7 +81,7 @@
 
 리뷰어 `claude-code 2.1.284 · claude-fable-5-1 · effort=low` · 샘플당 **8회** 실행 · 짝 **60쌍** · 캐시 `uncontrolled` · 파서가 버린 지적 0건
 
-설정 `imported(claude-code,fmt=native,kind=agent,model=claude-fable-5-1,effort=low,isolation=safe-mode,strict-mcp-config,no-session-persistence,DISABLE_AUTOUPDATER=1,permission=dontAsk;tools=Read,Grep,Glob,instruction_hash=7d1332f82a7d41f3c8daf0b9,prompt_hash=305d8e25f7fdbdafc7b89332,schema_hash=b957f782e99241837721bb08)`
+설정 `imported(claude-code,fmt=native,kind=agent,runner_version=2,model=claude-fable-5-1,effort=low,isolation=safe-mode,strict-mcp-config,no-session-persistence,DISABLE_AUTOUPDATER=1,permission=dontAsk;tools=Read,Grep,Glob,instruction_hash=7d1332f82a7d41f3c8daf0b9,prompt_hash=305d8e25f7fdbdafc7b89332,schema_hash=b957f782e99241837721bb08)`
 
 > 🔴 층이 다르다 (`agent`) — 파일 탐색 · 다회 턴 · 툴 사용이 가능해서 `model_api` 와 조건이 다르다. 위 정적분석기 숫자와 같은 문서에 둘 뿐 **섞어 집계하지 않는다.**
 

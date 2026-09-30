@@ -37,7 +37,6 @@ from typing import TYPE_CHECKING, Any
 
 from codeproof_ai.domain.reviewer import ReviewerKind, ReviewResult
 from codeproof_ai.domain.run import ToolVersion
-from codeproof_ai.llm.parse import parse_findings
 from codeproof_ai.reviewers.formats import FORMATS
 
 if TYPE_CHECKING:
@@ -50,7 +49,9 @@ BUNDLE_FILE = "findings.jsonl"
 _RUN_OUTPUT = re.compile(r"(?P<sid>.+)\.(?P<run>\d+)\.json")
 
 # RUN.json 에서 설정 지문에 싣는 항목. 하나라도 다르면 다른 실행이다.
+# [실측] runner_version 이 빠져 있어서 2 → 3 으로 바꿔도 config_hash 가 같았다.
 _SIGNED = (
+    "runner_version",
     "model",
     "effort",
     "isolation",
@@ -129,7 +130,7 @@ class ImportedReviewer:
         self._cursor: dict[str, int] = {}
         self.run_record = read_run_record(root)
         self.rejected: list[str] = []
-        """파서가 버린 지적 (제시되지 않은 파일 · 범위 밖 줄). 🔴 조용히 사라지지 않게 센다."""
+        """파서가 버린 지적 (제시되지 않은 파일 · 범위 밖 줄 · 위치 없음). 🔴 포맷 무관하게 센다."""
         self.unrecognized: list[str] = []
         """포맷의 모양이 아닌 파일. 하나라도 있으면 그 실행의 숫자는 믿을 수 없다."""
 
@@ -197,15 +198,9 @@ class ImportedReviewer:
             # 🔴 모르는 모양을 「지적 0건」으로 읽지 않는다 - 세어서 호출부가 거부하게 한다.
             self.unrecognized.append(str(path))
             return ReviewResult(findings=(), raw={"_unrecognized": str(path)})
-        if self.fmt == "native" and isinstance(payload, dict):
-            # native 파서는 버린 것을 `rejected` 에 남기는데 FindingFormat 은
-            # 지적만 돌려준다 - 여기서 받아 둔다.
-            outcome = parse_findings(payload, source=self.name, target=target)
-            self.rejected.extend(f"{sid}#{idx}: {r}" for r in outcome.rejected)
-            findings = outcome.findings
-        else:
-            findings = self._parser.parse(payload, self.name, target)
+        outcome = self._parser.parse(payload, self.name, target)
+        self.rejected.extend(f"{sid}#{idx}: {r}" for r in outcome.rejected)
         return ReviewResult(
-            findings=findings,
+            findings=outcome.findings,
             raw={"_source": str(path), "_format": self.fmt},
         )

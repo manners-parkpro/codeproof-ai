@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 from codeproof_ai.domain.finding import Category, Finding, Severity
 from codeproof_ai.domain.location import Location, Position, Span
-from codeproof_ai.llm.parse import parse_findings
+from codeproof_ai.llm.parse import ParseOutcome, parse_findings
 
 if TYPE_CHECKING:
     from codeproof_ai.domain.target import ReviewTarget
@@ -27,7 +27,7 @@ class FindingFormat(Protocol):
     def recognizes(self, payload: Any) -> bool:
         """🔴 이 포맷의 모양인가.
 
-        파서는 모르는 모양을 받아도 예외 없이 빈 튜플을 낸다 - 그러면
+        파서는 모르는 모양을 받아도 예외 없이 지적 0건을 낸다 - 그러면
         **형식 착오가 「지적 0건」으로 둔갑**한다. [실측] 에이전트 출력(native)을
         기본 포맷(sarif)으로 가져오면 전 샘플이 미탐지로 채점될 뻔했다.
         """
@@ -35,7 +35,12 @@ class FindingFormat(Protocol):
 
     def parse(
         self, payload: Any, source: str, target: ReviewTarget
-    ) -> tuple[Finding, ...]:
+    ) -> ParseOutcome:
+        """🔴 버린 지적은 `rejected` 에 이유를 남긴다 - 버린 것은 미탐지와 구별되지 않는다.
+
+        [실측] SARIF · bandit 파서가 버린 것을 세지 않았다 - 경로가 다른 SARIF 를
+        가져오면 exit 0 · 경고 0 · 전 샘플 「지적 0건」이었다. native 만 세고 있었다.
+        """
         ...
 
 
@@ -76,10 +81,12 @@ class SarifFormat:
 
     def parse(
         self, payload: Any, source: str, target: ReviewTarget
-    ) -> tuple[Finding, ...]:
+    ) -> ParseOutcome:
         if not isinstance(payload, dict):
-            return ()
+            return ParseOutcome(findings=(), rejected=("SARIF 가 객체가 아니다",))
         out: list[Finding] = []
+        rejected: list[str] = []
+        i = 0
         for run in payload.get("runs") or []:
             driver = (run.get("tool") or {}).get("driver") or {}
             rules: dict[str, Any] = {
@@ -88,29 +95,33 @@ class SarifFormat:
                 if isinstance(r, dict) and r.get("id") is not None
             }
             for res in run.get("results") or []:
-                f = self._one(res, rules, source, target)
-                if f is not None:
-                    out.append(f)
-        return tuple(out)
+                got = self._one(res, rules, source, target)
+                if isinstance(got, Finding):
+                    out.append(got)
+                else:
+                    rejected.append(f"[{i}] {got}")
+                i += 1
+        return ParseOutcome(findings=tuple(out), rejected=tuple(rejected))
 
     def _one(
         self, res: Any, rules: dict[str, Any], source: str, target: ReviewTarget
-    ) -> Finding | None:
+    ) -> Finding | str:
+        """결과 하나를 Finding 으로. 문자열이면 버린 이유다."""
         if not isinstance(res, dict):
-            return None
+            return "객체가 아니다"
         locs = res.get("locations") or []
         if not locs:
-            return None
+            return "위치가 없다"
         phys = (locs[0] or {}).get("physicalLocation") or {}
         uri = str((phys.get("artifactLocation") or {}).get("uri", ""))
         region = phys.get("region") or {}
 
         path = _match_path(uri, target)
         if path is None:
-            return None
+            return f"제시되지 않은 파일을 가리킨다: {uri!r}"
         line = int(region.get("startLine", 1))
         if not target.is_visible(path, line):
-            return None
+            return f"범위 밖을 가리킨다: {path}:{line}"
 
         rule_id = str(res.get("ruleId") or "unknown")
         rule = rules.get(rule_id, {})
@@ -158,18 +169,23 @@ class BanditFormat:
 
     def parse(
         self, payload: Any, source: str, target: ReviewTarget
-    ) -> tuple[Finding, ...]:
+    ) -> ParseOutcome:
         if not isinstance(payload, dict):
-            return ()
+            return ParseOutcome(findings=(), rejected=("bandit 출력이 객체가 아니다",))
         out: list[Finding] = []
-        for res in payload.get("results") or []:
+        rejected: list[str] = []
+        for i, res in enumerate(payload.get("results") or []):
             if not isinstance(res, dict):
+                rejected.append(f"[{i}] 객체가 아니다")
                 continue
-            path = _match_path(str(res.get("filename", "")), target)
+            filename = str(res.get("filename", ""))
+            path = _match_path(filename, target)
             if path is None:
+                rejected.append(f"[{i}] 제시되지 않은 파일을 가리킨다: {filename!r}")
                 continue
             line = int(res.get("line_number", 1))
             if not target.is_visible(path, line):
+                rejected.append(f"[{i}] 범위 밖을 가리킨다: {path}:{line}")
                 continue
 
             out.append(
@@ -195,7 +211,7 @@ class BanditFormat:
                     raw=dict(res),
                 )
             )
-        return tuple(out)
+        return ParseOutcome(findings=tuple(out), rejected=tuple(rejected))
 
 
 class NativeFormat:
@@ -208,10 +224,10 @@ class NativeFormat:
 
     def parse(
         self, payload: Any, source: str, target: ReviewTarget
-    ) -> tuple[Finding, ...]:
+    ) -> ParseOutcome:
         if not isinstance(payload, dict):
-            return ()
-        return parse_findings(payload, source=source, target=target).findings
+            return ParseOutcome(findings=(), rejected=("native 출력이 객체가 아니다",))
+        return parse_findings(payload, source=source, target=target)
 
 
 FORMATS: dict[str, FindingFormat] = {

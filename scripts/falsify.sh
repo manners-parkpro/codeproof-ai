@@ -51,7 +51,8 @@ PASS=0; FAIL=0; FAILED_NAMES=()
 #   guard_X   가드. 깨끗한 트리에서 **통과**하고 깨뜨린 뒤 **실패**해야 한다.
 
 SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict convention docs-tree generated
-           agent-contract span-match llm-symbol import-format import-manifest model-pin
+           agent-contract span-match llm-symbol import-format import-manifest import-rejected
+           signed-runner model-pin
            model-drift multirun-views view-regrade view-copy multirun-labels run-gap short-runs
            sweep-ladder sensitivity-views report-partial report-labels pack-partial pack-leftover)
 
@@ -152,6 +153,19 @@ break_import-manifest() {
     src/codeproof_ai/reviewers/imported.py
 }
 guard_import-manifest() { uv run pytest tests/cli/test_commands.py -q -k run_record_is_the_manifest; }
+
+claim_import-rejected() { echo "SARIF · bandit 파서가 버린 지적도 센다 — 버린 것은 미탐지와 구별되지 않는다 (I)"; }
+break_import-rejected() {
+  perl -0pi -e 's/rejected\.append\(f"\[\{i\}\] \{got\}"\)/pass  # falsify.sh/' \
+    src/codeproof_ai/reviewers/formats.py
+}
+guard_import-rejected() { uv run pytest tests/cli/test_commands.py -q -k sarif_findings_on_other_paths; }
+
+claim_signed-runner() { echo "실행기 판(runner_version)도 설정 지문에 싣는다 — 다른 실행기의 출력을 가른다 (F1)"; }
+break_signed-runner() {
+  perl -0pi -e 's/\n    "runner_version",//' src/codeproof_ai/reviewers/imported.py
+}
+guard_signed-runner() { uv run pytest tests/reviewers/test_imported.py -q -k runner_version; }
 
 claim_model-pin() { echo "고정한 모델이 아닌 모델의 답은 실패로 센다 — A2b"; }
 break_model-pin() {

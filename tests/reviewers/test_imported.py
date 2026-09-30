@@ -86,3 +86,24 @@ class TestBundle:
         assert pack_runs(src) == pack_runs(src)
         ids = [json.loads(line)["sample_id"] for line in pack_runs(src).splitlines()]
         assert ids == sorted(ids)
+
+
+class TestConfigSignature:
+    """🔴 실행을 가르는 RUN.json 항목은 설정 지문에 싣는다 (F1).
+
+    빠지면 다른 실행이 같은 설정으로 읽힌다.
+    """
+
+    def _signature(self, root: Path, run: dict[str, str]) -> str:
+        root.mkdir()
+        (root / RUN_FILE).write_text(json.dumps(run), encoding="utf-8")
+        return _reviewer(root).config_signature()
+
+    def test_runner_version_changes_the_signature(self, tmp_path: Path) -> None:
+        """[실측] runner_version 이 빠져 있어서 2 → 3 으로 바꿔도 config_hash 가 같았다."""
+        run = {"runner_version": "2", "model": "m-1", "effort": "low"}
+        first = self._signature(tmp_path / "a", run)
+        again = self._signature(tmp_path / "b", dict(run))
+        bumped = self._signature(tmp_path / "c", {**run, "runner_version": "3"})
+        assert first == again, "같은 실행 기록이 다른 설정으로 읽혔다"
+        assert first != bumped, "실행기 판이 달라도 같은 설정으로 읽힌다"

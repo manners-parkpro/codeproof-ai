@@ -293,7 +293,7 @@ class TestDecoyCommands:
 
 
 class TestImport:
-    def _sarif(self) -> dict[str, object]:
+    def _sarif(self, uri: str = PRESENTED_FILENAME) -> dict[str, object]:
         return {
             "runs": [
                 {
@@ -306,7 +306,7 @@ class TestImport:
                             "locations": [
                                 {
                                     "physicalLocation": {
-                                        "artifactLocation": {"uri": PRESENTED_FILENAME},
+                                        "artifactLocation": {"uri": uri},
                                         "region": {"startLine": 1, "startColumn": 1},
                                     }
                                 }
@@ -317,14 +317,14 @@ class TestImport:
             ]
         }
 
-    def _write_pair(self, tmp_path: Path) -> Path:
+    def _write_pair(self, tmp_path: Path, uri: str = PRESENTED_FILENAME) -> Path:
         """짝의 **양쪽**을 채운다 - 반쪽만 두면 짝 채점이 성립하지 않는다."""
         src = tmp_path / "out"
         src.mkdir(exist_ok=True)
         sid = "D001-upstream-validated-dict-access"
         for name in (sid, f"{sid}#twin"):
             (src / f"{name}.json").write_text(
-                json.dumps(self._sarif()), encoding="utf-8"
+                json.dumps(self._sarif(uri)), encoding="utf-8"
             )
         return src
 
@@ -345,6 +345,26 @@ class TestImport:
         #    [실측] 제시 파일명이 바뀌었을 때 이 단언이 없었으면
         #    지적이 전부 버려진 채로 통과했을 것이다.
         assert "지적 1건" in out, f"가져온 지적이 없다:\n{out}"
+
+    def test_sarif_findings_on_other_paths_are_counted(
+        self, tmp_path: Path, db: str, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """🔴 경로가 어긋난 SARIF 는 전부 버려진다 - 세지 않으면 exit 0 · 경고 0 · 「지적 0건」이다.
+
+        [실측] 그렇게 들어왔다 - 버린 지적은 native 만 셌다.
+        대조군은 바로 위 test_imports_external_findings (경로가 맞으면 지적이 들어온다).
+        """
+        src = self._write_pair(tmp_path, uri="elsewhere.py")
+        code = main(
+            [
+                "import", "--from", str(src), "--name", "fake",
+                "--identity", "v1", "--store", db, "--allow-partial",
+            ]
+        )
+        out = capsys.readouterr().out
+        assert code == 0
+        assert "파서가 버린 지적 2건" in out, f"버린 지적이 보이지 않는다:\n{out}"
+        assert "elsewhere.py" in out
 
     def test_missing_source_directory_is_rejected(self, db: str) -> None:
         code = main(

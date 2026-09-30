@@ -103,6 +103,8 @@ store    → domain·eval         cli      → 전부
   `--bare` 는 OAuth 를 읽지 않아 구독 로그인에서는 실패한다.
 - 출력 규격을 손으로 적지 않는다 — `review_schema()` 에서 뽑고 같은 스키마를 CLI 에 강제한다.
 - `import` 는 `RUN.json` 을 정본으로 읽는다. 손으로 준 identity 가 다르면 거부한다.
+  실행을 가르는 항목은 전부 설정 지문(`_SIGNED`)에 싣는다 — [실측] `runner_version` 이 빠져
+  2 → 3 으로 바꿔도 config_hash 가 같았다.
 - LLM 지적에도 둘러싼 함수를 붙인다 — `run_reviewer` 한 곳에서 (E00). 없으면 짝 채점의
   「같은 지적」이 `(category, None)` 이 되어 파일 안 같은 category 가 전부 같은 지적이 된다.
 - 크레딧이 한정인 실행은 `--runs` 를 **1씩** 올려 이어 돈다 — 실행기가 샘플마다 N회를 다 돌고 넘어가서,
@@ -116,7 +118,7 @@ store    → domain·eval         cli      → 전부
 |---|---|---|
 | `Analyzer` | `analysis/registry.py` | 클래스 추가 + `ANALYZERS` 한 줄 |
 | `ReviewProvider` | `llm/registry.py` | 클래스 추가 + `PROVIDERS`·`CREDENTIAL_OF` |
-| `FindingFormat` | `reviewers/formats.py` | 파서 추가 + `FORMATS` |
+| `FindingFormat` | `reviewers/formats.py` | 파서 추가 + `FORMATS`. 버린 지적은 `ParseOutcome.rejected` 로 센다 (I) |
 | `Reviewer` | — | `reviewers/<name>.py`. **먼저 `ImportedReviewer` 로 되는지 본다** |
 | `Verifier` | — | `verify/<rule>.py`. 파이프라인 구성은 호출부 정책 |
 | `Grader` | **없음 (의도)** | `eval/grading/<name>.py` |
@@ -789,7 +791,9 @@ pytest 가 `exit=4`(file not found)를 내고 그걸 「가드가 울었다」�
 
 - `domain` 의 값 객체는 `@dataclass(frozen=True, slots=True)`.
 - 외부 도구 출력 파싱은 **부분 실패를 예외로 올리지 않는다.** 1건이 깨져도 나머지를
-  살리고, 깨진 건 세어서 남긴다.
+  살리고, 깨진 건 세어서 남긴다. 🔴 버린 것도 센다 — 포맷마다 `ParseOutcome`(지적 + 버린 이유)을 낸다.
+  [실측] SARIF · bandit 파서는 버린 건을 세지 않았다 — 경로가 다른 SARIF 가 exit 0 · 경고 0 ·
+  전 샘플 「지적 0건」으로 들어왔다. native 만 세고 있었다.
 - 프롬프트는 코드가 아니라 **데이터**다. `llm/prompts/` 에 파일로 두고 해시한다.
 - 새 지표는 **신뢰구간을 같이 내지 않으면 추가하지 않는다.** 점추정만 내는 건 측정이 아니다.
 
@@ -812,6 +816,7 @@ pytest 가 `exit=4`(file not found)를 내고 그걸 「가드가 울었다」�
 | 실제 레포에 분석기 실행 | C1 |
 | 호스트 설정·캐시를 격리 안 함 | C1a — 레포마다 다른 숫자 |
 | `config_signature()` 가 실제와 다름 | C1a — 매니페스트가 거짓이 된다 |
+| 실행을 가르는 `RUN.json` 항목을 지문에서 빼기 | A2b — 다른 실행이 같은 설정으로 읽힌다 |
 | 복원 방식이 결과를 바꿈 | C1b |
 | 대상마다 subprocess | C1b |
 | `mypy.api.run` | C2 |
@@ -837,6 +842,7 @@ pytest 가 `exit=4`(file not found)를 내고 그걸 「가드가 울었다」�
 | 다회 실행을 평균/합집합 | F6 |
 | 관점별 숫자를 판정 걸러내기로 | F6 — 짝의 지적을 받는 채점자는 관점마다 다시 채점한다 |
 | 모자란 · 끊긴 회차를 「지적 0건」으로 | F6 — 미측정이 미탐지가 된다 |
+| 버린 지적을 세지 않는 파서 | I — 미측정이 미탐지가 된다 |
 | `rate` 를 판정 근거로 | F6 |
 | 기본 LLM 판정자 · 자기 확인 | F7 |
 | "재현 가능한 출력" 표현 | F8 |

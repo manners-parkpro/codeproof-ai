@@ -778,7 +778,7 @@ def _cmd_import(
         # 🔴 버린 지적은 미탐지와 구별되지 않는다 - 세어서 보인다.
         print(
             f"\n  ⚠ 파서가 버린 지적 {len(reviewer.rejected)}건 "
-            "(제시되지 않은 파일 · 범위 밖 줄). 미탐지로 읽히지 않게 확인한다:"
+            "(제시되지 않은 파일 · 범위 밖 줄 · 위치 없음). 미탐지로 읽히지 않게 확인한다:"
         )
         for r in reviewer.rejected[:5]:
             print(f"      {r}")
