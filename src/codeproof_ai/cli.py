@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import shutil
 import sys
 import tempfile
@@ -217,6 +218,12 @@ def _add_pack_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -
         "--out", required=True, help="묶음 디렉터리 - 보통 results/agent/<리뷰어 이름>"
     )
     pk.add_argument("--corpus", default="corpus/decoys")
+    pk.add_argument(
+        "--runs",
+        type=int,
+        default=None,
+        help="앞 N회만 묶는다 - 묶을 회차 수는 결과를 보기 전에 정한다. 생략하면 있는 회차 전부",
+    )
 
 
 def _add_report_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -655,7 +662,8 @@ def _measured_pairs(
     🔴 **실행이 모자란 샘플도 같다.** 8회 중 5회만 있으면 나머지 3회가
        「지적 0건」이 되어 출현 빈도(F6)가 거짓이 된다.
     """
-    complete = {s.sample_id for s in labeled if reviewer.available_runs(s.sample_id) == runs}
+    # 앞 N회만 쓸 때는 N회 이상 있는 샘플이 완전하다 - 기본(N = 최댓값)에서는 == 와 같다.
+    complete = {s.sample_id for s in labeled if reviewer.available_runs(s.sample_id) >= runs}
     missing = [s.sample_id for s in labeled if s.sample_id not in complete]
     if not missing:
         return labeled
@@ -699,20 +707,24 @@ def _replay(
     fmt: str | None = None,
     slack: int = 0,
     allow_partial: bool = False,
+    first_runs: int | None = None,
 ) -> tuple[ReviewerRun, ImportedReviewer, list[Grader], list[LabeledSample]] | None:
     """저장된 지적을 채점까지 재생한다. 안 되면 이유를 말하고 None.
 
     🔴 import 와 report 가 **이 경로 하나**를 탄다 - E00 과 같은 이유다. 갈리면 새 검사가
        한쪽에서 빠지고, 같은 실행이 import 출력과 생성물에서 다른 숫자를 낸다.
+
+    회차 수는 파일에 있는 연속 회차의 최댓값이다. `first_runs` 를 주면 앞 N회만 쓴다.
     """
     source = _import_source(src, identity, fmt)
     if source is None:
         return None
     reviewer = ImportedReviewer(src, name=name, identity=source[0], kind=kind, fmt=source[1])
-    runs = max((reviewer.available_runs(s.sample_id) for s in labeled), default=0)
-    if runs == 0:
+    available = max((reviewer.available_runs(s.sample_id) for s in labeled), default=0)
+    if available == 0:
         print(f"{src} 에 <sample_id>.json 이 하나도 없다", file=sys.stderr)
         return None
+    runs = available if first_runs is None else first_runs
     measured = _measured_pairs(labeled, reviewer, runs, allow_partial=allow_partial)
     if measured is None:
         return None
@@ -976,23 +988,38 @@ def _agent_sections(root: Path, samples: list[LabeledSample]) -> list[AgentSecti
             )
             return None
         run, reviewer, graders, _ = replay
+        packed = (reviewer.run_record or {}).get("packed_runs")
         sections.append(
-            AgentSection(run=run, graders=tuple(graders), rejected=len(reviewer.rejected))
+            AgentSection(
+                run=run,
+                graders=tuple(graders),
+                rejected=len(reviewer.rejected),
+                packed_runs=int(packed) if packed else None,
+            )
         )
     return sections
 
 
-def _cmd_pack(corpus: Path, src: Path, out: Path) -> int:
+def _cmd_pack(corpus: Path, src: Path, out: Path, *, runs: int | None = None) -> int:
     """에이전트 실행을 `RUN.json` + `findings.jsonl` 로 묶는다 - 저장소에 싣는 모양.
 
     🔴 import 와 **같은 경로**로 먼저 재생해 본다 - 모자란 회차 · 모르는 모양이면 묶지 않는다.
        원본 응답(raw/)은 싣지 않는다. 로컬 `runs/` 에 둔다.
+
+    `runs` 는 앞 N회만 묶는다 - 실행 기록의 `runs` 는 세션 목표의 최댓값이라 실제로
+    묶은 회차 수와 다를 수 있다. 그래서 묶음의 기록에 `packed_runs` 를 따로 적는다.
     """
+    if runs is not None and runs < 1:
+        print(f"--runs 는 1 이상이다 (받은 값 {runs})", file=sys.stderr)
+        return 2
     labeled = load_decoy_samples(corpus)
     if not labeled:
         print(f"평가 샘플이 없다: {corpus}", file=sys.stderr)
         return 2
-    if _replay(labeled, src, name=out.name, kind=ReviewerKind.AGENT, allow_partial=False) is None:
+    replayed = _replay(
+        labeled, src, name=out.name, kind=ReviewerKind.AGENT, allow_partial=False, first_runs=runs
+    )
+    if replayed is None:
         return 2
     keep = {RUN_FILE, BUNDLE_FILE}
     extra = sorted(p.name for p in out.iterdir() if p.name not in keep) if out.is_dir() else []
@@ -1001,8 +1028,15 @@ def _cmd_pack(corpus: Path, src: Path, out: Path) -> int:
         print(f"{out} 에 다른 파일이 있다 (예: {extra[:3]}) - 비우고 다시 묶는다", file=sys.stderr)
         return 2
     out.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(src / RUN_FILE, out / RUN_FILE)
-    body = pack_runs(src)
+    if runs is None:
+        shutil.copyfile(src / RUN_FILE, out / RUN_FILE)
+    else:
+        record = json.loads((src / RUN_FILE).read_text(encoding="utf-8"))
+        record["packed_runs"] = str(runs)
+        (out / RUN_FILE).write_text(
+            json.dumps(record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
+    body = pack_runs(src, runs)
     (out / BUNDLE_FILE).write_text(body, encoding="utf-8")
     print(f"{out} 를 썼다: {RUN_FILE} + {BUNDLE_FILE} ({len(body.splitlines())}회차)")
     return 0
@@ -1125,7 +1159,7 @@ _COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
         Path(a.corpus), a.analyzer, a.ruff_select, a.out, check=a.check, agents=Path(a.agents)
     ),
     "export": lambda a: _cmd_export(Path(a.corpus), Path(a.out), a.prompt),
-    "pack": lambda a: _cmd_pack(Path(a.corpus), Path(a.src), Path(a.out)),
+    "pack": lambda a: _cmd_pack(Path(a.corpus), Path(a.src), Path(a.out), runs=a.runs),
     "doctor": lambda _a: _cmd_doctor(),
     "history": lambda a: _cmd_history(a.store, a.limit, a.repro),
     "import": lambda a: _cmd_import(

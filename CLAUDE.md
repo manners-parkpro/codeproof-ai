@@ -23,7 +23,7 @@ uv run codeproof doctor          # 자격증명·도구 준비 상태
 uv run codeproof measure         # 정적분석기로 채점 기준 편차 측정 (API 불필요)
 uv run codeproof history         # 저장된 실행 · 재현성 확인
 uv run codeproof report          # docs/MEASUREMENTS.md 생성 (--check 로 최신 확인)
-uv run codeproof pack --from <실행기 출력> --out results/agent/<이름>  # 생성물에 싣는 에이전트 묶음
+uv run codeproof pack --from <실행기 출력> --out results/agent/<이름> [--runs N]  # 에이전트 묶음 (N = 수집 전에 선언한 회차 수)
 uv run codeproof decoy validate  # decoy 규격 검사
 uv run codeproof decoy new <id>  # 템플릿에서 새 decoy
 ```
@@ -555,6 +555,12 @@ P-V 로 만든다. 다회 실행은 관점을 골라 **라벨을 붙인다** —
 [실측 · claude n=8 · 60쌍] 그렇게 60.4% 를 발표했고 참값은 62.7% 였다. 테스트가 채점자마다
 「관점 값 = 그 실행만 채점한 값」을 본다.
 
+🔴 리뷰어 비교는 같은 짝 위의 **차이**로 낸다 (`multirun.difference` — 두 리뷰어를 같은 짝으로
+함께 복원추출). 두 구간을 눈으로 겹쳐 보지 않는다. 반복 횟수 · 주 지표 · 주장 규칙은 수집 **전에**
+선언한다 (DESIGN §7.10b) — 결과를 보고 N 을 고르면 optional stopping 이다. 회차가 고르지 않은
+실행은 `pack --runs N` 으로 앞 N회만 묶는다 — [실측] 그대로 묶으면 codex 는 11/120 만 남고
+나머지가 「모자란 회차」로 거부됐다.
+
 🔴 **N회가 다 있는 샘플만 채점한다.** 모자란 회차는 「지적 0건」으로 읽혀 빈도가 거짓이 된다 —
 미측정을 미탐지로 세는 것이다 (F4). 회차는 0부터 **끊김 없이** 센다 — 파일 개수가 아니다.
 
@@ -841,6 +847,8 @@ pytest 가 `exit=4`(file not found)를 내고 그걸 「가드가 울었다」�
 | CI 겹치는데 「분류마다 다르다」 | F5a |
 | 다회 실행을 평균/합집합 | F6 |
 | 관점별 숫자를 판정 걸러내기로 | F6 — 짝의 지적을 받는 채점자는 관점마다 다시 채점한다 |
+| 두 리뷰어의 구간을 겹쳐 보고 비교 | F6 — 같은 짝 위의 차이와 그 구간으로 낸다 |
+| 결과를 보고 반복 횟수를 정하기 | F6 — 수집 전에 선언한다 (DESIGN §7.10b) |
 | 모자란 · 끊긴 회차를 「지적 0건」으로 | F6 — 미측정이 미탐지가 된다 |
 | 버린 지적을 세지 않는 파서 | I — 미측정이 미탐지가 된다 |
 | `rate` 를 판정 근거로 | F6 |

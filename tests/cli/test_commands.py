@@ -721,6 +721,32 @@ class TestReport:
         assert "run_id" not in section
         assert "created_at" not in section
 
+    def test_two_agents_get_a_paired_comparison(self, small_corpus: Path, tmp_path: Path) -> None:
+        """🔴 두 에이전트는 같은 짝 위의 차이로 비교한다 - 두 구간을 눈으로 겹쳐 보지 않는다."""
+        agents = tmp_path / "agents"
+        for name, runs in (("claude-code", 2), ("codex-cli", 1)):
+            (tmp_path / name).mkdir()
+            src = _runner_output(tmp_path / name, small_corpus, runs)
+            dest = agents / name
+            dest.mkdir(parents=True)
+            shutil.copyfile(src / RUN_FILE, dest / RUN_FILE)
+            (dest / BUNDLE_FILE).write_text(pack_runs(src), encoding="utf-8")
+        out = tmp_path / "M.md"
+        assert self._report(small_corpus, agents, out) == 0
+        section = out.read_text(encoding="utf-8").split("## 에이전트 비교", 1)[1]
+        # 🔴 표마다 머리 행을 본다 - 위 테스트와 같은 이유다.
+        assert "| 채점자 | `claude-code` | `codex-cli` | 차이 | 95% 구간 | 판정 |" in section
+        assert "| `provable_safety` (주) |" in section
+        assert "| slack | 차이 | 95% 구간 | 판정 |" in section
+        # 같은 지적을 낸 두 리뷰어다 - 실행 횟수가 달라도 차이는 0 이고 구별되지 않는다.
+        assert "| +0.0%p | [+0.0, +0.0]%p | 구별되지 않는다 |" in section
+
+    def test_one_agent_gets_no_comparison(self, small_corpus: Path, tmp_path: Path) -> None:
+        agents = self._agents(tmp_path, small_corpus, runs=2)
+        out = tmp_path / "M.md"
+        assert self._report(small_corpus, agents, out) == 0
+        assert "## 에이전트 비교" not in out.read_text(encoding="utf-8")
+
     def test_agent_runs_leave_the_static_sections_alone(
         self, small_corpus: Path, tmp_path: Path
     ) -> None:
@@ -767,8 +793,46 @@ class TestReport:
 class TestPack:
     """저장소에 싣는 묶음 - 파일 961개 대신 둘. 부분 실행은 묶지 않는다."""
 
-    def _pack(self, corpus: Path, src: Path, out: Path) -> int:
-        return main(["pack", "--from", str(src), "--out", str(out), "--corpus", str(corpus)])
+    def _pack(self, corpus: Path, src: Path, out: Path, *extra: str) -> int:
+        return main([
+            "pack", "--from", str(src), "--out", str(out), "--corpus", str(corpus), *extra,
+        ])
+
+    def test_first_runs_packs_only_the_declared_rounds(
+        self, small_corpus: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """🔴 회차가 고르지 않으면 앞 N회만 묶는다 - 묶을 N 은 결과를 보기 전에 정한다.
+
+        [실측] codex 실행은 11샘플만 8회를 가져서, 그대로 묶으면 나머지 109개가
+        「모자란 회차」로 거부됐다 (DESIGN §7.10b).
+        """
+        src = _runner_output(tmp_path, small_corpus, runs=2)
+        extra = "D002-shell-true-constant-command#twin"
+        for i in (2, 3):
+            shutil.copyfile(src / f"{extra}.0.json", src / f"{extra}.{i}.json")
+        out = tmp_path / "agents" / "codex-cli"
+        assert self._pack(small_corpus, src, out) == 2, "대조 - 그대로 묶으면 거부된다"
+        capsys.readouterr()
+        assert self._pack(small_corpus, src, out, "--runs", "2") == 0
+        bundle = (out / BUNDLE_FILE).read_text(encoding="utf-8").splitlines()
+        assert {json.loads(line)["run"] for line in bundle} == {0, 1}, "앞 2회만 묶어야 한다"
+        assert json.loads((out / RUN_FILE).read_text(encoding="utf-8"))["packed_runs"] == "2"
+        report = tmp_path / "M.md"
+        assert main([
+            "report", "--corpus", str(small_corpus), "--agents", str(out.parent),
+            "--out", str(report),
+        ]) == 0
+        assert "샘플당 **2회** 실행 (앞 2회만 묶음)" in report.read_text(encoding="utf-8")
+        capsys.readouterr()
+
+    def test_first_runs_beyond_what_exists_is_refused(
+        self, small_corpus: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        out = tmp_path / "out"
+        src = _runner_output(tmp_path, small_corpus, runs=2)
+        assert self._pack(small_corpus, src, out, "--runs", "3") == 2
+        assert "3회에 모자란 샘플" in capsys.readouterr().err
+        assert not out.exists()
 
     def test_it_writes_two_files_that_report_reads(
         self, small_corpus: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]

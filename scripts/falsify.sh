@@ -52,7 +52,7 @@ PASS=0; FAIL=0; FAILED_NAMES=()
 
 SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict convention docs-tree generated
            agent-contract span-match llm-symbol import-format import-manifest import-rejected
-           signed-runner model-pin
+           signed-runner pack-first-runs pair-difference model-pin
            model-drift multirun-views view-regrade view-copy multirun-labels run-gap short-runs
            sweep-ladder sensitivity-views report-partial report-labels pack-partial pack-leftover)
 
@@ -166,6 +166,20 @@ break_signed-runner() {
   perl -0pi -e 's/\n    "runner_version",//' src/codeproof_ai/reviewers/imported.py
 }
 guard_signed-runner() { uv run pytest tests/reviewers/test_imported.py -q -k runner_version; }
+
+claim_pack-first-runs() { echo "앞 N회만 묶으면 N회 너머는 묶음에 들어가지 않는다 — N 은 결과를 보기 전에 정한다 (DESIGN §7.10b)"; }
+break_pack-first-runs() {
+  perl -0pi -e 's/ and \(runs is None or int\(m\["run"\]\) < runs\)//' \
+    src/codeproof_ai/reviewers/imported.py
+}
+guard_pack-first-runs() { uv run pytest tests/cli/test_commands.py -q -k first_runs_packs_only; }
+
+claim_pair-difference() { echo "리뷰어 비교는 같은 짝으로 함께 복원추출한다 — 짝이 어긋나면 자기 자신과의 차이에도 폭이 생긴다"; }
+break_pair-difference() {
+  perl -0pi -e 's/diffs = \[sa\[p\] - sb\[p\] for p in sa\]/diffs = [sa[p] - sb[q] for p, q in zip(sa, reversed(list(sb)), strict=True)]/' \
+    src/codeproof_ai/eval/multirun.py
+}
+guard_pair-difference() { uv run pytest tests/eval/test_multirun.py -q -k against_itself_has_no_width; }
 
 claim_model-pin() { echo "고정한 모델이 아닌 모델의 답은 실패로 센다 — A2b"; }
 break_model-pin() {

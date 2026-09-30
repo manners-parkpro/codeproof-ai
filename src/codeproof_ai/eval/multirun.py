@@ -82,6 +82,32 @@ def total_runs(outcomes: Sequence[SampleOutcome]) -> int:
     return counts.pop()
 
 
+def _correct_by_run(
+    outcomes: Sequence[SampleOutcome], samples: Sequence[LabeledSample], grader: Grader
+) -> list[dict[str, bool]]:
+    """실행마다 **그 실행의 지적만으로 다시 채점한** 짝별 구별 성공(P-C)."""
+    return [
+        {
+            pr.pair_id: pr.verdict is PairVerdict.CORRECT
+            for pr in score_pairs(regrade_view(outcomes, samples, [grader], run=r), grader.name)
+        }
+        for r in range(total_runs(outcomes))
+    ]
+
+
+def _shares(by_run: list[dict[str, bool]]) -> dict[str, float]:
+    """짝마다 「N회 중 구별한 비율」 하나 - 부트스트랩이 복원추출하는 단위다."""
+    runs = len(by_run)
+    return {p: sum(r[p] for r in by_run) / runs for p in by_run[0]}
+
+
+def _interval(values: list[float], *, resamples: int, seed: int) -> tuple[float, float]:
+    """짝 단위 부트스트랩 95%."""
+    rng = random.Random(seed)  # noqa: S311 - 재표집용이다. 보안 난수가 아니고 재현이 목적이다
+    boots = sorted(fmean(rng.choices(values, k=len(values))) for _ in range(resamples))
+    return boots[round(0.025 * (resamples - 1))], boots[round(0.975 * (resamples - 1))]
+
+
 def expectation(
     outcomes: Sequence[SampleOutcome],
     samples: Sequence[LabeledSample],
@@ -94,30 +120,62 @@ def expectation(
 
     구간은 짝 단위 부트스트랩.
     """
-    runs = total_runs(outcomes)
-    by_run = [
-        score_pairs(regrade_view(outcomes, samples, [grader], run=r), grader.name)
-        for r in range(runs)
-    ]
-    pair_ids = [p.pair_id for p in by_run[0]]
-    if not pair_ids:
+    by_run = _correct_by_run(outcomes, samples, grader)
+    shares = list(_shares(by_run).values())
+    if not shares:
         return Expectation(per_run=(), pairs=0, point=None, interval=None)
+    per_run = tuple(sum(r.values()) for r in by_run)
+    interval = _interval(shares, resamples=resamples, seed=seed)
+    return Expectation(per_run=per_run, pairs=len(shares), point=fmean(shares), interval=interval)
 
-    hits = dict.fromkeys(pair_ids, 0)
-    for results in by_run:
-        for pr in results:
-            if pr.verdict is PairVerdict.CORRECT:
-                hits[pr.pair_id] += 1
-    shares = [hits[p] / runs for p in pair_ids]
 
-    rng = random.Random(seed)  # noqa: S311 - 재표집용이다. 보안 난수가 아니고 재현이 목적이다
-    boots = sorted(fmean(rng.choices(shares, k=len(shares))) for _ in range(resamples))
-    lo = boots[round(0.025 * (resamples - 1))]
-    hi = boots[round(0.975 * (resamples - 1))]
-    per_run = tuple(
-        sum(1 for pr in results if pr.verdict is PairVerdict.CORRECT) for results in by_run
-    )
-    return Expectation(per_run=per_run, pairs=len(pair_ids), point=fmean(shares), interval=(lo, hi))
+@dataclass(frozen=True, slots=True)
+class Difference:
+    """두 리뷰어의 단일 실행 기대값 차이 (a - b) - 같은 짝 위에서."""
+
+    pairs: int
+    point: float | None
+    interval: tuple[float, float] | None
+    """짝 단위 부트스트랩 95% - 두 리뷰어를 **같은 짝으로 함께** 복원추출한다."""
+
+    @property
+    def distinguishable(self) -> bool | None:
+        """구간이 0 을 품지 않는가.
+
+        🔴 두 리뷰어의 구간을 눈으로 겹쳐 보는 것과 다르다 - 같은 짝을 함께 뽑으면
+           짝마다의 난이도가 상쇄되어 그보다 예민하다.
+        """
+        if self.interval is None:
+            return None
+        lo, hi = self.interval
+        return lo > 0 or hi < 0
+
+
+def difference(
+    a: Sequence[SampleOutcome],
+    b: Sequence[SampleOutcome],
+    samples: Sequence[LabeledSample],
+    grader: Grader,
+    *,
+    resamples: int = RESAMPLES,
+    seed: int = SEED,
+) -> Difference:
+    """두 리뷰어의 단일 실행 기대값 차이 (a - b).
+
+    실행 횟수는 달라도 된다 - 단일 실행 기대값은 N 과 무관한 양이다.
+    🔴 짝 집합이 다르면 거부한다. 한쪽에만 있는 짝을 빼고 비교하면 비교 대상이
+       조용히 바뀐다.
+    """
+    sa = _shares(_correct_by_run(a, samples, grader))
+    sb = _shares(_correct_by_run(b, samples, grader))
+    if sa.keys() != sb.keys():
+        msg = f"두 리뷰어의 짝이 다르다 ({len(sa)} vs {len(sb)}) - 같은 짝 위에서만 비교한다"
+        raise ValueError(msg)
+    if not sa:
+        return Difference(pairs=0, point=None, interval=None)
+    diffs = [sa[p] - sb[p] for p in sa]
+    interval = _interval(diffs, resamples=resamples, seed=seed)
+    return Difference(pairs=len(diffs), point=fmean(diffs), interval=interval)
 
 
 def thresholds(runs: int) -> tuple[tuple[str, int], ...]:

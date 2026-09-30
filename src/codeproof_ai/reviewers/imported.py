@@ -62,15 +62,17 @@ _SIGNED = (
 )
 
 
-def pack_runs(root: Path) -> str:
+def pack_runs(root: Path, runs: int | None = None) -> str:
     """실행기 출력(`<sample_id>.<run>.json`)을 한 줄에 한 회차씩 묶는다.
 
     🔴 결정적이다 - (샘플, 회차) 순서로 쓴다. 같은 출력이 같은 바이트가 되어야
        커밋 diff 가 실제 변화만 보인다.
+
+    `runs` 를 주면 앞 N회만 묶는다 - 묶을 회차 수는 결과를 보기 전에 정한다.
     """
     rows = []
     for path in root.iterdir():
-        if m := _RUN_OUTPUT.fullmatch(path.name):
+        if (m := _RUN_OUTPUT.fullmatch(path.name)) and (runs is None or int(m["run"]) < runs):
             payload = json.loads(path.read_text(encoding="utf-8"))
             rows.append((m["sid"], int(m["run"]), payload))
     rows.sort(key=lambda r: (r[0], r[1]))

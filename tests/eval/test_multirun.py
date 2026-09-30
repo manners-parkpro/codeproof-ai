@@ -23,7 +23,7 @@ from codeproof_ai.eval.grading.injected import InjectedDefectGrader
 from codeproof_ai.eval.grading.paired import PairedFixGrader
 from codeproof_ai.eval.grading.safety import ProvableSafetyGrader
 from codeproof_ai.eval.loader import PRESENTED_FILENAME, load_decoy_samples
-from codeproof_ai.eval.multirun import at_least, expectation, thresholds, total_runs
+from codeproof_ai.eval.multirun import at_least, difference, expectation, thresholds, total_runs
 from codeproof_ai.eval.pairing import PairVerdict, score_pairs
 from codeproof_ai.eval.runner import ReviewerRun, regrade_view, run_reviewer
 from codeproof_ai.reviewers.imported import ImportedReviewer
@@ -35,6 +35,7 @@ if TYPE_CHECKING:
 
 DECOYS = Path(__file__).resolve().parents[2] / "corpus" / "decoys"
 D005 = "D005-half-open-contract"  # twin 결함 L9 · decoy 근거가 덮는 구간 L7-15
+D001 = "D001-upstream-validated-dict-access"
 G = "provable_safety"
 
 
@@ -146,6 +147,64 @@ class TestViewsMatchRunningAlone:
         (pair,) = score_pairs(_run(tmp_path / "both", both).outcomes, grader)
         expected = int(pair.verdict is PairVerdict.CORRECT)
         assert at_least(flaky.outcomes, _samples(), _grader(grader), 2).successes == expected
+
+
+def _pair_samples(*sids: str) -> list[LabeledSample]:
+    wanted = {x for s in sids for x in (s, f"{s}#twin")}
+    return [s for s in load_decoy_samples(DECOYS) if s.sample_id in wanted]
+
+
+class TestDifference:
+    """🔴 리뷰어 비교는 같은 짝 위의 차이로 낸다 (DESIGN §7.10b).
+
+    두 리뷰어의 구간을 눈으로 겹쳐 보지 않는다.
+    """
+
+    def test_point_is_the_difference_of_expectations(
+        self, tmp_path: Path, flaky: ReviewerRun
+    ) -> None:
+        """실행 횟수가 달라도 된다 - 단일 실행 기대값은 N 과 무관한 양이다."""
+        once = _run(tmp_path / "once", {sid: [rs[0]] for sid, rs in FLAKY.items()})
+        d = difference(flaky.outcomes, once.outcomes, _samples(), _grader(G))
+        a = expectation(flaky.outcomes, _samples(), _grader(G)).point
+        b = expectation(once.outcomes, _samples(), _grader(G)).point
+        assert a is not None and b is not None
+        assert d.point == pytest.approx(a - b)
+
+    def test_a_reviewer_against_itself_has_no_width(self, tmp_path: Path) -> None:
+        """🔴 두 리뷰어를 같은 짝으로 함께 뽑는다.
+
+        따로 뽑으면 자기 자신과의 차이에도 폭이 생긴다.
+        """
+        run = _run(tmp_path, {
+            D005: [[]], f"{D005}#twin": [[_llm(9, 9)]],  # 구별 (P-C)
+            D001: [[]], f"{D001}#twin": [[]],            # 둘 다 미지적 (P-B)
+        })
+        samples = _pair_samples(D005, D001)
+        d = difference(run.outcomes, run.outcomes, samples, _grader(G))
+        assert (d.point, d.interval, d.distinguishable) == (0.0, (0.0, 0.0), False)
+        # 대조 - 같은 데이터의 기대값 구간은 폭이 있다. 짝마다 결과가 달라서다.
+        e = expectation(run.outcomes, samples, _grader(G))
+        assert e.interval is not None
+        assert e.interval[0] < e.interval[1]
+
+    def test_a_clear_gap_is_distinguishable(self, tmp_path: Path) -> None:
+        good = _run(tmp_path / "good", {D005: [[]], f"{D005}#twin": [[_llm(9, 9)]]})
+        over = _run(tmp_path / "over", {D005: [[_llm(8, 9)]], f"{D005}#twin": [[_llm(9, 9)]]})
+        d = difference(good.outcomes, over.outcomes, _samples(), _grader(G))
+        assert d.point == pytest.approx(1.0)
+        assert d.distinguishable is True
+
+    def test_different_pairs_are_refused(self, tmp_path: Path) -> None:
+        a = _run(tmp_path / "a", {D005: [[]], f"{D005}#twin": [[_llm(9, 9)]]})
+        b = _run(tmp_path / "b", {D001: [[]], f"{D001}#twin": [[]]})
+        with pytest.raises(ValueError, match="짝이 다르다"):
+            difference(a.outcomes, b.outcomes, _pair_samples(D005, D001), _grader(G))
+
+    def test_deterministic(self, tmp_path: Path, flaky: ReviewerRun) -> None:
+        once = _run(tmp_path / "once", {sid: [rs[0]] for sid, rs in FLAKY.items()})
+        first = difference(flaky.outcomes, once.outcomes, _samples(), _grader(G))
+        assert first == difference(flaky.outcomes, once.outcomes, _samples(), _grader(G))
 
 
 class TestExpectationInterval:

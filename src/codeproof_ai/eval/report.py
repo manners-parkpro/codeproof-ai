@@ -17,16 +17,20 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from itertools import combinations
 from typing import TYPE_CHECKING
 
 from codeproof_ai.eval.grading.base import Outcome
+from codeproof_ai.eval.grading.safety import ProvableSafetyGrader
 from codeproof_ai.eval.metrics import credibility_warning
 from codeproof_ai.eval.mix import Axis, mix_sensitivity
 from codeproof_ai.eval.multirun import (
     EXPECTATION_LABEL,
     RESAMPLES,
     SEED,
+    Difference,
     at_least,
+    difference,
     expectation,
     thresholds,
 )
@@ -36,7 +40,7 @@ from codeproof_ai.eval.pairing import (
     pair_summary,
     score_pairs,
 )
-from codeproof_ai.eval.sensitivity import sweep_views
+from codeproof_ai.eval.sensitivity import DEFAULT_SWEEP, sweep_views
 from codeproof_ai.eval.spread import compute_spread
 
 if TYPE_CHECKING:
@@ -63,6 +67,8 @@ class AgentSection:
     graders: tuple[Grader, ...]
     rejected: int
     """파서가 버린 지적 수. 🔴 버린 지적은 미탐지와 구별되지 않는다 - 세어서 싣는다."""
+    packed_runs: int | None = None
+    """앞 N회만 묶었으면 N (`pack --runs`). 실행 기록의 `runs` 는 세션 목표의 최댓값이다."""
 
 
 def render_measurements(
@@ -99,6 +105,7 @@ def render_measurements(
         _pairs_section(run),
         _mix_section(run, samples),
         *(_agent_section(a, samples) for a in agents),
+        *(_comparison_section(a, b, samples) for a, b in combinations(agents, 2)),
         _caveats(negatives, agents=bool(agents)),
     ]
     return "\n".join(parts).rstrip() + "\n"
@@ -218,10 +225,11 @@ def _agent_section(agent: AgentSection, samples: Sequence[LabeledSample]) -> str
     run = agent.run
     m = run.manifest
     pairs = len(score_pairs(run.outcomes, HEADLINE_GRADER))
+    packed = f" (앞 {agent.packed_runs}회만 묶음)" if agent.packed_runs else ""
     return "\n".join([
         f"## 에이전트 층 — `{run.reviewer}`",
         "",
-        f"리뷰어 `{m.model_id}` · 샘플당 **{m.sample_n}회** 실행 · 짝 **{pairs}쌍** · "
+        f"리뷰어 `{m.model_id}` · 샘플당 **{m.sample_n}회** 실행{packed} · 짝 **{pairs}쌍** · "
         f"캐시 `{m.cache_policy}` · 파서가 버린 지적 {agent.rejected}건",
         "",
         f"설정 `{m.params_sent.get('reviewer_config', '?')}`",
@@ -233,6 +241,72 @@ def _agent_section(agent: AgentSection, samples: Sequence[LabeledSample]) -> str
         _views_table(run, agent.graders, samples),
         _sensitivity_views(run, samples),
     ])
+
+
+def _pp(d: Difference) -> tuple[str, str, str]:
+    """차이 · 구간 · 판정 - %p 로."""
+    if d.point is None or d.interval is None:
+        return "n/a", "n/a", "n/a"
+    lo, hi = d.interval
+    verdict = "구별된다" if d.distinguishable else "구별되지 않는다"
+    return f"{d.point * 100:+.1f}%p", f"[{lo * 100:+.1f}, {hi * 100:+.1f}]%p", verdict
+
+
+def _comparison_section(
+    a: AgentSection, b: AgentSection, samples: Sequence[LabeledSample]
+) -> str:
+    """🔴 두 리뷰어는 같은 짝 위의 차이로 비교한다 - 두 구간을 눈으로 겹쳐 보지 않는다.
+
+    설계(주 지표 · 주장 규칙 · 보조)는 수집 전에 선언했다 - DESIGN §7.10b.
+    """
+    ra, rb = a.run, b.run
+    lines = [
+        f"## 에이전트 비교 — `{ra.reviewer}` vs `{rb.reviewer}`",
+        "",
+        f"주 지표는 `{HEADLINE_GRADER}` · slack 0 의 **단일 실행 기대값 짝 차이**다 "
+        f"(`{ra.reviewer}` 에서 `{rb.reviewer}` 를 뺀 값). 같은 짝을 "
+        f"두 리뷰어가 **함께** 복원추출하는 부트스트랩 95% (재표집 {RESAMPLES} · 시드 {SEED}). "
+        "구간이 0 을 품으면 이 코퍼스에서 구별되지 않는다. 설계는 수집 전에 선언했다 "
+        "(DESIGN §7.10b).",
+        "",
+        f"| 채점자 | `{ra.reviewer}` | `{rb.reviewer}` | 차이 | 95% 구간 | 판정 |",
+        "|---|---:|---:|---:|---|---|",
+    ]
+    shared = {g.name for g in b.graders}
+    for g in a.graders:
+        if g.name not in shared:
+            continue
+        ea = expectation(ra.outcomes, samples, g).point
+        eb = expectation(rb.outcomes, samples, g).point
+        if ea is None or eb is None:
+            continue
+        diff, iv, verdict = _pp(difference(ra.outcomes, rb.outcomes, samples, g))
+        tag = " (주)" if g.name == HEADLINE_GRADER else ""
+        lines.append(f"| `{g.name}`{tag} | {ea:.1%} | {eb:.1%} | {diff} | {iv} | {verdict} |")
+    lines += [
+        "",
+        f"### 차이의 매칭 민감도 (`{HEADLINE_GRADER}`)",
+        "",
+        "| slack | 차이 | 95% 구간 | 판정 |",
+        "|---:|---:|---|---|",
+    ]
+    seen: set[tuple[bool, bool | None]] = set()
+    for slack in DEFAULT_SWEEP:
+        d = difference(ra.outcomes, rb.outcomes, samples, ProvableSafetyGrader(overlap_slack=slack))
+        diff, iv, verdict = _pp(d)
+        lines.append(f"| {slack} | {diff} | {iv} | {verdict} |")
+        seen.add(((d.point or 0.0) > 0, d.distinguishable))
+    lines += [
+        "",
+        "🔴 흔들린다 — slack 에 따라 차이의 방향이나 판정이 바뀐다. 단일 slack 값으로 결론을 "
+        "쓰지 않는다." if len(seen) > 1 else "o slack 사다리 전체에서 방향과 판정이 같다.",
+        "",
+        "- 도구 · 권한이 제품마다 다르다 (각 절의 설정 `permission=`) — 차이에는 모델과 "
+        "제품이 함께 들어 있다.",
+        "- k-임계는 실행 횟수에 따라 뜻이 달라 **리뷰어 안에서만** 싣는다 (위 각 절).",
+        "",
+    ]
+    return "\n".join(lines)
 
 
 def _views_table(
