@@ -475,6 +475,50 @@ class TestImport:
         assert self._import_agent(src, db) == 0
         assert "파서가 버린 지적 1건" in capsys.readouterr().out
 
+    def _write_runs(self, tmp_path: Path, runs: dict[str, int]) -> Path:
+        """샘플별 실행 횟수를 달리해 쓴다 - 다회 실행의 부분 적용을 흉내 낸다."""
+        src = self._write_agent_run(tmp_path)
+        for f in src.glob("*.0.json"):
+            f.unlink()
+        finding = {"findings": [{
+            "file": PRESENTED_FILENAME, "line_start": 1, "line_end": 1,
+            "category": "correctness", "severity": "error", "quoted_code": "x",
+            "message": "m", "failure_mode": "f",
+        }]}
+        for sid, n in runs.items():
+            for i in range(n):
+                (src / f"{sid}.{i}.json").write_text(json.dumps(finding), encoding="utf-8")
+        return src
+
+    def test_short_runs_are_refused_like_missing_ones(
+        self, tmp_path: Path, db: str, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """🔴 8회 중 일부만 있으면 모자란 회차가 「지적 0건」이 된다 - 출현 빈도가 거짓이 된다."""
+        d1, d2 = "D001-upstream-validated-dict-access", "D002-shell-true-constant-command"
+        src = self._write_runs(
+            tmp_path, {d1: 2, f"{d1}#twin": 2, d2: 2, f"{d2}#twin": 1}
+        )
+        code = main([
+            "import", "--from", str(src), "--name", "claude-code",
+            "--kind", "agent", "--store", db,
+        ])
+        assert code == 2
+        assert "2회에 모자란" in capsys.readouterr().err
+
+    def test_short_runs_drop_their_pair_under_allow_partial(
+        self, tmp_path: Path, db: str, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        d1, d2 = "D001-upstream-validated-dict-access", "D002-shell-true-constant-command"
+        src = self._write_runs(
+            tmp_path, {d1: 2, f"{d1}#twin": 2, d2: 2, f"{d2}#twin": 1}
+        )
+        assert self._import_agent(src, db) == 0
+        cap = capsys.readouterr()
+        assert "완전한 짝 1쌍만 집계한다" in cap.err
+        # 다회 실행은 합집합 한 줄이 아니라 라벨 붙은 관점으로 나온다 (F3 · F6).
+        assert "단일 실행 기대값" in cap.out
+        assert "k=2 (만장일치)" in cap.out
+
     def test_half_a_pair_is_not_scored(self, tmp_path: Path, db: str) -> None:
         """🔴 반쪽짜리 짝은 버린다 - 한쪽만으로는 P-C/P-V/P-B/P-R 을 못 가른다 (F5)."""
         src = tmp_path / "half"

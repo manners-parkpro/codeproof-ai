@@ -29,6 +29,7 @@ from codeproof_ai.eval.grading.safety import ProvableSafetyGrader
 from codeproof_ai.eval.loader import load_decoy_samples
 from codeproof_ai.eval.metrics import credibility_warning
 from codeproof_ai.eval.mix import Axis, mix_sensitivity
+from codeproof_ai.eval.multirun import at_least, expectation, thresholds
 from codeproof_ai.eval.pairing import (
     PairVerdict,
     discrimination_rate,
@@ -403,14 +404,24 @@ def _print_sensitivity(
 
 
 def _print_pairs(run: ReviewerRun, graders: Sequence[Grader]) -> None:
-    """🔴 짝 채점 - 과잉지적은 짝을 지어야만 보인다."""
+    """🔴 짝 채점 - 과잉지적은 짝을 지어야만 보인다.
+
+    🔴 다회 실행이면 합집합 한 줄로 내지 않는다 (F3 · F6). 8회 중 한 번 튄
+       지적이 짝을 P-V 로 만들기 때문이다 - 관점마다 라벨을 붙여 낸다.
+    """
+    n = run.manifest.sample_n
     for g in graders:
         pairs = score_pairs(run.outcomes, g.name)
         if not pairs:
             continue
+        print(f"\n  [짝 채점 · PrimeVul] 채점자={g.name}")
+        if n > 1:
+            print(f"    단일 실행 기대값 : {expectation(run.outcomes, g.name).render()}")
+            for label, k in thresholds(n):
+                print(f"    {label:<16} : {at_least(run.outcomes, g.name, k).render()}")
+            continue
         hit, total_pairs = discrimination_rate(pairs)
         counts = pair_summary(pairs)
-        print(f"\n  [짝 채점 · PrimeVul] 채점자={g.name}")
         print(f"    구별 성공   : {hit}/{total_pairs}  <- 유일하게 옳은 결과")
         print(f"    P-C 구별    : {counts[PairVerdict.CORRECT]}")
         print(f"    P-V 과잉지적: {counts[PairVerdict.OVER_FLAG]}  (둘 다 지적)")
@@ -594,22 +605,26 @@ def _import_source(
 
 
 def _measured_pairs(
-    labeled: list[LabeledSample], reviewer: ImportedReviewer, *, allow_partial: bool
+    labeled: list[LabeledSample], reviewer: ImportedReviewer, runs: int, *, allow_partial: bool
 ) -> list[LabeledSample] | None:
-    """결과가 있는 샘플만 남긴다. 못 하면 이유를 말하고 None.
+    """모든 실행이 있는 샘플만 남긴다. 못 하면 이유를 말하고 None.
 
     🔴 결과 파일이 없는 샘플은 「지적 0건」으로 들어온다 (ImportedReviewer.review).
        SARIF 도구라면 그게 맞다 - 돌았는데 아무것도 못 찾은 것이다. 그러나
        에이전트 실행이 중간에 끊긴 경우엔 **미측정이 미탐지로 둔갑**한다.
        그러면 P-B(둘 다 미지적)가 부풀어 리뷰어가 실제보다 나쁘게 나온다 -
        증거의 부재를 오답으로 세는 F4 와 같은 종류의 오류다.
+
+    🔴 **실행이 모자란 샘플도 같다.** 8회 중 5회만 있으면 나머지 3회가
+       「지적 0건」이 되어 출현 빈도(F6)가 거짓이 된다.
     """
-    missing = [s.sample_id for s in labeled if reviewer.available_runs(s.sample_id) == 0]
+    complete = {s.sample_id for s in labeled if reviewer.available_runs(s.sample_id) == runs}
+    missing = [s.sample_id for s in labeled if s.sample_id not in complete]
     if not missing:
         return labeled
-    covered = len(labeled) - len(missing)
+    covered = len(complete)
     print(
-        f"결과가 없는 샘플이 {len(missing)}개다 "
+        f"결과가 없거나 {runs}회에 모자란 샘플이 {len(missing)}개다 "
         f"(적용 범위 {covered}/{len(labeled)}). 예: {missing[:3]}",
         file=sys.stderr,
     )
@@ -625,8 +640,7 @@ def _measured_pairs(
     #    한 쌍만 측정했는데 60쌍을 놓친 것처럼 보인다.
     #    → 측정된 **완전한 짝**만 남긴다. 반쪽짜리 짝도 버린다 -
     #      한쪽 지적만으로는 P-C/P-V/P-B/P-R 을 가를 수 없다 (F5).
-    have = {s.sample_id for s in labeled if reviewer.available_runs(s.sample_id) > 0}
-    kept = [s for s in labeled if s.sample_id in have and s.paired_with in have]
+    kept = [s for s in labeled if s.sample_id in complete and s.paired_with in complete]
     if not kept:
         print("  완전한 짝이 하나도 없다 - 짝의 양쪽이 모두 있어야 채점된다.", file=sys.stderr)
         return None
@@ -670,7 +684,7 @@ def _cmd_import(
     if runs == 0:
         print(f"{src} 에 <sample_id>.json 이 하나도 없다", file=sys.stderr)
         return 2
-    measured = _measured_pairs(labeled, reviewer, allow_partial=allow_partial)
+    measured = _measured_pairs(labeled, reviewer, runs, allow_partial=allow_partial)
     if measured is None:
         return 2
     labeled = measured

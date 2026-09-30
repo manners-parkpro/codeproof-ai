@@ -469,6 +469,7 @@ src/codeproof_ai/
 │   ├── grading/{base,safety,injected,corroboration,paired}.py
 │   ├── spread.py            #   🔴 채점 기준 편차 = 헤드라인
 │   ├── pairing.py           #   PrimeVul P-C/P-V/P-B/P-R
+│   ├── multirun.py          #   다회 실행 — 실행별 · 단일 실행 기대값 · k-임계 (합집합으로 뭉개지 않는다)
 │   ├── sensitivity.py       #   매칭 민감도 스윕
 │   ├── mix.py               #   구성비 민감도 — 두 축 (§3.5)
 │   ├── bait.py              #   미끼 효과 측정

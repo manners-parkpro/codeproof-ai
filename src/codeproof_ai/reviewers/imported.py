@@ -130,8 +130,15 @@ class ImportedReviewer:
         return (ToolVersion(name=tool, version=str(run["cli_version"])),)
 
     def available_runs(self, sample_id: str) -> int:
-        """이 샘플에 대해 몇 회분이 저장돼 있는가."""
-        n = len(list(self.root.glob(f"{sample_id}.*.json")))
+        """이 샘플에 대해 0회차부터 **끊김 없이** 몇 회분이 저장돼 있는가.
+
+        🔴 파일 개수를 세지 않는다. 실행 하나가 실패해 3회차가 비면(0,1,2,4...)
+           개수는 7이지만 review() 는 3회차를 읽을 때 「지적 0건」을 낸다 -
+           미측정이 미탐지로 둔갑한다. 이어진 앞부분만 센다.
+        """
+        n = 0
+        while (self.root / f"{sample_id}.{n}.json").is_file():
+            n += 1
         return n if n else int((self.root / f"{sample_id}.json").is_file())
 
     def review(self, target: ReviewTarget) -> ReviewResult:
