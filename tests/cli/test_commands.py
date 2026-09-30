@@ -547,8 +547,11 @@ class TestImport:
         cap = capsys.readouterr()
         assert "완전한 짝 1쌍만 집계한다" in cap.err
         # 다회 실행은 합집합 한 줄이 아니라 라벨 붙은 관점으로 나온다 (F3 · F6).
-        assert "단일 실행 기대값" in cap.out
-        assert "k=2 (만장일치)" in cap.out
+        # 🔴 짝 채점 절 안에서 본다 - 민감도 표 머리에도 같은 라벨이 있어서, 출력 전체를 보면
+        #    짝 채점이 합집합으로 무너져도 통과한다 [실측 - falsify.sh multirun-labels 가 침묵했다].
+        pairs = cap.out.split("[짝 채점 · PrimeVul]", 1)[1].split("[매칭 민감도", 1)[0]
+        assert "단일 실행 기대값" in pairs
+        assert "k=2 (만장일치)" in pairs
 
     def test_multirun_sensitivity_is_labeled_by_view(
         self, tmp_path: Path, small_corpus: Path, db: str, capsys: pytest.CaptureFixture[str]
