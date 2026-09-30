@@ -4,7 +4,8 @@
 #
 #   ./scripts/verify.sh
 #
-# API 키가 필요 없고 30초 안에 끝난다. 전체 절차는 docs/VERIFY.md 에 있다.
+# API 키가 필요 없다. 새 클론에서 venv 생성까지 1분 남짓이다 [실측 · 69초 · 가드 28개].
+# 전체 절차는 docs/VERIFY.md 에 있다.
 #
 # 🔴 이건 시연이 아니라 검증이다. 재현되지 않으면 **크게 실패하고 exit 1** 이다.
 #    항상 초록불이 켜지는 스크립트는 아무것도 증명하지 못한다.
@@ -110,7 +111,8 @@ else
   bad "반증 실행이 실패했다 — 안전 근거가 거짓인 쌍이 있다" "라벨"
 fi
 if uv run codeproof report --check > /dev/null 2>&1; then
-  ok "docs/MEASUREMENTS.md 가 코퍼스와 일치한다 (생성물이 최신)"
+  ok "docs/MEASUREMENTS.md 가 코퍼스 · 에이전트 묶음과 일치한다 (생성물이 최신)"
+  why "에이전트 층(results/agent/)은 실린 지적을 API 없이 다시 채점해 대조한다 — 리뷰를 다시 돌리지는 않는다."
 else
   bad "생성물이 낡았다 — codeproof report 로 다시 만든다" "생성물"
 fi
@@ -123,7 +125,7 @@ if [[ ${#FAILED[@]} -eq 0 ]]; then
   cat <<NEXT
 
 ${B}다음에 볼 것${O}
-  docs/VERIFY.md   T4(라벨을 직접 공격) · ${B}면접관용 질문 7개${O} · ${B}이 도구가 확인해 주지 못하는 것 6가지${O}
+  docs/VERIFY.md   T4(라벨을 직접 공격) · T6(에이전트 층 재채점) · ${B}면접관용 질문 7개${O} · ${B}이 도구가 확인해 주지 못하는 것 6가지${O}
   ./scripts/falsify.sh --list   어떤 불변식을 검사하는지
 NEXT
   exit 0
