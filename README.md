@@ -63,9 +63,11 @@ uv run codeproof import --from out --name bandit --format bandit --identity "1.8
 
 # 에이전트 CLI - 격리·모델 고정·기록은 실행기가 한다 (DESIGN §7.10)
 uv run codeproof export --out agent-in
-./scripts/review-with-agent.sh codex agent-in codex-out --effort low   # effort 는 필수
+./scripts/review-with-agent.sh codex agent-in codex-out --effort low --runs 8   # effort 는 필수 · n≥8 (F8)
+#   벤더 최상위가 scripts/agent-models.json 의 기준과 다르면 멈춘다 - 따라갈지는 사람이 정한다
 uv run codeproof import --from codex-out --name codex-cli --kind agent
 #   포맷·identity·effort 는 실행기가 남긴 RUN.json 에서 읽는다 - 손으로 준 값이 다르면 거부
+#   다회 실행은 합집합 한 줄이 아니라 단일 실행 기대값 · k-임계로 나온다 - 회차가 모자란 샘플은 거부
 ```
 
 ⚠️ **`agent` 와 `model_api` 는 섞어서 집계하지 않는다.** 에이전트는 파일 탐색·다회 턴·

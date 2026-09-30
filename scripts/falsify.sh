@@ -52,7 +52,7 @@ PASS=0; FAIL=0; FAILED_NAMES=()
 
 SCENARIOS=(layering runner registry proof-label proof-vacuous convention docs-tree generated
            agent-contract span-match llm-symbol import-format import-manifest model-pin
-           model-drift)
+           model-drift multirun-views multirun-labels run-gap short-runs)
 
 claim_layering() { echo "런타임(analysis)은 정답 라벨(eval)을 볼 수 없다 — A1"; }
 break_layering() {
@@ -153,6 +153,35 @@ break_model-drift() {
     scripts/agent_output.py
 }
 guard_model-drift() { uv run pytest tests/scripts -q -k ModelDrift; }
+
+# ── 다회 실행 (F3 · F6) - 합집합과 미측정이 숫자를 조용히 바꾸는 자리 ──
+
+claim_multirun-views() { echo "다회 실행은 관점을 골라 센다 — 합집합으로 접지 않는다 (F6)"; }
+break_multirun-views() {
+  perl -0pi -e 's/    if run is None and at_least is None:\n        return None\n/    return None  # falsify.sh\n/' \
+    src/codeproof_ai/eval/pairing.py
+}
+guard_multirun-views() { uv run pytest tests/eval/test_multirun.py -q -k ViewsAreDifferentNumbers; }
+
+claim_multirun-labels() { echo "다회 실행의 짝 채점은 라벨 붙은 관점으로 찍는다 — F3"; }
+break_multirun-labels() {
+  perl -0pi -e 's/^        if n > 1:\n/        if False:  # falsify.sh\n/m' src/codeproof_ai/cli.py
+}
+guard_multirun-labels() { uv run pytest tests/cli/test_commands.py -q -k short_runs_drop_their_pair; }
+
+claim_run-gap() { echo "끊긴 회차를 이어진 것으로 세지 않는다 — 미측정은 미탐지가 아니다 (F4)"; }
+break_run-gap() {
+  perl -0pi -e 's|        n = 0\n        while \(self\.root / f"\{sample_id\}\.\{n\}\.json"\)\.is_file\(\):\n            n \+= 1\n|        n = len(list(self.root.glob(f"{sample_id}.*.json")))  # falsify.sh\n|' \
+    src/codeproof_ai/reviewers/imported.py
+}
+guard_run-gap() { uv run pytest tests/reviewers/test_imported.py -q -k gap; }
+
+claim_short-runs() { echo "N회에 모자란 샘플은 채점하지 않는다 — 출현 빈도가 거짓이 된다 (F6)"; }
+break_short-runs() {
+  perl -0pi -e 's/available_runs\(s\.sample_id\) == runs\}/available_runs(s.sample_id) > 0}  # falsify.sh/' \
+    src/codeproof_ai/cli.py
+}
+guard_short-runs() { uv run pytest tests/cli/test_commands.py -q -k short_runs_are_refused; }
 
 # 🔴 이건 가드 테스트가 아니라 **회귀 재현**이다. 관례 주장을 결함 주장으로
 #    세면 FP 가 폭발한다 - 발표했던 결론 두 개를 철회하게 만든 바로 그 버그다.
