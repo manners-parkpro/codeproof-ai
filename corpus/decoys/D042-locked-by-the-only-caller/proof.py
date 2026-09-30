@@ -10,7 +10,9 @@ from codeproof_ai.corpus.proof import race_window
 # 🔴 경쟁은 비결정적이다. 한 번에 재현되지 않을 수 있으므로 여러 번 시도한다.
 #    [실측] D042 가 단독 실행에서는 5/5 통과했는데 전체 테스트 부하에서
 #    twin 을 못 깨 flaky 했다. decoy 쪽도 같은 횟수로 시도하므로 완화가 아니다.
-ATTEMPTS = 5
+#    [실측 2026-09-30] 5회로도 부하 속에서 30번 중 1번 twin 을 못 깨 falsify 가
+#    깨끗한 트리에서 실패했다. 상한(MAX_ATTEMPTS)인 20회로 올리자 0/30.
+ATTEMPTS = 20
 
 _THREADS = 8
 _PER_THREAD = 40
