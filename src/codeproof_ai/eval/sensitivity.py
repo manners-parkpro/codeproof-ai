@@ -13,14 +13,38 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from codeproof_ai.eval.grading.safety import ProvableSafetyGrader
 from codeproof_ai.eval.pairing import PairVerdict, pair_summary, score_pairs
+from codeproof_ai.eval.runner import SampleOutcome
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from codeproof_ai.eval.runner import SampleOutcome
+    from codeproof_ai.eval.sample import LabeledSample
 
 DEFAULT_SWEEP: tuple[int, ...] = (0, 2, 5)
+
+
+def regrade_safety(
+    outcomes: Sequence[SampleOutcome], samples: Sequence[LabeledSample], slack: int
+) -> list[SampleOutcome]:
+    """지적은 그대로 두고 `provable_safety` 만 slack 을 바꿔 다시 채점한다.
+
+    🔴 import 출력과 생성물이 **같은 함수**로 스윕한다 - 한 곳만 다르면 같은 실행이
+       곳마다 다른 민감도를 낸다 (A2a).
+    """
+    by_id = {s.sample_id: s for s in samples}
+    g = ProvableSafetyGrader(overlap_slack=slack)
+    return [
+        SampleOutcome(
+            sample_id=o.sample_id,
+            is_proven_safe=o.is_proven_safe,
+            observations=o.observations,
+            judgments={g.name: tuple(g.judge(by_id[o.sample_id], o.observations.observed))},
+        )
+        for o in outcomes
+        if o.sample_id in by_id
+    ]
 
 
 @dataclass(frozen=True, slots=True)

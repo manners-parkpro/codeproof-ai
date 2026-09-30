@@ -39,10 +39,9 @@ from codeproof_ai.eval.pairing import (
 from codeproof_ai.eval.report import render_measurements
 from codeproof_ai.eval.runner import (
     ReviewerRun,
-    SampleOutcome,
     run_reviewer,
 )
-from codeproof_ai.eval.sensitivity import sweep
+from codeproof_ai.eval.sensitivity import regrade_safety, sweep
 from codeproof_ai.eval.spread import compute_spread
 from codeproof_ai.llm.credentials import all_statuses
 from codeproof_ai.llm.registry import (
@@ -367,22 +366,7 @@ def _print_sensitivity(
     [실측] 같은 결함을 Ruff 는 호출 시작 줄로, bandit 은 인자 줄로 보고한다.
     단일 slack 값으로 낸 숫자는 리뷰어의 성질이 아니라 매칭 정책의 산물일 수 있다.
     """
-    by_id = {s.sample_id: s for s in samples}
-
-    def regrade(slack: int) -> list[SampleOutcome]:
-        g = ProvableSafetyGrader(overlap_slack=slack)
-        return [
-            SampleOutcome(
-                sample_id=o.sample_id,
-                is_proven_safe=o.is_proven_safe,
-                observations=o.observations,
-                judgments={g.name: tuple(g.judge(by_id[o.sample_id], o.observations.observed))},
-            )
-            for o in run.outcomes
-            if o.sample_id in by_id
-        ]
-
-    sens = sweep(regrade, grader_name)
+    sens = sweep(lambda slack: regrade_safety(run.outcomes, samples, slack), grader_name)
     if not sens.points:
         return
 
@@ -652,6 +636,51 @@ def _measured_pairs(
     return kept
 
 
+def _replay(
+    labeled: list[LabeledSample],
+    src: Path,
+    *,
+    name: str,
+    kind: ReviewerKind,
+    identity: str | None = None,
+    fmt: str | None = None,
+    slack: int = 0,
+    allow_partial: bool = False,
+) -> tuple[ReviewerRun, ImportedReviewer, list[Grader], list[LabeledSample]] | None:
+    """저장된 지적을 채점까지 재생한다. 안 되면 이유를 말하고 None.
+
+    🔴 import 와 report 가 **이 경로 하나**를 탄다 - E00 과 같은 이유다. 갈리면 새 검사가
+       한쪽에서 빠지고, 같은 실행이 import 출력과 생성물에서 다른 숫자를 낸다.
+    """
+    source = _import_source(src, identity, fmt)
+    if source is None:
+        return None
+    reviewer = ImportedReviewer(src, name=name, identity=source[0], kind=kind, fmt=source[1])
+    runs = max((reviewer.available_runs(s.sample_id) for s in labeled), default=0)
+    if runs == 0:
+        print(f"{src} 에 <sample_id>.json 이 하나도 없다", file=sys.stderr)
+        return None
+    measured = _measured_pairs(labeled, reviewer, runs, allow_partial=allow_partial)
+    if measured is None:
+        return None
+
+    graders = _graders_for(name, slack, measured)
+    run = run_reviewer(
+        reviewer, measured, graders, sample_n=runs,
+        prompt_hash=reviewer.prompt_hash or "n/a",
+    )
+    if reviewer.unrecognized:
+        # 🔴 저장하지 않는다 - 모르는 모양을 「지적 0건」으로 센 숫자다.
+        print(
+            f"🔴 --format {reviewer.fmt} 의 모양이 아닌 파일이 "
+            f"{len(reviewer.unrecognized)}개다. 예: {reviewer.unrecognized[:2]}\n"
+            "   이대로면 형식 착오가 「지적 0건」(미탐지)으로 채점된다. 저장하지 않는다.",
+            file=sys.stderr,
+        )
+        return None
+    return run, reviewer, graders, measured
+
+
 def _cmd_import(
     corpus: Path,
     src: Path,
@@ -673,42 +702,19 @@ def _cmd_import(
     if not labeled:
         print(f"평가 샘플이 없다: {corpus}", file=sys.stderr)
         return 2
-    source = _import_source(src, identity, fmt)
-    if source is None:
-        return 2
-
-    reviewer = ImportedReviewer(
-        src, name=name, identity=source[0], kind=kind, fmt=source[1]
+    replay = _replay(
+        labeled, src, name=name, kind=kind, identity=identity, fmt=fmt,
+        slack=slack, allow_partial=allow_partial,
     )
-    runs = max((reviewer.available_runs(s.sample_id) for s in labeled), default=0)
-    if runs == 0:
-        print(f"{src} 에 <sample_id>.json 이 하나도 없다", file=sys.stderr)
+    if replay is None:
         return 2
-    measured = _measured_pairs(labeled, reviewer, runs, allow_partial=allow_partial)
-    if measured is None:
-        return 2
-    labeled = measured
+    run, reviewer, graders, labeled = replay
 
     if kind is ReviewerKind.AGENT:
         print(
             "⚠ agent 층이다 - 툴 접근·다회 턴이 가능해서 model_api 와 조건이 다르다.\n"
             "  같은 표에 놓되 섞어서 집계하지 않는다.\n"
         )
-
-    graders = _graders_for(name, slack, labeled)
-    run = run_reviewer(
-        reviewer, labeled, graders, sample_n=runs,
-        prompt_hash=reviewer.prompt_hash or "n/a",
-    )
-    if reviewer.unrecognized:
-        # 🔴 저장하지 않는다 - 모르는 모양을 「지적 0건」으로 센 숫자다.
-        print(
-            f"🔴 --format {reviewer.fmt} 의 모양이 아닌 파일이 "
-            f"{len(reviewer.unrecognized)}개다. 예: {reviewer.unrecognized[:2]}\n"
-            "   이대로면 형식 착오가 「지적 0건」(미탐지)으로 채점된다. 저장하지 않는다.",
-            file=sys.stderr,
-        )
-        return 2
 
     print("=" * 74)
     print(f"리뷰어: {run.reviewer}  ({reviewer.identity})  [{kind.value}]")
