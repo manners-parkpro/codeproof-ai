@@ -63,7 +63,7 @@ uv run codeproof import --from out --name bandit --format bandit --identity "1.8
 
 # 에이전트 CLI - 격리·모델 고정·기록은 실행기가 한다 (DESIGN §7.10)
 uv run codeproof export --out agent-in
-./scripts/review-with-agent.sh codex agent-in codex-out --effort low --runs 8   # effort 는 필수 · n≥8 (F8)
+./scripts/review-with-agent.sh codex agent-in codex-out --effort low --runs 8   # effort 는 필수 · 반복 횟수는 수집 전에 선언 (F8)
 #   크레딧이 한정이면 --runs 를 1 → 2 → … → 8 로 한 칸씩 올려 이어 돈다 - 샘플마다 N회를 다 돌고 넘어가서 (CLAUDE A2b)
 #   벤더 최상위가 scripts/agent-models.json 의 기준과 다르면 멈춘다 - 따라갈지는 사람이 정한다
 uv run codeproof import --from codex-out --name codex-cli --kind agent
@@ -72,6 +72,7 @@ uv run codeproof import --from codex-out --name codex-cli --kind agent
 uv run codeproof pack --from codex-out --out results/agent/codex-cli
 #   생성물(docs/MEASUREMENTS.md)에 싣는 묶음 - RUN.json + findings.jsonl 두 파일 (raw/ 는 빼고).
 #   report 가 풀어서 import 와 같은 경로로 재생한다. 회차가 모자란 실행은 묶지도 싣지도 않는다
+#   회차가 고르지 않으면 --runs N 으로 앞 N회만 묶는다 - N 은 수집 전에 선언한 값 (DESIGN §7.10b)
 ```
 
 ⚠️ **`agent` 와 `model_api` 는 섞어서 집계하지 않는다.** 에이전트는 파일 탐색·다회 턴·
@@ -273,7 +274,7 @@ Anthropic 은 Claude 4.7 이후 모델에서 이를 **제거했고 400 을 반�
 게다가 **Anthropic 에는 `seed` 파라미터가 없다.** temperature 도 seed 도 없으니
 Claude 실행은 **환원 불가능하게 확률적**이다.
 → 그래서 이 프로젝트는 **"재현 가능한 출력"이 아니라 "재현 가능한 프로토콜"** 을 주장한다.
-n≥8 반복 + 오차막대, 모든 원본 응답 아카이브, 그리고 실행마다
+횟수를 수집 전에 선언한 반복(기본 8) + 오차막대, 모든 원본 응답 아카이브, 그리고 실행마다
 `RunManifest`(모델 ID · 프롬프트 해시 · 코퍼스 해시 · 도구 버전 · 하네스 SHA).
 
 #### 그리고 공정성 함정 두 개를 정면으로 다룬다
