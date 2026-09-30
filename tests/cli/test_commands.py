@@ -491,19 +491,25 @@ class TestImport:
         return src
 
     def test_short_runs_are_refused_like_missing_ones(
-        self, tmp_path: Path, db: str, capsys: pytest.CaptureFixture[str]
+        self, tmp_path: Path, small_corpus: Path, db: str, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        """🔴 8회 중 일부만 있으면 모자란 회차가 「지적 0건」이 된다 - 출현 빈도가 거짓이 된다."""
-        d1, d2 = "D001-upstream-validated-dict-access", "D002-shell-true-constant-command"
-        src = self._write_runs(
-            tmp_path, {d1: 2, f"{d1}#twin": 2, d2: 2, f"{d2}#twin": 1}
-        )
+        """🔴 8회 중 일부만 있으면 모자란 회차가 「지적 0건」이 된다 - 출현 빈도가 거짓이 된다.
+
+        🔴 모자란 샘플 **하나만** 두고 나머지는 전부 채운다. 결과가 아예 없는 샘플이
+           섞이면 그쪽이 먼저 거부해서, 회차 검사를 지워도 이 테스트가 통과한다
+           [실측 - falsify.sh short-runs 가 침묵했다].
+        """
+        short = "D002-shell-true-constant-command#twin"
+        full = {f"{d.name}{s}": 2 for d in small_corpus.iterdir() for s in ("", "#twin")}
+        src = self._write_runs(tmp_path, full | {short: 1})
         code = main([
             "import", "--from", str(src), "--name", "claude-code",
-            "--kind", "agent", "--store", db,
+            "--kind", "agent", "--store", db, "--corpus", str(small_corpus),
         ])
         assert code == 2
-        assert "2회에 모자란" in capsys.readouterr().err
+        err = capsys.readouterr().err
+        assert "2회에 모자란 샘플이 1개다" in err
+        assert short in err
 
     def test_short_runs_drop_their_pair_under_allow_partial(
         self, tmp_path: Path, db: str, capsys: pytest.CaptureFixture[str]
