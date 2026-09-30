@@ -52,7 +52,7 @@ PASS=0; FAIL=0; FAILED_NAMES=()
 
 SCENARIOS=(layering runner registry proof-label proof-vacuous convention docs-tree generated
            agent-contract span-match llm-symbol import-format import-manifest model-pin
-           model-drift multirun-views multirun-labels run-gap short-runs
+           model-drift multirun-views view-regrade view-copy multirun-labels run-gap short-runs
            sweep-ladder sensitivity-views report-partial report-labels pack-partial pack-leftover)
 
 claim_layering() { echo "런타임(analysis)은 정답 라벨(eval)을 볼 수 없다 — A1"; }
@@ -159,10 +159,24 @@ guard_model-drift() { uv run pytest tests/scripts -q -k ModelDrift; }
 
 claim_multirun-views() { echo "다회 실행은 관점을 골라 센다 — 합집합으로 접지 않는다 (F6)"; }
 break_multirun-views() {
-  perl -0pi -e 's/    if run is None and at_least is None:\n        return None\n/    return None  # falsify.sh\n/' \
-    src/codeproof_ai/eval/pairing.py
+  perl -0pi -e 's/observed=pick\(o\.observations\)/observed=o.observations.observed/' \
+    src/codeproof_ai/eval/runner.py
 }
 guard_multirun-views() { uv run pytest tests/eval/test_multirun.py -q -k ViewsAreDifferentNumbers; }
+
+claim_view-regrade() { echo "관점별 숫자는 관점의 지적으로 다시 묶어 채점한다 — 합집합 짝의 판정을 걸러내지 않는다 (F6)"; }
+break_view-regrade() {
+  perl -0pi -e 's/\(by_id\[o\.sample_id\], obs\) for o, obs in viewed/(by_id[o.sample_id], o.observations) for o, obs in viewed/' \
+    src/codeproof_ai/eval/runner.py
+}
+guard_view-regrade() { uv run pytest tests/eval/test_multirun.py -q -k ViewsMatchRunningAlone; }
+
+claim_view-copy() { echo "관점 재채점은 채점자 복사본을 묶는다 — 넘겨받은 채점자의 바인딩을 바꾸지 않는다"; }
+break_view-copy() {
+  perl -0pi -e 's/bound = \[copy\.copy\(g\) for g in graders\]/bound = list(graders)/' \
+    src/codeproof_ai/eval/runner.py
+}
+guard_view-copy() { uv run pytest tests/eval/test_multirun.py -q -k leaves_the_given_grader_unbound; }
 
 claim_multirun-labels() { echo "다회 실행의 짝 채점은 라벨 붙은 관점으로 찍는다 — F3"; }
 break_multirun-labels() {

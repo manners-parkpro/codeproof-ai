@@ -10,6 +10,11 @@ N회 실행이면 한 짝에 대한 답이 N개다. 그걸 하나로 접는 방�
 🔴 합집합(k=1)만 내면 드물게 튀는 지적 하나가 짝을 P-V 로 만든다 - 과잉지적이
    부풀고, 그 숫자는 개발자가 한 번 돌려서는 볼 수 없는 값이다.
 
+🔴 관점별 숫자는 판정을 걸러내지 않고 **관점의 지적만으로 다시 채점**한다
+   (`runner.regrade_view`). 짝의 지적을 받는 채점자(paired_fix)는 합집합 짝으로
+   판정했으므로, 걸러내기만 하면 그 판정이 관점에 그대로 남는다
+   [실측 · claude n=8 · 60쌍: 60.4% 로 발표 · 회차별 단독 채점 62.7%].
+
 ## 신뢰구간
 
 단일 실행 기대값의 구간은 **짝 단위 부트스트랩**이다. 같은 짝을 N번 본 것이라
@@ -29,11 +34,14 @@ from typing import TYPE_CHECKING
 
 from codeproof_ai.eval.metrics import Proportion
 from codeproof_ai.eval.pairing import PairVerdict, discrimination_rate, score_pairs
+from codeproof_ai.eval.runner import regrade_view
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from codeproof_ai.eval.grading.base import Grader
     from codeproof_ai.eval.runner import SampleOutcome
+    from codeproof_ai.eval.sample import LabeledSample
 
 RESAMPLES = 2000
 SEED = 0
@@ -76,14 +84,21 @@ def total_runs(outcomes: Sequence[SampleOutcome]) -> int:
 
 def expectation(
     outcomes: Sequence[SampleOutcome],
-    grader: str,
+    samples: Sequence[LabeledSample],
+    grader: Grader,
     *,
     resamples: int = RESAMPLES,
     seed: int = SEED,
 ) -> Expectation:
-    """실행마다 짝 채점을 하고 평균한다. 구간은 짝 단위 부트스트랩."""
+    """실행마다 **그 실행의 지적만으로 다시 채점해** 짝을 매기고 평균한다.
+
+    구간은 짝 단위 부트스트랩.
+    """
     runs = total_runs(outcomes)
-    by_run = [score_pairs(outcomes, grader, run=r) for r in range(runs)]
+    by_run = [
+        score_pairs(regrade_view(outcomes, samples, [grader], run=r), grader.name)
+        for r in range(runs)
+    ]
     pair_ids = [p.pair_id for p in by_run[0]]
     if not pair_ids:
         return Expectation(per_run=(), pairs=0, point=None, interval=None)
@@ -121,7 +136,13 @@ def thresholds(runs: int) -> tuple[tuple[str, int], ...]:
     return tuple((views[k], k) for k in sorted(views))
 
 
-def at_least(outcomes: Sequence[SampleOutcome], grader: str, k: int) -> Proportion:
-    """k회 이상 나온 지적만 셌을 때의 구별 성공 - Wilson 구간."""
-    hit, total = discrimination_rate(score_pairs(outcomes, grader, at_least=k))
+def at_least(
+    outcomes: Sequence[SampleOutcome],
+    samples: Sequence[LabeledSample],
+    grader: Grader,
+    k: int,
+) -> Proportion:
+    """k회 이상 나온 지적만으로 다시 채점했을 때의 구별 성공 - Wilson 구간."""
+    view = regrade_view(outcomes, samples, [grader], at_least=k)
+    hit, total = discrimination_rate(score_pairs(view, grader.name))
     return Proportion(hit, total)

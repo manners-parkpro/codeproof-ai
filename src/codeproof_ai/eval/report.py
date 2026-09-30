@@ -230,12 +230,14 @@ def _agent_section(agent: AgentSection, samples: Sequence[LabeledSample]) -> str
         "`model_api` 와 조건이 다르다. 위 정적분석기 숫자와 같은 문서에 둘 뿐 "
         "**섞어 집계하지 않는다.**",
         "",
-        _views_table(run, agent.graders),
+        _views_table(run, agent.graders, samples),
         _sensitivity_views(run, samples),
     ])
 
 
-def _views_table(run: ReviewerRun, graders: Sequence[Grader]) -> str:
+def _views_table(
+    run: ReviewerRun, graders: Sequence[Grader], samples: Sequence[LabeledSample]
+) -> str:
     n = run.manifest.sample_n
     views = thresholds(n)
     lines = [
@@ -249,11 +251,11 @@ def _views_table(run: ReviewerRun, graders: Sequence[Grader]) -> str:
         "|---|---|---:|" + "---|" * len(views),
     ]
     for g in graders:
-        exp = expectation(run.outcomes, g.name)
+        exp = expectation(run.outcomes, samples, g)
         if exp.point is None or exp.interval is None:
             continue
         lo, hi = exp.interval
-        cells = " | ".join(_hits(at_least(run.outcomes, g.name, k)) for _, k in views)
+        cells = " | ".join(_hits(at_least(run.outcomes, samples, g, k)) for _, k in views)
         lines.append(
             f"| `{g.name}` | {exp.point:.1%} [{lo:.1%}, {hi:.1%}] "
             f"| {min(exp.per_run)}~{max(exp.per_run)}/{exp.pairs} | {cells} |"

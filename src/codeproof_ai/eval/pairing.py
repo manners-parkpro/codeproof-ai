@@ -50,61 +50,27 @@ class PairResult:
     detail: str = ""
 
 
-def _counted(
-    outcome: SampleOutcome, run: int | None, at_least: int | None
-) -> frozenset[str] | None:
-    """이 관점에서 셀 지적의 키. None 이면 관측된 지적 전부 (합집합)."""
-    if run is None and at_least is None:
-        return None
-    obs = outcome.observations
-    chosen = obs.in_run(run) if run is not None else obs.at_least(at_least or 1)
-    return frozenset(o.finding.fingerprint for o in chosen)
-
-
-def _flagged(
-    outcome: SampleOutcome,
-    grader: str,
-    *,
-    want: Outcome,
-    run: int | None = None,
-    at_least: int | None = None,
-) -> bool:
+def _flagged(outcome: SampleOutcome, grader: str, *, want: Outcome) -> bool:
     """이 샘플에서 채점자가 관련 지적을 인정했는가.
 
     음성에서는 FALSE_POSITIVE 가, 양성에서는 TRUE_POSITIVE 가
     "리뷰어가 이 자리를 지적했다" 를 뜻한다.
     UNDECIDABLE 은 **지적하지 않은 것으로 세지 않는다** - 판정 범위 밖일 뿐이다.
     """
-    keys = _counted(outcome, run, at_least)
-    return any(
-        j.outcome is want and (keys is None or j.finding_key in keys)
-        for j in outcome.judgments.get(grader, ())
-    )
+    return any(j.outcome is want for j in outcome.judgments.get(grader, ()))
 
 
-def score_pairs(
-    outcomes: Sequence[SampleOutcome],
-    grader: str,
-    *,
-    run: int | None = None,
-    at_least: int | None = None,
-) -> tuple[PairResult, ...]:
+def score_pairs(outcomes: Sequence[SampleOutcome], grader: str) -> tuple[PairResult, ...]:
     """음성/양성 짝을 찾아 PrimeVul 코드를 매긴다.
 
     짝은 `<id>` 와 `<id>#twin` 규약으로 맺는다.
 
-    🔴 다회 실행에서 기본값은 **합집합**이다 - N회 중 한 번이라도 나온 지적이
-       샘플을 「지적함」으로 만든다. 그러면 드물게 튀는 지적 하나가 P-V 를
-       만든다. 다회 실행은 관점을 골라 **라벨을 붙여** 낸다 (F3 · F6):
-
-       run=r        r 번째 실행에서 실제로 나온 지적만 - 개발자가 한 번 돌렸을 때
-       at_least=k   k회 이상 나온 지적만 - k-임계 (기법이지 기준선이 아니다)
-
-       단일 실행 기대값은 run 을 전부 돌려 평균한다 (`multirun`).
+    🔴 다회 실행이면 이건 **합집합**이다 - N회 중 한 번이라도 나온 지적이 샘플을
+       「지적함」으로 만들어, 드물게 튀는 지적 하나가 P-V 를 만든다. 관점별 숫자
+       (실행별 · k-임계)는 `multirun` 이 관점마다 **다시 채점해** 낸다 (F3 · F6).
+       여기서 판정을 걸러내면 짝의 지적을 받는 채점자가 합집합 짝으로 판정된 채
+       남는다 (`runner.regrade_view`).
     """
-    if run is not None and at_least is not None:
-        msg = "run 과 at_least 는 다른 관점이다 - 하나만 고른다"
-        raise ValueError(msg)
     by_id = {o.sample_id: o for o in outcomes}
     results: list[PairResult] = []
 
@@ -115,8 +81,8 @@ def score_pairs(
         if twin is None:
             continue
 
-        neg = _flagged(o, grader, want=Outcome.FALSE_POSITIVE, run=run, at_least=at_least)
-        pos = _flagged(twin, grader, want=Outcome.TRUE_POSITIVE, run=run, at_least=at_least)
+        neg = _flagged(o, grader, want=Outcome.FALSE_POSITIVE)
+        pos = _flagged(twin, grader, want=Outcome.TRUE_POSITIVE)
 
         if pos and not neg:
             verdict, detail = PairVerdict.CORRECT, "양성만 지적 - 구별했다"

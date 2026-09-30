@@ -103,15 +103,14 @@ def sweep_views(
     🔴 생성물과 import · eval 출력이 **이 함수 하나**로 낸다 (A2a).
     """
     views = thresholds(total_runs(outcomes))
-    name = ProvableSafetyGrader.name
     points: list[ViewPoint] = []
     for slack in slacks:
-        regraded = regrade_safety(outcomes, samples, slack)
-        point = expectation(regraded, name).point
+        g = ProvableSafetyGrader(overlap_slack=slack)
+        point = expectation(outcomes, samples, g).point
         if point is None:
             return None
         points.append(
-            ViewPoint(slack, point, tuple(at_least(regraded, name, k) for _, k in views))
+            ViewPoint(slack, point, tuple(at_least(outcomes, samples, g, k) for _, k in views))
         )
     return ViewSweep(thresholds=tuple(label for label, _ in views), points=tuple(points))
 

@@ -18,17 +18,20 @@ from typing import TYPE_CHECKING
 import pytest
 
 from codeproof_ai.domain.reviewer import ReviewerKind
+from codeproof_ai.eval.grading.base import UnboundGraderError
 from codeproof_ai.eval.grading.injected import InjectedDefectGrader
+from codeproof_ai.eval.grading.paired import PairedFixGrader
 from codeproof_ai.eval.grading.safety import ProvableSafetyGrader
 from codeproof_ai.eval.loader import PRESENTED_FILENAME, load_decoy_samples
 from codeproof_ai.eval.multirun import at_least, expectation, thresholds, total_runs
 from codeproof_ai.eval.pairing import PairVerdict, score_pairs
-from codeproof_ai.eval.runner import ReviewerRun, run_reviewer
+from codeproof_ai.eval.runner import ReviewerRun, regrade_view, run_reviewer
 from codeproof_ai.reviewers.imported import ImportedReviewer
 
 if TYPE_CHECKING:
     from codeproof_ai.eval.grading.base import Grader
     from codeproof_ai.eval.runner import SampleOutcome
+    from codeproof_ai.eval.sample import LabeledSample
 
 DECOYS = Path(__file__).resolve().parents[2] / "corpus" / "decoys"
 D005 = "D005-half-open-contract"  # twin 결함 L9 · decoy 근거가 덮는 구간 L7-15
@@ -46,7 +49,7 @@ def _llm(start: int, end: int) -> dict[str, object]:
 def _run(tmp_path: Path, runs: dict[str, list[list[dict[str, object]]]]) -> ReviewerRun:
     samples = [s for s in load_decoy_samples(DECOYS) if s.sample_id in runs]
     root = tmp_path / "out"
-    root.mkdir()
+    root.mkdir(parents=True)
     for sid, per_run in runs.items():
         for i, fs in enumerate(per_run):
             (root / f"{sid}.{i}.json").write_text(json.dumps({"findings": fs}), encoding="utf-8")
@@ -54,16 +57,33 @@ def _run(tmp_path: Path, runs: dict[str, list[list[dict[str, object]]]]) -> Revi
     reviewer = ImportedReviewer(
         root, name="agent", identity="t", kind=ReviewerKind.AGENT, fmt="native"
     )
-    graders: list[Grader] = [ProvableSafetyGrader(), InjectedDefectGrader()]
+    graders: list[Grader] = [ProvableSafetyGrader(), InjectedDefectGrader(), PairedFixGrader()]
     return run_reviewer(reviewer, samples, graders, sample_n=n, harness_sha="test")
+
+
+FLAKY: dict[str, list[list[dict[str, object]]]] = {
+    D005: [[], [_llm(8, 9)]],                 # 두 번째 실행에서만 튄다
+    f"{D005}#twin": [[_llm(9, 9)], [_llm(9, 9)]],
+}
 
 
 @pytest.fixture
 def flaky(tmp_path: Path) -> ReviewerRun:
-    return _run(tmp_path, {
-        D005: [[], [_llm(8, 9)]],                 # 두 번째 실행에서만 튄다
-        f"{D005}#twin": [[_llm(9, 9)], [_llm(9, 9)]],
-    })
+    return _run(tmp_path, FLAKY)
+
+
+def _samples() -> list[LabeledSample]:
+    return [s for s in load_decoy_samples(DECOYS) if s.sample_id in FLAKY]
+
+
+def _grader(name: str) -> Grader:
+    """새 채점자 - 관점 함수는 채점자를 복사해 다시 묶으므로 새것이어도 된다."""
+    graders: dict[str, Grader] = {
+        "provable_safety": ProvableSafetyGrader(),
+        "injected_defect": InjectedDefectGrader(),
+        "paired_fix": PairedFixGrader(),
+    }
+    return graders[name]
 
 
 class TestViewsAreDifferentNumbers:
@@ -73,31 +93,69 @@ class TestViewsAreDifferentNumbers:
 
     def test_each_run_is_what_a_developer_sees(self, flaky: ReviewerRun) -> None:
         # 계약의 두 번째 줄 - 같은 데이터가 실행 0 에서는 구별 성공이다.
-        (first,) = score_pairs(flaky.outcomes, G, run=0)
-        (second,) = score_pairs(flaky.outcomes, G, run=1)
+        g = [_grader(G)]
+        (first,) = score_pairs(regrade_view(flaky.outcomes, _samples(), g, run=0), G)
+        (second,) = score_pairs(regrade_view(flaky.outcomes, _samples(), g, run=1), G)
         assert (first.verdict, second.verdict) == (PairVerdict.CORRECT, PairVerdict.OVER_FLAG)
 
     def test_single_run_expectation_averages_the_runs(self, flaky: ReviewerRun) -> None:
-        e = expectation(flaky.outcomes, G)
+        e = expectation(flaky.outcomes, _samples(), _grader(G))
         assert e.per_run == (1, 0)
         assert e.point == pytest.approx(0.5)
 
     def test_threshold_drops_the_one_off(self, flaky: ReviewerRun) -> None:
-        assert at_least(flaky.outcomes, G, 2).successes == 1
-        assert at_least(flaky.outcomes, G, 1).successes == 0
+        assert at_least(flaky.outcomes, _samples(), _grader(G), 2).successes == 1
+        assert at_least(flaky.outcomes, _samples(), _grader(G), 1).successes == 0
 
     def test_views_are_exclusive(self, flaky: ReviewerRun) -> None:
         with pytest.raises(ValueError, match="하나만"):
-            score_pairs(flaky.outcomes, G, run=0, at_least=2)
+            regrade_view(flaky.outcomes, _samples(), [_grader(G)], run=0, at_least=2)
+
+    def test_regrading_leaves_the_given_grader_unbound(self, flaky: ReviewerRun) -> None:
+        """🔴 복사본을 묶는다 - 넘겨받은 채점자를 다시 묶으면 뒤의 채점이 관점의 짝을 본다."""
+        g = PairedFixGrader()
+        regrade_view(flaky.outcomes, _samples(), [g], run=0)
+        with pytest.raises(UnboundGraderError):
+            g.judge(_samples()[0], ())
+
+
+class TestViewsMatchRunningAlone:
+    """🔴 관점 값은 「그 실행만 돌렸다면」 나왔을 값이어야 한다 - 채점자와 무관하게.
+
+    기준값은 실행기 경로를 한 번 더 타서 만든다 (그 실행의 지적만으로 sample_n=1).
+    `paired_fix` 는 짝의 지적을 받아 판정하므로, 판정을 관점으로 **걸러내기만**
+    하면 합집합 짝으로 내린 판정이 그대로 남는다.
+    [실측 · claude n=8 · 60쌍] 그렇게 낸 단일 실행 기대값이 60.4% 로 발표됐다 -
+    회차별 단독 채점의 평균은 62.7% 였고, 다른 채점자 셋은 일치했다.
+    """
+
+    GRADERS = ("provable_safety", "injected_defect", "paired_fix")
+
+    @pytest.mark.parametrize("grader", GRADERS)
+    def test_each_run(self, tmp_path: Path, flaky: ReviewerRun, grader: str) -> None:
+        alone = []
+        for r in range(2):
+            run_r = _run(tmp_path / f"alone{r}", {sid: [rs[r]] for sid, rs in FLAKY.items()})
+            (pair,) = score_pairs(run_r.outcomes, grader)
+            alone.append(int(pair.verdict is PairVerdict.CORRECT))
+        assert expectation(flaky.outcomes, _samples(), _grader(grader)).per_run == tuple(alone)
+
+    @pytest.mark.parametrize("grader", GRADERS)
+    def test_threshold(self, tmp_path: Path, flaky: ReviewerRun, grader: str) -> None:
+        both = {sid: [[f for f in rs[0] if f in rs[1]]] for sid, rs in FLAKY.items()}
+        (pair,) = score_pairs(_run(tmp_path / "both", both).outcomes, grader)
+        expected = int(pair.verdict is PairVerdict.CORRECT)
+        assert at_least(flaky.outcomes, _samples(), _grader(grader), 2).successes == expected
 
 
 class TestExpectationInterval:
     def test_deterministic(self, flaky: ReviewerRun) -> None:
         # 🔴 생성물에 실리는 값이다 - 돌릴 때마다 달라지면 「최신인가」를 물을 수 없다.
-        assert expectation(flaky.outcomes, G) == expectation(flaky.outcomes, G)
+        e1 = expectation(flaky.outcomes, _samples(), _grader(G))
+        assert e1 == expectation(flaky.outcomes, _samples(), _grader(G))
 
     def test_interval_contains_the_point(self, flaky: ReviewerRun) -> None:
-        e = expectation(flaky.outcomes, G)
+        e = expectation(flaky.outcomes, _samples(), _grader(G))
         assert e.interval is not None
         assert e.point is not None
         assert e.interval[0] <= e.point <= e.interval[1]

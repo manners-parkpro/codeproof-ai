@@ -16,8 +16,9 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
@@ -29,10 +30,10 @@ from codeproof_ai.eval.metrics import GraderResult, summarize
 from codeproof_ai.eval.provenance import harness_sha as current_sha
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping, Sequence
+    from collections.abc import Callable, Mapping, Sequence
 
     from codeproof_ai.domain.finding import Finding
-    from codeproof_ai.domain.observation import FindingGrouper, ObservationSet
+    from codeproof_ai.domain.observation import FindingGrouper, ObservationSet, ObservedFinding
     from codeproof_ai.domain.reviewer import Reviewer, ReviewResult, ReviewTelemetry
     from codeproof_ai.domain.run import ToolVersion
     from codeproof_ai.domain.target import ReviewTarget
@@ -208,6 +209,59 @@ def _grade(
     graders: Sequence[Grader],
 ) -> dict[str, tuple[Judgment, ...]]:
     return {g.name: tuple(g.judge(sample, obs.observed)) for g in graders}
+
+
+def _pick(
+    run: int | None, at_least: int | None
+) -> Callable[[ObservationSet], tuple[ObservedFinding, ...]]:
+    if run is not None and at_least is None:
+        r = run
+        return lambda obs: obs.in_run(r)
+    if at_least is not None and run is None:
+        k = at_least
+        return lambda obs: obs.at_least(k)
+    msg = "관점은 run 과 at_least 중 하나만 고른다"
+    raise ValueError(msg)
+
+
+def regrade_view(
+    outcomes: Sequence[SampleOutcome],
+    samples: Sequence[LabeledSample],
+    graders: Sequence[Grader],
+    *,
+    run: int | None = None,
+    at_least: int | None = None,
+) -> list[SampleOutcome]:
+    """한 관점에 든 지적만 남기고 **다시 묶어 다시 채점한다** - 다회 실행의 관점별 숫자.
+
+    run=r        r 번째 실행에서 실제로 나온 지적 - 개발자가 한 번 돌렸을 때
+    at_least=k   k회 이상 나온 지적 - k-임계 (기법이지 기준선이 아니다)
+
+    🔴 판정을 관점으로 **걸러내기만** 하면 틀린다. `bind_run` 으로 짝의 지적을 받는
+       채점자(paired_fix)는 합집합 짝으로 이미 판정했으므로 걸러도 그 판정이 남는다.
+       [실측 · claude n=8 · 60쌍] 그렇게 낸 단일 실행 기대값이 60.4% 로 발표됐다 -
+       회차별 단독 채점의 평균은 62.7% 였고, 다른 채점자 셋은 일치했다.
+    🔴 채점자를 **복사해서** 묶는다. 넘겨받은 채점자를 다시 묶으면 그 뒤의 채점이
+       마지막 관점의 짝을 본다.
+    """
+    pick = _pick(run, at_least)
+    by_id = {s.sample_id: s for s in samples}
+    viewed = [
+        (o, replace(o.observations, observed=pick(o.observations)))
+        for o in outcomes
+        if o.sample_id in by_id
+    ]
+    bound = [copy.copy(g) for g in graders]
+    _bind_run_context(bound, [(by_id[o.sample_id], obs) for o, obs in viewed])
+    return [
+        SampleOutcome(
+            sample_id=o.sample_id,
+            is_proven_safe=o.is_proven_safe,
+            observations=obs,
+            judgments=_grade(by_id[o.sample_id], obs, bound),
+        )
+        for o, obs in viewed
+    ]
 
 
 def _summarize_strata(

@@ -438,7 +438,9 @@ def _print_sensitivity_views(run: ReviewerRun, samples: Sequence[LabeledSample])
         print("    o 모든 관점에서 안정 - 이 결론은 매칭 정책의 산물이 아니다")
 
 
-def _print_pairs(run: ReviewerRun, graders: Sequence[Grader]) -> None:
+def _print_pairs(
+    run: ReviewerRun, graders: Sequence[Grader], samples: Sequence[LabeledSample]
+) -> None:
     """🔴 짝 채점 - 과잉지적은 짝을 지어야만 보인다.
 
     🔴 다회 실행이면 합집합 한 줄로 내지 않는다 (F3 · F6). 8회 중 한 번 튄
@@ -451,9 +453,9 @@ def _print_pairs(run: ReviewerRun, graders: Sequence[Grader]) -> None:
             continue
         print(f"\n  [짝 채점 · PrimeVul] 채점자={g.name}")
         if n > 1:
-            print(f"    단일 실행 기대값 : {expectation(run.outcomes, g.name).render()}")
+            print(f"    단일 실행 기대값 : {expectation(run.outcomes, samples, g).render()}")
             for label, k in thresholds(n):
-                print(f"    {label:<16} : {at_least(run.outcomes, g.name, k).render()}")
+                print(f"    {label:<16} : {at_least(run.outcomes, samples, g, k).render()}")
             continue
         hit, total_pairs = discrimination_rate(pairs)
         counts = pair_summary(pairs)
@@ -597,7 +599,7 @@ def _cmd_eval(
         print(f"  텔레메트리: {run.telemetry.render()}")
         _print_observations(run)
         _print_spread(run, graders)
-        _print_pairs(run, graders)
+        _print_pairs(run, graders, labeled)
         _print_sensitivity(run, labeled, "provable_safety")
         _print_mix(run, labeled, "provable_safety")
         _print_strata(run)
@@ -782,7 +784,7 @@ def _cmd_import(
             print(f"      {r}")
     _print_observations(run)
     _print_spread(run, graders)
-    _print_pairs(run, graders)
+    _print_pairs(run, graders, labeled)
     _print_sensitivity(run, labeled, "provable_safety")
     _print_mix(run, labeled, "provable_safety")
     _print_strata(run)
@@ -920,7 +922,7 @@ def _cmd_measure(
                     )
 
         _print_spread(run, graders)
-        _print_pairs(run, graders)
+        _print_pairs(run, graders, samples)
         _print_sensitivity(run, samples, "provable_safety")
         _print_mix(run, samples, "provable_safety")
         _print_strata(run)
