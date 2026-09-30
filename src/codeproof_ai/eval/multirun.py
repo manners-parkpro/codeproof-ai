@@ -38,6 +38,9 @@ if TYPE_CHECKING:
 RESAMPLES = 2000
 SEED = 0
 
+# 단일 실행 기대값 관점의 이름 - k-임계 관점의 이름은 `thresholds()` 가 낸다.
+EXPECTATION_LABEL = "단일 실행 기대값"
+
 
 @dataclass(frozen=True, slots=True)
 class Expectation:

@@ -18,6 +18,7 @@ import pytest
 
 from codeproof_ai.cli import main
 from codeproof_ai.eval.loader import PRESENTED_FILENAME
+from codeproof_ai.reviewers.imported import BUNDLE_FILE, RUN_FILE, pack_runs
 from codeproof_ai.store.sqlite import Store
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -27,6 +28,30 @@ DECOYS = ROOT / "corpus" / "decoys"
 @pytest.fixture
 def db(tmp_path: Path) -> str:
     return str(tmp_path / "t.db")
+
+
+def _runner_output(root: Path, corpus: Path, runs: int, short: str | None = None) -> Path:
+    """실행기(review-with-agent.sh) 출력의 모양 - `<샘플>.<회차>.json` + RUN.json.
+
+    `short` 샘플만 한 회차 모자라게 쓴다.
+    """
+    src = root / "runner"
+    src.mkdir()
+    finding = {"findings": [{
+        "file": PRESENTED_FILENAME, "line_start": 1, "line_end": 1,
+        "category": "correctness", "severity": "error", "quoted_code": "x",
+        "message": "m", "failure_mode": "f",
+    }]}
+    for d in corpus.iterdir():
+        for sid in (d.name, f"{d.name}#twin"):
+            for i in range(runs - 1 if sid == short else runs):
+                (src / f"{sid}.{i}.json").write_text(json.dumps(finding), encoding="utf-8")
+    run = {
+        "agent": "claude", "cli_version": "9.9.9", "model": "m-1", "effort": "low",
+        "identity": "claude-code 9.9.9 · m-1 · effort=low", "prompt_hash": "p" * 24,
+    }
+    (src / RUN_FILE).write_text(json.dumps(run), encoding="utf-8")
+    return src
 
 
 class TestExitCodes:
@@ -525,6 +550,26 @@ class TestImport:
         assert "단일 실행 기대값" in cap.out
         assert "k=2 (만장일치)" in cap.out
 
+    def test_multirun_sensitivity_is_labeled_by_view(
+        self, tmp_path: Path, small_corpus: Path, db: str, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """🔴 다회 실행의 매칭 민감도는 관점마다 낸다 - 라벨 없는 합집합 표가 아니다 (F6).
+
+        [실측] 전에는 `sweep()` 이 관점을 모르고 합집합으로 센 표를 라벨 없이 찍었다 -
+        생성물의 k≥1 열과 같은 숫자였다.
+        """
+        full = {f"{d.name}{s}": 2 for d in small_corpus.iterdir() for s in ("", "#twin")}
+        code = main([
+            "import", "--from", str(self._write_runs(tmp_path, full)), "--name", "claude-code",
+            "--kind", "agent", "--store", db, "--corpus", str(small_corpus),
+        ])
+        assert code == 0
+        section = capsys.readouterr().out.split("[매칭 민감도", 1)[1].split("\n\n", 1)[0]
+        assert section.startswith(" · 관점별]"), section
+        assert "k≥1 (합집합)" in section
+        assert "k=2 (만장일치)" in section
+        assert "P-V" not in section, "합집합 분포(P-C/P-V/P-B/P-R)는 1회 실행에서만 낸다"
+
     def test_half_a_pair_is_not_scored(self, tmp_path: Path, db: str) -> None:
         """🔴 반쪽짜리 짝은 버린다 - 한쪽만으로는 P-C/P-V/P-B/P-R 을 못 가른다 (F5)."""
         src = tmp_path / "half"
@@ -614,3 +659,126 @@ class TestReport:
         ])
         assert code == 2
         capsys.readouterr()
+
+    def _agents(self, root: Path, corpus: Path, runs: int, short: str | None = None) -> Path:
+        """`results/agent/<이름>/` 의 모양 - 묶음.
+
+        `pack` 을 거치지 않고 묶는다 - 모자란 묶음도 만들어야 report 가 거부하는지 본다.
+        """
+        src = _runner_output(root, corpus, runs, short)
+        dest = root / "agents" / "claude-code"
+        dest.mkdir(parents=True)
+        shutil.copyfile(src / RUN_FILE, dest / RUN_FILE)
+        (dest / BUNDLE_FILE).write_text(pack_runs(src), encoding="utf-8")
+        return dest.parent
+
+    def _report(self, corpus: Path, agents: Path, out: Path) -> int:
+        return main([
+            "report", "--corpus", str(corpus), "--agents", str(agents), "--out", str(out),
+        ])
+
+    def test_agent_runs_get_a_labeled_section(self, small_corpus: Path, tmp_path: Path) -> None:
+        """🔴 다회 실행의 모델 숫자는 관점마다 라벨을 붙여 싣는다 - 합집합 한 줄이 아니다 (F6)."""
+        agents = self._agents(tmp_path, small_corpus, runs=2)
+        a, b = tmp_path / "a.md", tmp_path / "b.md"
+        assert self._report(small_corpus, agents, a) == 0
+        assert self._report(small_corpus, agents, b) == 0
+        body = a.read_text(encoding="utf-8")
+        assert body == b.read_text(encoding="utf-8"), "재표집 시드가 고정돼야 최신인지 묻는다"
+
+        section = body.split("## 에이전트 층", 1)[1]
+        assert "claude-code 9.9.9 · m-1 · effort=low" in section
+        # 🔴 표마다 머리 행을 본다 - 라벨이 절 어딘가에만 있으면 한 표가 합집합 하나로
+        #    무너져도 다른 표의 같은 라벨 덕에 통과한다.
+        views = "k≥1 (합집합) | k=2 (만장일치)"
+        assert f"| 채점자 | 단일 실행 기대값 | 실행별 P-C | {views} |" in section
+        assert f"| slack | 단일 실행 기대값 | {views} |" in section
+        for g in ("provable_safety", "injected_defect", "paired_fix", "static_corroboration"):
+            assert f"| `{g}` |" in section, "구별 성공률은 (리뷰어 x 채점자)의 성질이다"
+        assert "run_id" not in section
+        assert "created_at" not in section
+
+    def test_agent_runs_leave_the_static_sections_alone(
+        self, small_corpus: Path, tmp_path: Path
+    ) -> None:
+        """에이전트 절은 덧붙을 뿐이다 - 정적분석기 숫자를 바꾸지 않는다."""
+        with_agents, without = tmp_path / "w.md", tmp_path / "wo.md"
+        self._report(small_corpus, self._agents(tmp_path, small_corpus, runs=2), with_agents)
+        self._report(small_corpus, tmp_path / "none", without)
+        plain = without.read_text(encoding="utf-8")
+        assert "## 에이전트 층" not in plain
+        assert "**정적분석기**의 것이다" in plain
+        static = plain.split("## 이 숫자를 읽는 법")[0]
+        assert with_agents.read_text(encoding="utf-8").split("## 에이전트 층")[0] == static
+
+    def test_short_agent_runs_are_refused(
+        self, small_corpus: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """🔴 생성물에 부분 실행을 싣지 않는다 - 모자란 회차가 「지적 0건」으로 실린다 (F6).
+
+        🔴 모자란 샘플 **하나만** 둔다. 결과가 아예 없는 샘플이 섞이면 그쪽이 먼저 거부해서
+           회차 검사를 지워도 통과한다 [실측 - falsify.sh short-runs 가 침묵했다].
+        """
+        short = "D002-shell-true-constant-command#twin"
+        out = tmp_path / "M.md"
+        code = self._report(
+            small_corpus, self._agents(tmp_path, small_corpus, runs=2, short=short), out
+        )
+        assert code == 2
+        err = capsys.readouterr().err
+        assert "2회에 모자란 샘플이 1개다" in err
+        assert short in err
+        assert not out.exists(), "부분 실행으로 쓰면 미측정이 미탐지로 실린다"
+
+    def test_an_unpacked_directory_is_refused(
+        self, small_corpus: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """실행기 출력을 그대로 두면 묶음이 아니다 - 파일 961개가 다시 커밋되는 길이다."""
+        agents = tmp_path / "agents"
+        agents.mkdir()
+        shutil.copytree(_runner_output(tmp_path, small_corpus, runs=2), agents / "claude-code")
+        assert self._report(small_corpus, agents, tmp_path / "M.md") == 2
+        assert "codeproof pack" in capsys.readouterr().err
+
+
+class TestPack:
+    """저장소에 싣는 묶음 - 파일 961개 대신 둘. 부분 실행은 묶지 않는다."""
+
+    def _pack(self, corpus: Path, src: Path, out: Path) -> int:
+        return main(["pack", "--from", str(src), "--out", str(out), "--corpus", str(corpus)])
+
+    def test_it_writes_two_files_that_report_reads(
+        self, small_corpus: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        out = tmp_path / "agents" / "claude-code"
+        assert self._pack(small_corpus, _runner_output(tmp_path, small_corpus, runs=2), out) == 0
+        assert sorted(p.name for p in out.iterdir()) == sorted([RUN_FILE, BUNDLE_FILE])
+        report = tmp_path / "M.md"
+        assert main([
+            "report", "--corpus", str(small_corpus), "--agents", str(out.parent),
+            "--out", str(report),
+        ]) == 0
+        assert "## 에이전트 층 — `claude-code`" in report.read_text(encoding="utf-8")
+        capsys.readouterr()
+
+    def test_pack_refuses_short_runs(
+        self, small_corpus: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """🔴 모자란 회차는 묶지 않는다 - 묶고 나면 report 에 가서야 걸린다 (F6)."""
+        short = "D002-shell-true-constant-command#twin"
+        out = tmp_path / "out"
+        src = _runner_output(tmp_path, small_corpus, runs=2, short=short)
+        assert self._pack(small_corpus, src, out) == 2
+        assert "2회에 모자란 샘플이 1개다" in capsys.readouterr().err
+        assert not out.exists()
+
+    def test_pack_does_not_mix_with_leftover_files(
+        self, small_corpus: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """[실측] 묶기 전 이 자리에 실행기 출력 960개가 복사돼 있었다 - 섞이면 그대로 커밋된다."""
+        out = tmp_path / "out"
+        out.mkdir()
+        (out / "D001-upstream-validated-dict-access.0.json").write_text("{}", encoding="utf-8")
+        assert self._pack(small_corpus, _runner_output(tmp_path, small_corpus, runs=2), out) == 2
+        assert "다른 파일이 있다" in capsys.readouterr().err
+        assert not (out / BUNDLE_FILE).exists()

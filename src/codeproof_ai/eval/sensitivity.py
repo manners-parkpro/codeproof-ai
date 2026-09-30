@@ -14,15 +14,25 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from codeproof_ai.eval.grading.safety import ProvableSafetyGrader
+from codeproof_ai.eval.multirun import (
+    EXPECTATION_LABEL,
+    at_least,
+    expectation,
+    thresholds,
+    total_runs,
+)
 from codeproof_ai.eval.pairing import PairVerdict, pair_summary, score_pairs
 from codeproof_ai.eval.runner import SampleOutcome
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from codeproof_ai.eval.metrics import Proportion
     from codeproof_ai.eval.sample import LabeledSample
 
-DEFAULT_SWEEP: tuple[int, ...] = (0, 2, 5)
+# 🔴 (0,2,5) 는 좁다 - 전이점이 slack 6 으로 옮겨가자 안정으로 보였다 (DESIGN #31).
+#    [실측 · 60쌍] ruff S,B,F,SIM 은 (0,2,5) 에서 stable, 10 을 넣으면 5→10 에서 바뀐다.
+DEFAULT_SWEEP: tuple[int, ...] = (0, 2, 5, 10)
 
 
 def regrade_safety(
@@ -45,6 +55,65 @@ def regrade_safety(
         for o in outcomes
         if o.sample_id in by_id
     ]
+
+
+@dataclass(frozen=True, slots=True)
+class ViewPoint:
+    slack: int
+    expectation: float
+    """단일 실행 기대값 (점추정)."""
+    thresholds: tuple[Proportion, ...]
+    """k-임계마다 - `ViewSweep.thresholds` 와 같은 순서."""
+
+
+@dataclass(frozen=True, slots=True)
+class ViewSweep:
+    """관점마다 slack 을 바꿔 다시 채점한 구별 성공(P-C) - 다회 실행용.
+
+    🔴 `sweep()` 은 관점을 모르고 합집합으로 센다. 다회 실행이면 이것을 쓴다 (F6).
+    """
+
+    thresholds: tuple[str, ...]
+    """k-임계 관점의 이름 - `multirun.thresholds()` 의 순서."""
+    points: tuple[ViewPoint, ...]
+
+    @property
+    def moved(self) -> tuple[str, ...]:
+        """구별 성공이 slack 에 따라 바뀐 관점.
+
+        🔴 반올림 전 값으로 판정한다 - 표의 63.5% 둘이 실제로는 다를 수 있다.
+        """
+        columns = [
+            (EXPECTATION_LABEL, [p.expectation for p in self.points]),
+            *(
+                (label, [float(p.thresholds[i].successes) for p in self.points])
+                for i, label in enumerate(self.thresholds)
+            ),
+        ]
+        return tuple(label for label, values in columns if len(set(values)) > 1)
+
+
+def sweep_views(
+    outcomes: Sequence[SampleOutcome],
+    samples: Sequence[LabeledSample],
+    slacks: Sequence[int] = DEFAULT_SWEEP,
+) -> ViewSweep | None:
+    """다회 실행의 slack 스윕 - `provable_safety` 의 구별 성공을 관점마다 낸다. 짝이 없으면 None.
+
+    🔴 생성물과 import · eval 출력이 **이 함수 하나**로 낸다 (A2a).
+    """
+    views = thresholds(total_runs(outcomes))
+    name = ProvableSafetyGrader.name
+    points: list[ViewPoint] = []
+    for slack in slacks:
+        regraded = regrade_safety(outcomes, samples, slack)
+        point = expectation(regraded, name).point
+        if point is None:
+            return None
+        points.append(
+            ViewPoint(slack, point, tuple(at_least(regraded, name, k) for _, k in views))
+        )
+    return ViewSweep(thresholds=tuple(label for label, _ in views), points=tuple(points))
 
 
 @dataclass(frozen=True, slots=True)

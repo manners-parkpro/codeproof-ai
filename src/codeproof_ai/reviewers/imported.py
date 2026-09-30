@@ -16,6 +16,10 @@ SARIF 계열(CodeQL · semgrep · Snyk · Trivy) 과 자기 JSON 을 내는 것(
     <root>/<sample_id>.<run>.json  다회 실행이면 실행별로
     <root>/RUN.json              (선택) 실행기가 남긴 실행 기록
 
+저장소에 싣는 모양은 **묶음**이다 - `RUN.json` + `findings.jsonl` (한 줄에 한 회차).
+[실측] 60쌍 x 8회를 파일로 올리면 961개 - 당시 추적 파일 376개의 2.5배였다.
+`unpack_runs()` 가 위 규약으로 되돌리므로 읽는 경로는 하나다.
+
 ## 🔴 매니페스트는 리뷰어가 신고한다 (E01)
 
 [실측] 이 클래스에 `manifest_fields()` 가 없어서 에이전트 실행이
@@ -28,6 +32,7 @@ SARIF 계열(CodeQL · semgrep · Snyk · Trivy) 과 자기 JSON 을 내는 것(
 from __future__ import annotations
 
 import json
+import re
 from typing import TYPE_CHECKING, Any
 
 from codeproof_ai.domain.reviewer import ReviewerKind, ReviewResult
@@ -41,6 +46,8 @@ if TYPE_CHECKING:
     from codeproof_ai.domain.target import ReviewTarget
 
 RUN_FILE = "RUN.json"
+BUNDLE_FILE = "findings.jsonl"
+_RUN_OUTPUT = re.compile(r"(?P<sid>.+)\.(?P<run>\d+)\.json")
 
 # RUN.json 에서 설정 지문에 싣는 항목. 하나라도 다르면 다른 실행이다.
 _SIGNED = (
@@ -52,6 +59,33 @@ _SIGNED = (
     "prompt_hash",
     "schema_hash",
 )
+
+
+def pack_runs(root: Path) -> str:
+    """실행기 출력(`<sample_id>.<run>.json`)을 한 줄에 한 회차씩 묶는다.
+
+    🔴 결정적이다 - (샘플, 회차) 순서로 쓴다. 같은 출력이 같은 바이트가 되어야
+       커밋 diff 가 실제 변화만 보인다.
+    """
+    rows = []
+    for path in root.iterdir():
+        if m := _RUN_OUTPUT.fullmatch(path.name):
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            rows.append((m["sid"], int(m["run"]), payload))
+    rows.sort(key=lambda r: (r[0], r[1]))
+    return "".join(
+        json.dumps({"sample_id": sid, "run": run, "payload": payload}, ensure_ascii=False) + "\n"
+        for sid, run, payload in rows
+    )
+
+
+def unpack_runs(bundle: Path, dest: Path) -> None:
+    """묶음을 실행기 출력 모양으로 푼다 - import 와 **같은 경로**로 재생하려고."""
+    for line in bundle.read_text(encoding="utf-8").splitlines():
+        row = json.loads(line)
+        (dest / f"{row['sample_id']}.{row['run']}.json").write_text(
+            json.dumps(row["payload"], ensure_ascii=False), encoding="utf-8"
+        )
 
 
 def read_run_record(root: Path) -> dict[str, Any] | None:

@@ -23,6 +23,7 @@ uv run codeproof doctor          # 자격증명·도구 준비 상태
 uv run codeproof measure         # 정적분석기로 채점 기준 편차 측정 (API 불필요)
 uv run codeproof history         # 저장된 실행 · 재현성 확인
 uv run codeproof report          # docs/MEASUREMENTS.md 생성 (--check 로 최신 확인)
+uv run codeproof pack --from <실행기 출력> --out results/agent/<이름>  # 생성물에 싣는 에이전트 묶음
 uv run codeproof decoy validate  # decoy 규격 검사
 uv run codeproof decoy new <id>  # 템플릿에서 새 decoy
 ```
@@ -78,6 +79,10 @@ store    → domain·eval         cli      → 전부
   스윕해 **흔들리는지**를 같이 낸다. 흔들리면 그 결론은 매칭 정책의 산물이다.
 
 → 스윕은 **채점만 다시 한다.** 리뷰어를 다시 돌리면 slack 효과와 실행 변동이 섞인다.
+
+→ 사다리는 `(0,2,5,10)` 이다 — 좁으면 전이점을 놓쳐 거짓 「안정」이 나온다
+  [실측 · 60쌍 · ruff S,B,F,SIM]. 다회 실행이면 관점마다 낸다(`sweep_views()`) —
+  `sweep()` 은 합집합으로 센다 (F6).
 
 → 위치는 지적의 **보고 범위**로 맞춘다 (`Span.overlaps`) — 시작 줄만 보지 않는다.
   claude 는 `def` 줄부터 범위를 잡는다. 시작 줄 기준이면 slack=0 에서

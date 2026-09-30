@@ -68,6 +68,9 @@ uv run codeproof export --out agent-in
 uv run codeproof import --from codex-out --name codex-cli --kind agent
 #   포맷·identity·effort 는 실행기가 남긴 RUN.json 에서 읽는다 - 손으로 준 값이 다르면 거부
 #   다회 실행은 합집합 한 줄이 아니라 단일 실행 기대값 · k-임계로 나온다 - 회차가 모자란 샘플은 거부
+uv run codeproof pack --from codex-out --out results/agent/codex-cli
+#   생성물(docs/MEASUREMENTS.md)에 싣는 묶음 - RUN.json + findings.jsonl 두 파일 (raw/ 는 빼고).
+#   report 가 풀어서 import 와 같은 경로로 재생한다. 회차가 모자란 실행은 묶지도 싣지도 않는다
 ```
 
 ⚠️ **`agent` 와 `model_api` 는 섞어서 집계하지 않는다.** 에이전트는 파일 탐색·다회 턴·
@@ -902,6 +905,7 @@ codeproof import --from out --name semgrep --identity "1.2.3"
 codeproof export --out agent-in                      # 에이전트 입력 (프롬프트 + 스키마)
 scripts/review-with-agent.sh claude agent-in claude-out --effort low
 codeproof import --from claude-out --name claude-code --kind agent   # RUN.json 이 정본
+codeproof pack --from claude-out --out results/agent/claude-code     # 생성물에 싣는 묶음 (두 파일)
 
 # ── 모델 (자격증명 필요) ────────────────────────────────
 codeproof eval --providers claude,codex --effort high --samples 8

@@ -13,38 +13,24 @@ from typing import TYPE_CHECKING
 import pytest
 
 from codeproof_ai.eval.grading.safety import ProvableSafetyGrader
-from codeproof_ai.eval.runner import ReviewerRun, SampleOutcome, run_reviewer
-from codeproof_ai.eval.sensitivity import Sensitivity, SlackPoint, sweep
+from codeproof_ai.eval.metrics import Proportion
+from codeproof_ai.eval.multirun import EXPECTATION_LABEL
+from codeproof_ai.eval.runner import run_reviewer
+from codeproof_ai.eval.sensitivity import (
+    Sensitivity,
+    SlackPoint,
+    ViewPoint,
+    ViewSweep,
+    regrade_safety,
+    sweep,
+)
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Sequence
-
+    from codeproof_ai.eval.runner import SampleOutcome
     from codeproof_ai.eval.sample import LabeledSample
     from tests.conftest import AnalyzedCorpus
 
 DECOYS = Path(__file__).resolve().parents[2] / "corpus" / "decoys"
-
-
-def _regrader(
-    run: ReviewerRun, samples: Sequence[LabeledSample]
-) -> Callable[[int], list[SampleOutcome]]:
-    by_id = {s.sample_id: s for s in samples}
-
-    def regrade(slack: int) -> list[SampleOutcome]:
-        g = ProvableSafetyGrader(overlap_slack=slack)
-        return [
-            SampleOutcome(
-                sample_id=o.sample_id,
-                is_proven_safe=o.is_proven_safe,
-                observations=o.observations,
-                judgments={
-                    g.name: tuple(g.judge(by_id[o.sample_id], o.observations.observed))
-                },
-            )
-            for o in run.outcomes
-        ]
-
-    return regrade
 
 
 class TestStability:
@@ -63,6 +49,26 @@ class TestStability:
         assert Sensitivity("g", ()).stable
 
 
+class TestViewSweep:
+    """🔴 다회 실행의 민감도는 관점마다 판정한다 - 합집합 하나로 접지 않는다 (F6)."""
+
+    VIEWS = ("k≥1 (합집합)", "k=2 (만장일치)")
+
+    def test_it_names_only_the_views_that_moved(self) -> None:
+        vs = ViewSweep(self.VIEWS, (
+            ViewPoint(0, 0.5, (Proportion(3, 4), Proportion(1, 4))),
+            ViewPoint(2, 0.5, (Proportion(4, 4), Proportion(1, 4))),
+        ))
+        assert vs.moved == ("k≥1 (합집합)",)
+
+    def test_it_judges_before_rounding(self) -> None:
+        """표에는 둘 다 63.5% 로 찍히지만 값은 다르다 - 흔들림을 반올림으로 지우지 않는다."""
+        same = (Proportion(3, 4), Proportion(1, 4))
+        vs = ViewSweep(self.VIEWS, (ViewPoint(0, 0.6351, same), ViewPoint(2, 0.6349, same)))
+        assert f"{0.6351:.1%}" == f"{0.6349:.1%}"
+        assert vs.moved == (EXPECTATION_LABEL,)
+
+
 class TestSweepRegradesWithoutRerunning:
     """🔴 리뷰어를 다시 돌리면 slack 효과와 실행 변동이 섞인다."""
 
@@ -78,7 +84,7 @@ class TestSweepRegradesWithoutRerunning:
 
         def counting(slack: int) -> list[SampleOutcome]:
             calls.append(slack)
-            return _regrader(run, shipped_samples)(slack)
+            return regrade_safety(run.outcomes, shipped_samples, slack)
 
         sweep(counting, "provable_safety", (0, 2, 5))
         assert calls == [0, 2, 5], "각 slack 마다 채점만 다시 해야 한다"
@@ -101,13 +107,16 @@ class TestAgainstShippedCorpus:
         그래서 사다리를 (0,2,5,10) 으로 고정한다 - 답을 보고 고른 값이 아니라
         `test_wider_slack_never_reduces_flagging` 과 같은 표준 범위다.
         이 교훈 자체가 논지의 증거다: 측정 손잡이 하나가 결론을 뒤집는다.
+
+        🔴 **기본 사다리로** 스윕한다. [실측] 교훈이 이 테스트에만 들어가고
+           `DEFAULT_SWEEP` 은 (0,2,5) 로 남아, 도구 출력이 이 설정에서 거짓 「안정」을 냈다.
         """
         run = run_reviewer(
             analyzed("ruff", ("S", "B", "F", "SIM")),
             shipped_samples,
             [ProvableSafetyGrader()],
         )
-        sens = sweep(_regrader(run, shipped_samples), "provable_safety", (0, 2, 5, 10))
+        sens = sweep(lambda s: regrade_safety(run.outcomes, shipped_samples, s), "provable_safety")
 
         assert len(sens.points) == 4
         assert not sens.stable, (
@@ -125,6 +134,6 @@ class TestAgainstShippedCorpus:
             shipped_samples,
             [ProvableSafetyGrader()],
         )
-        sens = sweep(_regrader(run, shipped_samples), "provable_safety", (0, 2, 5, 10))
+        sens = sweep(lambda s: regrade_safety(run.outcomes, shipped_samples, s), "provable_safety")
         undecided = [p.under_flag for p in sens.points]
         assert undecided == sorted(undecided, reverse=True) or len(set(undecided)) == 1

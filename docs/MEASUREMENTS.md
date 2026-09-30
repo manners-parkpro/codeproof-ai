@@ -2,7 +2,7 @@
 
 # 측정값
 
-리뷰어 `ruff` (ruff/0.16.8) · 설정 `ruff(select=ALL,ignore-noqa,cat=tool)`
+정적분석기 리뷰어 `ruff` (ruff/0.16.8) · 설정 `ruff(select=ALL,ignore-noqa,cat=tool)`
 
 코퍼스 **60쌍** · `corpus_hash` `a21275ccd2e67d66873920f7`
 

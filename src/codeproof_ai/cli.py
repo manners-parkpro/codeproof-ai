@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import shutil
 import sys
+import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -29,19 +30,19 @@ from codeproof_ai.eval.grading.safety import ProvableSafetyGrader
 from codeproof_ai.eval.loader import load_decoy_samples
 from codeproof_ai.eval.metrics import credibility_warning
 from codeproof_ai.eval.mix import Axis, mix_sensitivity
-from codeproof_ai.eval.multirun import at_least, expectation, thresholds
+from codeproof_ai.eval.multirun import EXPECTATION_LABEL, at_least, expectation, thresholds
 from codeproof_ai.eval.pairing import (
     PairVerdict,
     discrimination_rate,
     pair_summary,
     score_pairs,
 )
-from codeproof_ai.eval.report import render_measurements
+from codeproof_ai.eval.report import AgentSection, render_measurements
 from codeproof_ai.eval.runner import (
     ReviewerRun,
     run_reviewer,
 )
-from codeproof_ai.eval.sensitivity import regrade_safety, sweep
+from codeproof_ai.eval.sensitivity import regrade_safety, sweep, sweep_views
 from codeproof_ai.eval.spread import compute_spread
 from codeproof_ai.llm.credentials import all_statuses
 from codeproof_ai.llm.registry import (
@@ -52,7 +53,14 @@ from codeproof_ai.llm.registry import (
 from codeproof_ai.llm.registry import available as provider_available
 from codeproof_ai.llm.render import load_prompt
 from codeproof_ai.llm.render import prompt_hash as prompt_hash_of
-from codeproof_ai.reviewers.imported import ImportedReviewer, read_run_record
+from codeproof_ai.reviewers.imported import (
+    BUNDLE_FILE,
+    RUN_FILE,
+    ImportedReviewer,
+    pack_runs,
+    read_run_record,
+    unpack_runs,
+)
 from codeproof_ai.reviewers.wrap import AnalyzerReviewer, ProviderReviewer
 from codeproof_ai.store.sqlite import ReproCheck, Store
 
@@ -193,8 +201,22 @@ def build_parser() -> argparse.ArgumentParser:
 
     _add_report_parser(sub)
     _add_export_parser(sub)
+    _add_pack_parser(sub)
 
     return parser
+
+
+def _add_pack_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    """에이전트 실행을 생성물에 싣는 모양으로 묶는다 - 파일 961개 대신 둘."""
+    pk = sub.add_parser(
+        "pack",
+        help="에이전트 실행 출력을 RUN.json + findings.jsonl 로 묶는다 (report 가 읽는 모양)",
+    )
+    pk.add_argument("--from", dest="src", required=True, help="실행기 출력 디렉터리")
+    pk.add_argument(
+        "--out", required=True, help="묶음 디렉터리 - 보통 results/agent/<리뷰어 이름>"
+    )
+    pk.add_argument("--corpus", default="corpus/decoys")
 
 
 def _add_report_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -215,6 +237,11 @@ def _add_report_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser])
         "--check",
         action="store_true",
         help="쓰지 않고 최신인지만 확인한다 (다르면 exit 1)",
+    )
+    rep.add_argument(
+        "--agents",
+        default="results/agent",
+        help="에이전트 묶음(<이름>/RUN.json + findings.jsonl) 디렉터리. 없으면 정적분석기만",
     )
 
 
@@ -365,7 +392,12 @@ def _print_sensitivity(
 
     [실측] 같은 결함을 Ruff 는 호출 시작 줄로, bandit 은 인자 줄로 보고한다.
     단일 slack 값으로 낸 숫자는 리뷰어의 성질이 아니라 매칭 정책의 산물일 수 있다.
+
+    🔴 다회 실행이면 관점마다 낸다 - `sweep()` 은 합집합으로 센다 (F6).
     """
+    if run.manifest.sample_n > 1:
+        _print_sensitivity_views(run, samples)
+        return
     sens = sweep(lambda slack: regrade_safety(run.outcomes, samples, slack), grader_name)
     if not sens.points:
         return
@@ -385,6 +417,25 @@ def _print_sensitivity(
             f"    🔴 불안정 ({spans} 에서 판정이 바뀐다) - "
             "단일 slack 값으로 낸 숫자를 결론으로 쓰지 않는다"
         )
+
+
+def _print_sensitivity_views(run: ReviewerRun, samples: Sequence[LabeledSample]) -> None:
+    """다회 실행의 매칭 민감도 - 생성물과 **같은 함수**(`sweep_views`)로 관점마다 낸다."""
+    vs = sweep_views(run.outcomes, samples)
+    if vs is None:
+        return
+    print("\n  [매칭 민감도 · 관점별] slack 을 바꾸면 구별 성공(P-C)이 흔들리는가")
+    print(f"    {'slack':>6}  {EXPECTATION_LABEL}  " + "  ".join(vs.thresholds))
+    for p in vs.points:
+        cells = "  ".join(f"{t.successes}/{t.total}" for t in p.thresholds)
+        print(f"    {p.slack:>6}  {p.expectation:>14.1%}  {cells}")
+    if vs.moved:
+        print(
+            f"    🔴 흔들린다 ({' · '.join(vs.moved)}) - "
+            "단일 slack 값으로 낸 숫자를 결론으로 쓰지 않는다"
+        )
+    else:
+        print("    o 모든 관점에서 안정 - 이 결론은 매칭 정책의 산물이 아니다")
 
 
 def _print_pairs(run: ReviewerRun, graders: Sequence[Grader]) -> None:
@@ -891,8 +942,72 @@ def _dispatch_decoy(args: argparse.Namespace) -> int:
     return _cmd_decoy_new(corpus, args.decoy_id)
 
 
+def _agent_sections(root: Path, samples: list[LabeledSample]) -> list[AgentSection] | None:
+    """저장소에 둔 에이전트 실행을 import 와 **같은 경로**로 재생한다. 못 하면 None.
+
+    🔴 `runs.db` 가 아니라 저장소의 묶음에서 읽는다 - `runs.db` 는 로컬이라 클린 클론에서
+       `report --check` 가 재현되지 않는다. 층은 디렉터리가 정한다 (`agent`).
+    🔴 부분 실행은 싣지 않는다 - 모자란 회차가 「지적 0건」으로 실린다 (F6).
+    """
+    if not root.is_dir():
+        return []
+    sections: list[AgentSection] = []
+    for src in sorted(p for p in root.iterdir() if p.is_dir()):
+        if not (src / BUNDLE_FILE).is_file() or not (src / RUN_FILE).is_file():
+            print(
+                f"  🔴 {src} 에 {RUN_FILE} + {BUNDLE_FILE} 이 없다 - `codeproof pack` 으로 묶는다",
+                file=sys.stderr,
+            )
+            return None
+        with tempfile.TemporaryDirectory() as tmp:
+            box = Path(tmp)  # 분석기의 materialize 와 같다 - 실행기 출력 모양으로 되돌려 읽는다
+            shutil.copyfile(src / RUN_FILE, box / RUN_FILE)
+            unpack_runs(src / BUNDLE_FILE, box)
+            replay = _replay(
+                samples, box, name=src.name, kind=ReviewerKind.AGENT, allow_partial=False
+            )
+        if replay is None:
+            print(
+                f"  🔴 {src} 를 싣지 않는다 - 생성물에는 모든 샘플의 모든 회차가 있는 "
+                "실행만 싣는다. 이어서 돌려 채우거나 디렉터리를 뺀다.",
+                file=sys.stderr,
+            )
+            return None
+        run, reviewer, graders, _ = replay
+        sections.append(
+            AgentSection(run=run, graders=tuple(graders), rejected=len(reviewer.rejected))
+        )
+    return sections
+
+
+def _cmd_pack(corpus: Path, src: Path, out: Path) -> int:
+    """에이전트 실행을 `RUN.json` + `findings.jsonl` 로 묶는다 - 저장소에 싣는 모양.
+
+    🔴 import 와 **같은 경로**로 먼저 재생해 본다 - 모자란 회차 · 모르는 모양이면 묶지 않는다.
+       원본 응답(raw/)은 싣지 않는다. 로컬 `runs/` 에 둔다.
+    """
+    labeled = load_decoy_samples(corpus)
+    if not labeled:
+        print(f"평가 샘플이 없다: {corpus}", file=sys.stderr)
+        return 2
+    if _replay(labeled, src, name=out.name, kind=ReviewerKind.AGENT, allow_partial=False) is None:
+        return 2
+    keep = {RUN_FILE, BUNDLE_FILE}
+    extra = sorted(p.name for p in out.iterdir() if p.name not in keep) if out.is_dir() else []
+    if extra:
+        # 옛 파일이 남으면 무엇이 실렸는지 알 수 없다 - 덮어쓰지 않는다
+        print(f"{out} 에 다른 파일이 있다 (예: {extra[:3]}) - 비우고 다시 묶는다", file=sys.stderr)
+        return 2
+    out.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(src / RUN_FILE, out / RUN_FILE)
+    body = pack_runs(src)
+    (out / BUNDLE_FILE).write_text(body, encoding="utf-8")
+    print(f"{out} 를 썼다: {RUN_FILE} + {BUNDLE_FILE} ({len(body.splitlines())}회차)")
+    return 0
+
+
 def _cmd_report(
-    corpus: Path, analyzer: str, ruff_select: str, out: str, *, check: bool
+    corpus: Path, analyzer: str, ruff_select: str, out: str, *, check: bool, agents: Path
 ) -> int:
     """🔴 측정값을 **생성**한다 - 문서가 숫자를 베끼면 반드시 낡는다."""
     samples = load_decoy_samples(corpus)
@@ -911,8 +1026,14 @@ def _cmd_report(
 
     graders = _graders_for(analyzer, 0, samples)
     run = run_reviewer(AnalyzerReviewer(an), samples, graders)
-    body = render_measurements(run, samples, graders)
+    sections = _agent_sections(agents, samples)
+    if sections is None:
+        return 2
+    return _emit_generated(render_measurements(run, samples, graders, sections), out, check=check)
 
+
+def _emit_generated(body: str, out: str, *, check: bool) -> int:
+    """생성물을 쓰거나, 쓰지 않고 최신인지만 본다 (다르면 1)."""
     if out == "-":
         print(body, end="")
         return 0
@@ -999,9 +1120,10 @@ _COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
         store_path=a.store,
     ),
     "report": lambda a: _cmd_report(
-        Path(a.corpus), a.analyzer, a.ruff_select, a.out, check=a.check
+        Path(a.corpus), a.analyzer, a.ruff_select, a.out, check=a.check, agents=Path(a.agents)
     ),
     "export": lambda a: _cmd_export(Path(a.corpus), Path(a.out), a.prompt),
+    "pack": lambda a: _cmd_pack(Path(a.corpus), Path(a.src), Path(a.out)),
     "doctor": lambda _a: _cmd_doctor(),
     "history": lambda a: _cmd_history(a.store, a.limit, a.repro),
     "import": lambda a: _cmd_import(

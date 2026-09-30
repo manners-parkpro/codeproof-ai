@@ -52,7 +52,8 @@ PASS=0; FAIL=0; FAILED_NAMES=()
 
 SCENARIOS=(layering runner registry proof-label proof-vacuous convention docs-tree generated
            agent-contract span-match llm-symbol import-format import-manifest model-pin
-           model-drift multirun-views multirun-labels run-gap short-runs)
+           model-drift multirun-views multirun-labels run-gap short-runs
+           sweep-ladder sensitivity-views report-partial report-labels pack-partial pack-leftover)
 
 claim_layering() { echo "런타임(analysis)은 정답 라벨(eval)을 볼 수 없다 — A1"; }
 break_layering() {
@@ -182,6 +183,47 @@ break_short-runs() {
     src/codeproof_ai/cli.py
 }
 guard_short-runs() { uv run pytest tests/cli/test_commands.py -q -k short_runs_are_refused; }
+
+claim_sweep-ladder() { echo "slack 사다리가 좁으면 전이점을 놓쳐 거짓 「안정」이 나온다 — A2a · DESIGN #31"; }
+break_sweep-ladder() {
+  perl -0pi -e 's/^DEFAULT_SWEEP: tuple\[int, \.\.\.\] = \(0, 2, 5, 10\)$/DEFAULT_SWEEP: tuple[int, ...] = (0, 2, 5)  # falsify.sh/m' \
+    src/codeproof_ai/eval/sensitivity.py
+}
+guard_sweep-ladder() { uv run pytest tests/eval/test_sensitivity.py -q -k slack_sensitive; }
+
+claim_sensitivity-views() { echo "다회 실행의 매칭 민감도는 관점마다 낸다 — 라벨 없는 합집합이 아니다 (F6)"; }
+break_sensitivity-views() {
+  perl -0pi -e 's/    if run\.manifest\.sample_n > 1:\n        _print_sensitivity_views/    if False:  # falsify.sh\n        _print_sensitivity_views/' \
+    src/codeproof_ai/cli.py
+}
+guard_sensitivity-views() { uv run pytest tests/cli/test_commands.py -q -k sensitivity_is_labeled; }
+
+claim_report-partial() { echo "생성물에는 모든 회차가 있는 에이전트 실행만 싣는다 — F6"; }
+break_report-partial() {
+  perl -0pi -e 's/(samples, box, name=src\.name, kind=ReviewerKind\.AGENT, )allow_partial=False$/${1}allow_partial=True  # falsify.sh/m' \
+    src/codeproof_ai/cli.py
+}
+guard_report-partial() { uv run pytest tests/cli/test_commands.py -q -k short_agent_runs; }
+
+claim_pack-partial() { echo "모자란 회차는 묶지 않는다 — 묶고 나면 report 에 가서야 걸린다 (F6)"; }
+break_pack-partial() {
+  perl -0pi -e 's/(labeled, src, name=out\.name, kind=ReviewerKind\.AGENT, )allow_partial=False\) is None:/${1}allow_partial=True) is None:  # falsify.sh/' \
+    src/codeproof_ai/cli.py
+}
+guard_pack-partial() { uv run pytest tests/cli/test_commands.py -q -k pack_refuses_short; }
+
+claim_pack-leftover() { echo "묶음 자리에 옛 파일이 있으면 묶지 않는다 — 섞이면 그대로 커밋된다"; }
+break_pack-leftover() {
+  perl -0pi -e 's/^    if extra:\n/    if False:  # falsify.sh\n/m' src/codeproof_ai/cli.py
+}
+guard_pack-leftover() { uv run pytest tests/cli/test_commands.py -q -k pack_does_not_mix; }
+
+claim_report-labels() { echo "생성물의 다회 실행 숫자는 관점마다 라벨을 붙인다 — F3 · F6"; }
+break_report-labels() {
+  perl -0pi -e 's/    views = thresholds\(n\)\n/    views = thresholds(1)  # falsify.sh\n/' \
+    src/codeproof_ai/eval/report.py
+}
+guard_report-labels() { uv run pytest tests/cli/test_commands.py -q -k agent_runs_get_a_labeled; }
 
 # 🔴 이건 가드 테스트가 아니라 **회귀 재현**이다. 관례 주장을 결함 주장으로
 #    세면 FP 가 폭발한다 - 발표했던 결론 두 개를 철회하게 만든 바로 그 버그다.
