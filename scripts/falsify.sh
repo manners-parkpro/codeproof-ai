@@ -232,7 +232,7 @@ guard_run-gap() { uv run pytest tests/reviewers/test_imported.py -q -k gap; }
 
 claim_short-runs() { echo "N회에 모자란 샘플은 채점하지 않는다 — 출현 빈도가 거짓이 된다 (F6)"; }
 break_short-runs() {
-  perl -0pi -e 's/available_runs\(s\.sample_id\) == runs\}/available_runs(s.sample_id) > 0}  # falsify.sh/' \
+  perl -0pi -e 's/available_runs\(s\.sample_id\) >= runs\}/available_runs(s.sample_id) > 0}  # falsify.sh/' \
     src/codeproof_ai/cli.py
 }
 guard_short-runs() { uv run pytest tests/cli/test_commands.py -q -k short_runs_are_refused; }
@@ -260,7 +260,7 @@ guard_report-partial() { uv run pytest tests/cli/test_commands.py -q -k short_ag
 
 claim_pack-partial() { echo "모자란 회차는 묶지 않는다 — 묶고 나면 report 에 가서야 걸린다 (F6)"; }
 break_pack-partial() {
-  perl -0pi -e 's/(labeled, src, name=out\.name, kind=ReviewerKind\.AGENT, )allow_partial=False\) is None:/${1}allow_partial=True) is None:  # falsify.sh/' \
+  perl -0pi -e 's/(labeled, src, name=out\.name, kind=ReviewerKind\.AGENT, )allow_partial=False, first_runs=runs/${1}allow_partial=True, first_runs=runs  # falsify.sh/' \
     src/codeproof_ai/cli.py
 }
 guard_pack-partial() { uv run pytest tests/cli/test_commands.py -q -k pack_refuses_short; }
@@ -383,7 +383,7 @@ done
 
 printf '%s%d개 가드가 울었다%s' "$GREEN" "$PASS" "$OFF"
 if [[ $FAIL -gt 0 ]]; then
-  printf ' · %s%d개가 침묵했다: %s%s\n' "$RED" "$FAIL" "${FAILED_NAMES[*]}" "$OFF"
+  printf ' · %s%d개가 실패했다: %s%s\n' "$RED" "$FAIL" "${FAILED_NAMES[*]}" "$OFF"
   exit 1
 fi
 printf '\n'
