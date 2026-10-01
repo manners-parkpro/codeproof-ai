@@ -105,8 +105,12 @@ def render_measurements(
     samples: Sequence[LabeledSample],
     graders: Sequence[Grader],
     agents: Sequence[AgentSection] = (),
+    widened: Sequence[LabeledSample] = (),
 ) -> str:
     """측정값 문서 전체.
+
+    `widened` 는 twin 정답 구간을 넓힌 라벨이다 - 에이전트 비교의 보조 지표에만 쓴다
+    (DESIGN §7.10c ③). 비어 있으면 그 표를 싣지 않는다.
 
     🔴 **내용에 영향 없는 변화에는 바뀌지 않아야 한다.** 그래야 「최신인가」를
        물을 수 있다. 그래서 넣지 않는 것:
@@ -135,7 +139,7 @@ def render_measurements(
         _mix_section(run, samples),
         *(_agent_section(a, samples) for a in agents),
         *(
-            _comparison_section(a, b, samples)
+            _comparison_section(a, b, samples, widened)
             for a, b in combinations(agents, 2)
             if comparable(a, b)
         ),
@@ -287,7 +291,10 @@ def _pp(d: Difference) -> tuple[str, str, str]:
 
 
 def _comparison_section(
-    a: AgentSection, b: AgentSection, samples: Sequence[LabeledSample]
+    a: AgentSection,
+    b: AgentSection,
+    samples: Sequence[LabeledSample],
+    widened: Sequence[LabeledSample] = (),
 ) -> str:
     """🔴 두 실행은 같은 짝 위의 차이로 비교한다 - 두 구간을 눈으로 겹쳐 보지 않는다.
 
@@ -345,6 +352,7 @@ def _comparison_section(
         "🔴 흔들린다 — slack 에 따라 차이의 방향이나 판정이 바뀐다. 단일 slack 값으로 결론을 "
         "쓰지 않는다." if len(seen) > 1 else "o slack 사다리 전체에서 방향과 판정이 같다.",
         "",
+        *_widened_rows(ra, rb, widened),
         _setup_note(a, b)
         if knob
         else "- 도구 · 권한이 제품마다 다르다 (각 절의 설정 `permission=`) — 차이에는 모델과 "
@@ -353,6 +361,36 @@ def _comparison_section(
         "",
     ]
     return "\n".join(lines)
+
+
+def _widened_rows(
+    ra: ReviewerRun, rb: ReviewerRun, widened: Sequence[LabeledSample]
+) -> list[str]:
+    """보조 ③ - twin 정답 구간을 decoy 처럼 넓혀 **같은 지적을 다시 채점한** 주 지표.
+
+    🔴 주 지표를 대체하지 않는다. decoy 의 FP 구간은 미끼~가드인데 twin 의 정답은 바뀐 줄뿐이라
+       비대칭이라는 사후 문제 제기에 답하는 자리다. 정의는 수집 전에 선언했다 (DESIGN §7.10c).
+    """
+    if not widened:
+        return []
+    g = ProvableSafetyGrader(overlap_slack=0)
+    ea = expectation(ra.outcomes, widened, g).point
+    eb = expectation(rb.outcomes, widened, g).point
+    if ea is None or eb is None:
+        return []
+    diff, iv, verdict = _pp(difference(ra.outcomes, rb.outcomes, widened, g))
+    return [
+        f"### 보조 — twin 정답 구간을 넓힌 정의 (`{HEADLINE_GRADER}` · slack 0)",
+        "",
+        "twin 쪽 정답을 바뀐 줄과 미끼를 잇는 구간으로 넓혀 같은 지적을 다시 채점했다 — decoy 의 "
+        "FP 구간(미끼~가드)과 대칭이다. 사후 문제 제기에 답하는 보조라 주 지표를 대체하지 않는다 "
+        "(DESIGN §7.10c).",
+        "",
+        f"| `{ra.reviewer}` | `{rb.reviewer}` | 차이 | 95% 구간 | 판정 |",
+        "|---:|---:|---:|---|---|",
+        f"| {ea:.1%} | {eb:.1%} | {diff} | {iv} | {verdict} |",
+        "",
+    ]
 
 
 def _setup_note(a: AgentSection, b: AgentSection) -> str:

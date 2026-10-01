@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 from codeproof_ai.corpus.decoy import (
     DecoyLoadError,
     Level,
+    decoy_lines_in_twin,
     load_decoy,
     twin_changed_lines,
     validate_decoy,
@@ -58,7 +59,9 @@ def _twin_id(decoy_id: str) -> str:
     return f"{decoy_id}#twin"
 
 
-def decoy_to_samples(rec: DecoyRecord) -> tuple[LabeledSample, LabeledSample]:
+def decoy_to_samples(
+    rec: DecoyRecord, *, widen_twin: bool = False
+) -> tuple[LabeledSample, LabeledSample]:
     """decoy 1건을 (음성, 양성) 짝으로 펼친다.
 
     decoy.py 는 증명된 음성, twin.py 는 진짜 결함이다.
@@ -67,6 +70,10 @@ def decoy_to_samples(rec: DecoyRecord) -> tuple[LabeledSample, LabeledSample]:
 
     🔴 각 샘플의 ReviewTarget 에는 **해당 파일 하나만** 들어간다.
        리뷰어에게 decoy 와 twin 을 같이 보여주면 정답을 알려주는 것이다.
+
+    Args:
+        widen_twin: twin 의 정답 구간을 decoy 처럼 넓힌다 - 보조 정의 (DESIGN §7.10c ③).
+            주 지표는 이 정의를 쓰지 않는다.
     """
     guard_loc = Location(
         path=PRESENTED_FILENAME,
@@ -110,6 +117,15 @@ def decoy_to_samples(rec: DecoyRecord) -> tuple[LabeledSample, LabeledSample]:
     twin_span = twin_changed_lines(rec.decoy_source, rec.twin_source)
     twin_start = twin_span[0].start if twin_span else 1
     twin_end = twin_span[-1].end if twin_span else 1
+    if widen_twin:
+        # 🔴 [실측] decoy 의 FP 구간은 미끼~가드인데 twin 의 정답은 바뀐 줄뿐이었다 - 가드를
+        #    지우기만 한 twin 20/60 에서는 「지운 자리 다음 줄」이 정답이 된다. 미끼를 twin 줄
+        #    번호로 옮겨 바뀐 줄과 잇는다 (decoy 쪽과 대칭). 못 옮기면 바뀐 줄만 쓴다.
+        lure = decoy_lines_in_twin(
+            rec.decoy_source, rec.twin_source, rec.lure.start, rec.lure.end
+        )
+        if lure:
+            twin_start, twin_end = min(twin_start, *lure), max(twin_end, *lure)
 
     positive = LabeledSample(
         target=ReviewTarget(
@@ -136,11 +152,14 @@ def decoy_to_samples(rec: DecoyRecord) -> tuple[LabeledSample, LabeledSample]:
     return negative, positive
 
 
-def load_decoy_samples(corpus_root: Path) -> list[LabeledSample]:
+def load_decoy_samples(corpus_root: Path, *, widen_twin: bool = False) -> list[LabeledSample]:
     """decoy 코퍼스 전체를 평가 샘플로 펼친다.
 
     🔴 검증을 통과하지 못한 decoy 는 싣지 않는다.
        규격 미달 decoy 가 섞이면 FPR 이 오염된다.
+
+    Args:
+        widen_twin: twin 정답 구간의 보조 정의 (`decoy_to_samples`).
     """
     # 🔴 없는 경로는 예외가 아니라 빈 결과다. 호출부(CLI)가 「샘플이 없다」로
     #    exit 2 를 내는데, 여기서 FileNotFoundError 가 터지면 그 경로를 못 탄다.
@@ -157,5 +176,5 @@ def load_decoy_samples(corpus_root: Path) -> list[LabeledSample]:
             continue
         if any(v.level is Level.ERROR for v in validate_decoy(rec)):
             continue
-        samples.extend(decoy_to_samples(rec))
+        samples.extend(decoy_to_samples(rec, widen_twin=widen_twin))
     return samples

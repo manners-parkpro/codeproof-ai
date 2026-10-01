@@ -1082,7 +1082,11 @@ def _cmd_report(
     sections = _agent_sections(agents, samples)
     if sections is None:
         return 2
-    return _emit_generated(render_measurements(run, samples, graders, sections), out, check=check)
+    # 보조 ③ - twin 정답 구간을 넓힌 라벨. 에이전트 비교에서만 쓴다 (DESIGN §7.10c).
+    widened = load_decoy_samples(corpus, widen_twin=True) if sections else []
+    return _emit_generated(
+        render_measurements(run, samples, graders, sections, widened), out, check=check
+    )
 
 
 def _emit_generated(body: str, out: str, *, check: bool) -> int:

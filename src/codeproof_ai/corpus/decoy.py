@@ -266,6 +266,22 @@ def twin_changed_lines(decoy_src: str, twin_src: str) -> list[LineRange]:
     return ranges
 
 
+def decoy_lines_in_twin(decoy_src: str, twin_src: str, start: int, end: int) -> list[int]:
+    """decoy 의 줄 구간(1-based 포함)을 twin 의 줄 번호로 옮긴다 - **같은 블록에 있는 줄만**.
+
+    twin_changed_lines 와 같은 diff 를 쓴다. 바뀐 블록 안의 줄은 대응이 없어 버린다 -
+    짐작으로 옮기면 정답 구간이 근거 없이 넓어진다 (DESIGN §7.10c 보조 ③).
+    """
+    a = decoy_src.splitlines()
+    b = twin_src.splitlines()
+    out: list[int] = []
+    for tag, i1, i2, j1, _j2 in difflib.SequenceMatcher(None, a, b).get_opcodes():
+        if tag != "equal":
+            continue
+        out.extend(j1 + (ln - 1 - i1) + 1 for ln in range(start, end + 1) if i1 < ln <= i2)
+    return out
+
+
 def diff_size(decoy_src: str, twin_src: str) -> int:
     """양쪽에서 달라진 줄 수의 합.
 

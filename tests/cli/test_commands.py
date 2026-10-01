@@ -747,6 +747,9 @@ class TestReport:
         assert "| slack | 차이 | 95% 구간 | 판정 |" in section
         # 같은 지적을 낸 두 리뷰어다 - 실행 횟수가 달라도 차이는 0 이고 구별되지 않는다.
         assert "| +0.0%p | [+0.0, +0.0]%p | 구별되지 않는다 |" in section
+        # 🔴 보조 ③ - twin 정답 구간을 넓힌 정의도 같은 짝 차이로 싣는다 (DESIGN §7.10c).
+        widened = section.split("### 보조 — twin 정답 구간을 넓힌 정의", 1)[1]
+        assert "| `claude-code` | `codex-cli` | 차이 | 95% 구간 | 판정 |" in widened
 
     def _pack(self, agents: Path, root: Path, corpus: Path, name: str, **run: Any) -> None:
         (root / name).mkdir()

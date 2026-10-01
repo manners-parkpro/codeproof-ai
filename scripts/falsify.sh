@@ -54,6 +54,7 @@ SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict conv
            agent-contract span-match llm-symbol import-format import-manifest import-rejected
            signed-runner pack-first-runs pair-difference model-pin
            docstring-neutral signed-docstrings resume-docstrings runner-docstrings compare-one-axis
+           widened-twin report-widened
            model-drift multirun-views view-regrade view-copy multirun-labels run-gap short-runs
            sweep-ladder sensitivity-views report-partial report-labels pack-partial pack-leftover)
 
@@ -213,6 +214,20 @@ break_compare-one-axis() {
     src/codeproof_ai/eval/report.py
 }
 guard_compare-one-axis() { uv run pytest tests/cli/test_commands.py -q -k one_axis_only; }
+
+claim_widened-twin() { echo "보조 정의의 twin 정답은 미끼까지 넓어진다 — decoy 의 미끼~가드와 대칭 (DESIGN §7.10c ③)"; }
+break_widened-twin() {
+  perl -0pi -e 's/        out\.extend\(j1 \+ \(ln - 1 - i1\) \+ 1 for ln in range\(start, end \+ 1\) if i1 < ln <= i2\)/        pass/' \
+    src/codeproof_ai/corpus/decoy.py
+}
+guard_widened-twin() { uv run pytest tests/eval/test_widened_twin.py -q -k changes_some_twins; }
+
+claim_report-widened() { echo "에이전트 비교는 보조 정의의 짝 차이도 싣는다 — 선언한 보조를 빼먹지 않는다 (DESIGN §7.10c)"; }
+break_report-widened() {
+  perl -0pi -e 's/    if not widened:\n        return \[\]\n    g = /    if True:\n        return []\n    g = /' \
+    src/codeproof_ai/eval/report.py
+}
+guard_report-widened() { uv run pytest tests/cli/test_commands.py -q -k two_agents_get_a_paired; }
 
 claim_model-pin() { echo "고정한 모델이 아닌 모델의 답은 실패로 센다 — A2b"; }
 break_model-pin() {
