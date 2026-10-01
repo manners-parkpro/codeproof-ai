@@ -1,0 +1,61 @@
+{
+  "runner_version": "2",
+  "agent": "codex",
+  "cli_version": "0.158.0",
+  "model_requested": "top",
+  "model": "gpt-6-astra",
+  "effort": "low",
+  "runs": "8",
+  "isolation": "ignore-user-config,ignore-rules,ephemeral",
+  "permission": "sandbox=read-only;exec=allowed",
+  "prompt_hash": "305d8e25f7fdbdafc7b89332",
+  "instruction_hash": "7d1332f82a7d41f3c8daf0b9",
+  "schema_hash": "b957f782e99241837721bb08",
+  "identity": "codex-cli 0.158.0 · gpt-6-astra · effort=low",
+  "timeout_s": "240",
+  "started_at": "2026-09-29T03:20:57Z",
+  "cli_version_end": "0.158.0",
+  "finished_at": "2026-10-01T03:56:09Z",
+  "audit": {
+    "files": 0,
+    "hits": {}
+  },
+  "sessions": [
+    {
+      "started_at": "2026-09-29T03:20:57Z",
+      "runs": "1",
+      "runner_sha": "unknown"
+    },
+    {
+      "started_at": "2026-09-30T00:02:13Z",
+      "runs": "8",
+      "runner_sha": "78d243f0e63b"
+    },
+    {
+      "started_at": "2026-09-30T06:26:03Z",
+      "runs": "1",
+      "runner_sha": "2e2cc2e7181d"
+    },
+    {
+      "started_at": "2026-09-30T22:47:08Z",
+      "runs": "2",
+      "runner_sha": "92d49ed97561"
+    },
+    {
+      "started_at": "2026-10-01T01:12:16Z",
+      "runs": "2",
+      "runner_sha": "534e59b682da"
+    },
+    {
+      "started_at": "2026-10-01T01:16:57Z",
+      "runs": "3",
+      "runner_sha": "534e59b682da"
+    },
+    {
+      "started_at": "2026-10-01T03:51:07Z",
+      "runs": "3",
+      "runner_sha": "0ff8ddd4d7ca"
+    }
+  ],
+  "packed_runs": "3"
+}
