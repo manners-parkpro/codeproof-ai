@@ -1098,19 +1098,19 @@ README 에 **반드시** 들어가야 한다.
 | `analysis` | Ruff · mypy 어댑터 · AST 심볼 인덱스 · **일괄 분석** · **호스트 격리** |
 | `reviewers` | **통합 Reviewer 층** · SARIF/bandit/native 가져오기 |
 | `verify` | citation · guard(callee 포함) · corroboration · reachability · confidence |
-| `eval` | 채점자 **4종** · **편차** · **짝 채점** · **민감도** · **미끼 측정** · Wilson CI |
+| `eval` | 채점자 **4종** · **편차** · **짝 채점** · **민감도** · **미끼 측정** · **다회 실행 관점**(기대값 · k-임계) · **짝 차이** · Wilson CI |
 | `store` | SQLite · 외래키로 E1 강제 · `config_hash` 재현성 검사 |
 | `corpus` | decoy 템플릿 · 검증기 **12규칙** · 실행 반증(`proof.py`) · 분류 14종 × 가드 위치 4종 (쌍 수는 [MEASUREMENTS](MEASUREMENTS.md)) |
 | `llm` | 스키마 · 프롬프트 · 파서 · replay · **Anthropic/OpenAI 어댑터** |
-| `cli` | `measure` · `eval` · `import` · `doctor` · `history` · `decoy` |
-| 테스트 | **244개 · 26초** |
+| `cli` | `measure` · `eval` · `import` · `export` · `pack` · `report` · `doctor` · `history` · `decoy` |
+| 테스트 | **696개** [실측 · 2026-10-01] — 지금 값은 CI 기록이 든다 (push 마다 Linux · macOS) |
 
 ### 남은 것
 
 | 항목 | 막는 것 |
 |---|---|
 | **decoy → 150** (목표) | 손으로 쓰는 작업. 집계 CI 보다 **분류별 이질성 검정**이 진짜 이유다 (§3.5) |
-| 모델 실측 | 자격증명 (어댑터는 준비됨 — 로그인하면 바로 돈다) |
+| 모델 API 층 실측 (`model_api`) | API 키 · 유료 (어댑터는 준비됨). 에이전트 층은 구독 로그인으로 잰다 — 묶음은 `results/agent/` |
 | A·B·C 층 코퍼스 | 마이닝 인프라 · Docker |
 | 런타임 단일 PR 리뷰 (`review` 서브명령) | **범위 밖** — CLI 에 올리지 않았다. 안 되는 것을 `--help` 에 두면 쓰는 사람이 속는다 |
 | `api/` FastAPI | v2 |
