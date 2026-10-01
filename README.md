@@ -1,5 +1,7 @@
 # CodeProof AI
 
+[![CI](https://github.com/manners-parkpro/codeproof-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/manners-parkpro/codeproof-ai/actions/workflows/ci.yml)
+
 **코드리뷰 품질 측정 실험 플랫폼**
 — 리뷰어를 비교하는 대신, **측정 방식이 결과를 얼마나 만드는지**를 측정한다.
 
@@ -929,6 +931,10 @@ uv run pytest tests/corpus/test_proofs.py
 
 헤드라인이 이 기계에서 재현되는지, 그게 **설정의 함수**인지, 가드가 공허하지
 않은지를 순서대로 검사한다. 전체 절차와 해설은 [docs/VERIFY.md](docs/VERIFY.md).
+
+같은 스크립트를 GitHub Actions 가 main push 와 PR 마다 Linux · macOS 새 환경에서 ruff · mypy · pytest 와 함께
+돌린다([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) — 직접 돌리기 전에 [실행 기록](https://github.com/manners-parkpro/codeproof-ai/actions/workflows/ci.yml)부터 볼 수 있다.
+초록불이 말하는 것은 「새 기계에서도 같은 검사가 통과한다」까지다. 검사가 충분한지는 VERIFY.md 가 다룬다.
 
 ### 가드가 공허하지 않은지 확인한다
 

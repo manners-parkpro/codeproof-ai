@@ -1,0 +1,46 @@
+# 「그린」을 작성자 기계 밖에서 확인한다 — 로컬 그린 확인과 **같은 명령**만 돈다.
+#
+#   ruff · mypy · pytest   CLAUDE.md 「명령어」
+#   scripts/verify.sh      README 가 처음 받은 사람에게 주는 한 줄 (가드 반증 · 생성물 대조 포함)
+#
+# API 키도 에이전트 CLI 도 쓰지 않는다 — 에이전트 층은 커밋된 묶음(results/agent/)을 다시 채점할 뿐이다.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: check (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    env:
+      UV_LOCKED: "1"   # uv.lock 이 pyproject 와 어긋나면 고쳐 쓰지 않고 실패한다
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
+        with:
+          version: "0.12.17"
+      - run: uv sync
+      - run: uv run ruff check .
+      - run: uv run mypy
+      - run: uv run pytest
+      # 🔴 verify.sh 는 트리가 더러우면 가드 반증(falsify)을 건너뛰고도 exit 0 이다.
+      #    그 앞에 추적 파일을 고치는 단계를 두지 않는다 — 두면 이 단계가 공허해진다.
+      - run: ./scripts/verify.sh
