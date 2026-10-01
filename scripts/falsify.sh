@@ -333,7 +333,14 @@ run_one() {
   fi
 
   # ② 불변식을 깬다.
+  local before; before=$(git status --porcelain --untracked-files=all)
   "break_$name" || { echo "  ${RED}깨뜨리지 못했다${OFF} — 시나리오가 낡았다"; ((FAIL++)); FAILED_NAMES+=("$name"); restore; return; }
+  # 🔴 perl · sed 는 치환할 곳이 없어도 0 을 낸다 - 그러면 아무것도 깨지 않은 채 가드가 통과하고
+  #    「공허한 가드」로 잘못 보고된다. [실측] 겨누던 줄을 고치자 short-runs · pack-partial 이 그렇게 침묵했다.
+  if [[ "$(git status --porcelain --untracked-files=all)" == "$before" ]]; then
+    printf '  결과 : %s깨뜨리지 못했다 — 바꾼 곳이 없다 (깨는 패턴이 낡았다)%s\n\n' "$RED" "$OFF"
+    ((FAIL++)); FAILED_NAMES+=("$name"); restore; return
+  fi
 
   local out rc
   out=$("guard_$name" 2>&1); rc=$?
