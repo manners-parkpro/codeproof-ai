@@ -36,5 +36,7 @@
       "runs": "8",
       "runner_sha": "ca5c2a7e2572"
     }
-  ]
+  ],
+  "docstrings": "keep",
+  "docstrings_note": "2026-10-01 에 채웠다 — 손잡이 이전의 export 는 module.py 를 원문 그대로 썼다 [실측: 다시 내보낸 module.py 가 decoy.py · twin.py 와 바이트 동일 · 인용 746건이 현재 파일의 보고 줄에 그대로]"
 }

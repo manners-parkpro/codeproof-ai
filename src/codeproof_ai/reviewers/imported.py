@@ -59,6 +59,7 @@ _SIGNED = (
     "instruction_hash",
     "prompt_hash",
     "schema_hash",
+    "docstrings",  # 프롬프트가 같아도 입력 코드가 다르다 (DESIGN §7.10c)
 )
 
 

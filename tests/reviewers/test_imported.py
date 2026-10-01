@@ -107,3 +107,13 @@ class TestConfigSignature:
         bumped = self._signature(tmp_path / "c", {**run, "runner_version": "3"})
         assert first == again, "같은 실행 기록이 다른 설정으로 읽혔다"
         assert first != bumped, "실행기 판이 달라도 같은 설정으로 읽힌다"
+
+    def test_docstring_knob_changes_the_signature(self, tmp_path: Path) -> None:
+        """🔴 프롬프트 해시가 같아도 입력 코드가 다르다 - keep 과 neutral 이 한 설정으로 읽히면
+        손잡이 효과를 잴 수 없다 (DESIGN §7.10c)."""
+        run = {"runner_version": "3", "model": "m-1", "effort": "low", "docstrings": "keep"}
+        keep = self._signature(tmp_path / "a", run)
+        again = self._signature(tmp_path / "b", dict(run))
+        neutral = self._signature(tmp_path / "c", {**run, "docstrings": "neutral"})
+        assert keep == again, "같은 실행 기록이 다른 설정으로 읽혔다"
+        assert keep != neutral, "docstring 손잡이가 달라도 같은 설정으로 읽힌다"

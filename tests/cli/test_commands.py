@@ -13,6 +13,7 @@ import json
 import re
 import shutil
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -30,7 +31,16 @@ def db(tmp_path: Path) -> str:
     return str(tmp_path / "t.db")
 
 
-def _runner_output(root: Path, corpus: Path, runs: int, short: str | None = None) -> Path:
+def _runner_output(
+    root: Path,
+    corpus: Path,
+    runs: int,
+    short: str | None = None,
+    *,
+    agent: str = "claude",
+    docstrings: str = "keep",
+    cli_version: str = "9.9.9",
+) -> Path:
     """실행기(review-with-agent.sh) 출력의 모양 - `<샘플>.<회차>.json` + RUN.json.
 
     `short` 샘플만 한 회차 모자라게 쓴다.
@@ -47,8 +57,9 @@ def _runner_output(root: Path, corpus: Path, runs: int, short: str | None = None
             for i in range(runs - 1 if sid == short else runs):
                 (src / f"{sid}.{i}.json").write_text(json.dumps(finding), encoding="utf-8")
     run = {
-        "agent": "claude", "cli_version": "9.9.9", "model": "m-1", "effort": "low",
+        "agent": agent, "cli_version": cli_version, "model": "m-1", "effort": "low",
         "identity": "claude-code 9.9.9 · m-1 · effort=low", "prompt_hash": "p" * 24,
+        "docstrings": docstrings,
     }
     (src / RUN_FILE).write_text(json.dumps(run), encoding="utf-8")
     return src
@@ -724,22 +735,73 @@ class TestReport:
     def test_two_agents_get_a_paired_comparison(self, small_corpus: Path, tmp_path: Path) -> None:
         """🔴 두 에이전트는 같은 짝 위의 차이로 비교한다 - 두 구간을 눈으로 겹쳐 보지 않는다."""
         agents = tmp_path / "agents"
-        for name, runs in (("claude-code", 2), ("codex-cli", 1)):
-            (tmp_path / name).mkdir()
-            src = _runner_output(tmp_path / name, small_corpus, runs)
-            dest = agents / name
-            dest.mkdir(parents=True)
-            shutil.copyfile(src / RUN_FILE, dest / RUN_FILE)
-            (dest / BUNDLE_FILE).write_text(pack_runs(src), encoding="utf-8")
+        for name, agent, runs in (("claude-code", "claude", 2), ("codex-cli", "codex", 1)):
+            self._pack(agents, tmp_path, small_corpus, name, runs=runs, agent=agent)
         out = tmp_path / "M.md"
         assert self._report(small_corpus, agents, out) == 0
         section = out.read_text(encoding="utf-8").split("## 에이전트 비교", 1)[1]
+        assert "docstring 손잡이 `keep` 에서 **리뷰어만** 다르다." in section
         # 🔴 표마다 머리 행을 본다 - 위 테스트와 같은 이유다.
         assert "| 채점자 | `claude-code` | `codex-cli` | 차이 | 95% 구간 | 판정 |" in section
         assert "| `provable_safety` (주) |" in section
         assert "| slack | 차이 | 95% 구간 | 판정 |" in section
         # 같은 지적을 낸 두 리뷰어다 - 실행 횟수가 달라도 차이는 0 이고 구별되지 않는다.
         assert "| +0.0%p | [+0.0, +0.0]%p | 구별되지 않는다 |" in section
+
+    def _pack(self, agents: Path, root: Path, corpus: Path, name: str, **run: Any) -> None:
+        (root / name).mkdir()
+        src = _runner_output(root / name, corpus, run.pop("runs", 1), **run)
+        dest = agents / name
+        dest.mkdir(parents=True)
+        shutil.copyfile(src / RUN_FILE, dest / RUN_FILE)
+        (dest / BUNDLE_FILE).write_text(pack_runs(src), encoding="utf-8")
+
+    def test_comparisons_vary_one_axis_only(self, small_corpus: Path, tmp_path: Path) -> None:
+        """🔴 리뷰어와 docstring 손잡이가 **둘 다** 다른 실행은 비교하지 않는다 (DESIGN §7.10c).
+
+        claude · keep 대 codex · neutral 의 차이에는 두 효과가 섞여 어느 쪽인지 말할 수 없다.
+        """
+        agents = tmp_path / "agents"
+        for name, agent, doc in (
+            ("claude-code", "claude", "keep"), ("claude-code-neutral", "claude", "neutral"),
+            ("codex-cli", "codex", "keep"), ("codex-cli-neutral", "codex", "neutral"),
+        ):
+            self._pack(agents, tmp_path, small_corpus, name, agent=agent, docstrings=doc)
+        out = tmp_path / "M.md"
+        assert self._report(small_corpus, agents, out) == 0
+        body = out.read_text(encoding="utf-8")
+        compared = {
+            line.removeprefix("## 에이전트 비교 — ")
+            for line in body.splitlines()
+            if line.startswith("## 에이전트 비교")
+        }
+        assert compared == {
+            "`claude-code` vs `claude-code-neutral`",   # 손잡이만
+            "`codex-cli` vs `codex-cli-neutral`",       # 손잡이만
+            "`claude-code` vs `codex-cli`",             # 리뷰어만 (keep)
+            "`claude-code-neutral` vs `codex-cli-neutral`",  # 리뷰어만 (neutral)
+        }
+        knob = body.split("## 에이전트 비교 — `claude-code` vs `claude-code-neutral`", 1)[1]
+        assert "같은 리뷰어에서 **docstring 손잡이만** 다르다 (`keep` · `neutral`)." in knob
+        assert "(DESIGN §7.10c)" in knob
+        assert "- 손잡이 말고 다른 설정: 없음" in knob.split("\n## ", 1)[0]
+        assert "docstring `neutral`" in body, "에이전트 절 머리에 손잡이를 싣는다"
+
+    def test_a_knob_comparison_shows_other_setup_differences(
+        self, small_corpus: Path, tmp_path: Path
+    ) -> None:
+        """🔴 손잡이 말고 다른 설정(CLI 판 등)이 섞이면 그 차이도 손잡이 효과로 읽힌다."""
+        agents = tmp_path / "agents"
+        self._pack(agents, tmp_path, small_corpus, "claude-code", docstrings="keep")
+        self._pack(
+            agents, tmp_path, small_corpus, "claude-code-neutral",
+            docstrings="neutral", cli_version="9.9.8",
+        )
+        out = tmp_path / "M.md"
+        assert self._report(small_corpus, agents, out) == 0
+        assert "- 손잡이 말고 다른 설정: `cli_version` 9.9.9 → 9.9.8" in out.read_text(
+            encoding="utf-8"
+        )
 
     def test_one_agent_gets_no_comparison(self, small_corpus: Path, tmp_path: Path) -> None:
         agents = self._agents(tmp_path, small_corpus, runs=2)

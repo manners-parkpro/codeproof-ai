@@ -79,9 +79,9 @@
 
 ## 에이전트 층 — `claude-code`
 
-리뷰어 `claude-code 2.1.284 · claude-fable-5-1 · effort=low` · 샘플당 **8회** 실행 · 짝 **60쌍** · 캐시 `uncontrolled` · 파서가 버린 지적 0건
+리뷰어 `claude-code 2.1.284 · claude-fable-5-1 · effort=low` · 샘플당 **8회** 실행 · 짝 **60쌍** · docstring `keep` · 캐시 `uncontrolled` · 파서가 버린 지적 0건
 
-설정 `imported(claude-code,fmt=native,kind=agent,runner_version=2,model=claude-fable-5-1,effort=low,isolation=safe-mode,strict-mcp-config,no-session-persistence,DISABLE_AUTOUPDATER=1,permission=dontAsk;tools=Read,Grep,Glob,instruction_hash=7d1332f82a7d41f3c8daf0b9,prompt_hash=305d8e25f7fdbdafc7b89332,schema_hash=b957f782e99241837721bb08)`
+설정 `imported(claude-code,fmt=native,kind=agent,runner_version=2,model=claude-fable-5-1,effort=low,isolation=safe-mode,strict-mcp-config,no-session-persistence,DISABLE_AUTOUPDATER=1,permission=dontAsk;tools=Read,Grep,Glob,instruction_hash=7d1332f82a7d41f3c8daf0b9,prompt_hash=305d8e25f7fdbdafc7b89332,schema_hash=b957f782e99241837721bb08,docstrings=keep)`
 
 > 🔴 층이 다르다 (`agent`) — 파일 탐색 · 다회 턴 · 툴 사용이 가능해서 `model_api` 와 조건이 다르다. 위 정적분석기 숫자와 같은 문서에 둘 뿐 **섞어 집계하지 않는다.**
 
@@ -114,9 +114,9 @@
 
 ## 에이전트 층 — `codex-cli`
 
-리뷰어 `codex-cli 0.158.0 · gpt-6-astra · effort=low` · 샘플당 **3회** 실행 (앞 3회만 묶음) · 짝 **60쌍** · 캐시 `uncontrolled` · 파서가 버린 지적 0건
+리뷰어 `codex-cli 0.158.0 · gpt-6-astra · effort=low` · 샘플당 **3회** 실행 (앞 3회만 묶음) · 짝 **60쌍** · docstring `keep` · 캐시 `uncontrolled` · 파서가 버린 지적 0건
 
-설정 `imported(codex-cli,fmt=native,kind=agent,runner_version=2,model=gpt-6-astra,effort=low,isolation=ignore-user-config,ignore-rules,ephemeral,permission=sandbox=read-only;exec=allowed,instruction_hash=7d1332f82a7d41f3c8daf0b9,prompt_hash=305d8e25f7fdbdafc7b89332,schema_hash=b957f782e99241837721bb08)`
+설정 `imported(codex-cli,fmt=native,kind=agent,runner_version=2,model=gpt-6-astra,effort=low,isolation=ignore-user-config,ignore-rules,ephemeral,permission=sandbox=read-only;exec=allowed,instruction_hash=7d1332f82a7d41f3c8daf0b9,prompt_hash=305d8e25f7fdbdafc7b89332,schema_hash=b957f782e99241837721bb08,docstrings=keep)`
 
 > 🔴 층이 다르다 (`agent`) — 파일 탐색 · 다회 턴 · 툴 사용이 가능해서 `model_api` 와 조건이 다르다. 위 정적분석기 숫자와 같은 문서에 둘 뿐 **섞어 집계하지 않는다.**
 
@@ -149,7 +149,9 @@
 
 ## 에이전트 비교 — `claude-code` vs `codex-cli`
 
-주 지표는 `provable_safety` · slack 0 의 **단일 실행 기대값 짝 차이**다 (`claude-code` 에서 `codex-cli` 를 뺀 값). 같은 짝을 두 리뷰어가 **함께** 복원추출하는 부트스트랩 95% (재표집 2000 · 시드 0). 구간이 0 을 품으면 이 코퍼스에서 구별되지 않는다. 설계는 수집 전에 선언했다 (DESIGN §7.10b).
+docstring 손잡이 `keep` 에서 **리뷰어만** 다르다.
+
+주 지표는 `provable_safety` · slack 0 의 **단일 실행 기대값 짝 차이**다 (`claude-code` 에서 `codex-cli` 를 뺀 값). 같은 짝을 두 실행이 **함께** 복원추출하는 부트스트랩 95% (재표집 2000 · 시드 0). 구간이 0 을 품으면 이 코퍼스에서 구별되지 않는다. 설계는 수집 전에 선언했다 (DESIGN §7.10b).
 
 | 채점자 | `claude-code` | `codex-cli` | 차이 | 95% 구간 | 판정 |
 |---|---:|---:|---:|---|---|

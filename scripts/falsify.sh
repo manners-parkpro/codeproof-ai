@@ -53,6 +53,7 @@ PASS=0; FAIL=0; FAILED_NAMES=()
 SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict convention docs-tree generated
            agent-contract span-match llm-symbol import-format import-manifest import-rejected
            signed-runner pack-first-runs pair-difference model-pin
+           docstring-neutral signed-docstrings resume-docstrings runner-docstrings compare-one-axis
            model-drift multirun-views view-regrade view-copy multirun-labels run-gap short-runs
            sweep-ladder sensitivity-views report-partial report-labels pack-partial pack-leftover)
 
@@ -180,6 +181,38 @@ break_pair-difference() {
     src/codeproof_ai/eval/multirun.py
 }
 guard_pair-difference() { uv run pytest tests/eval/test_multirun.py -q -k against_itself_has_no_width; }
+
+claim_docstring-neutral() { echo "neutral 은 모듈 docstring 의 기전을 실제로 지운다 — 줄 수는 그대로 (DESIGN §7.10c)"; }
+break_docstring-neutral() {
+  perl -0pi -e 's/\n    tree = ast\.parse\(source\)\n    first = /\n    return source\n    tree = ast.parse(source)\n    first = /' \
+    src/codeproof_ai/eval/export.py
+}
+guard_docstring-neutral() { uv run pytest tests/eval/test_export.py -q -k keeps_its_lines; }
+
+claim_signed-docstrings() { echo "docstring 손잡이도 설정 지문에 싣는다 — keep 과 neutral 이 한 설정으로 읽히지 않게 (F1)"; }
+break_signed-docstrings() {
+  perl -0pi -e 's/\n    "docstrings",[^\n]*//' src/codeproof_ai/reviewers/imported.py
+}
+guard_signed-docstrings() { uv run pytest tests/reviewers/test_imported.py -q -k docstring_knob; }
+
+claim_resume-docstrings() { echo "손잡이가 다른 실행은 한 출력 디렉터리에 이어 쓰지 않는다 — 섞이면 한 실행이 아니다 (F1)"; }
+break_resume-docstrings() {
+  perl -0pi -e 's/\n    "docstrings",[^\n]*//' scripts/agent_output.py
+}
+guard_resume-docstrings() { uv run pytest tests/scripts/test_agent_output.py -q -k different_docstring_knob; }
+
+claim_runner-docstrings() { echo "손잡이 이전의 내보내기로는 돌지 않는다 — 빈 값을 기록하면 keep 과 neutral 이 같아진다"; }
+break_runner-docstrings() {
+  perl -0pi -e 's/\n\[\[ -n \$DOCSTRINGS \]\] \|\| die[^\n]*//' scripts/review-with-agent.sh
+}
+guard_runner-docstrings() { uv run pytest tests/scripts/test_agent_output.py -q -k without_the_knob_is_refused; }
+
+claim_compare-one-axis() { echo "리뷰어와 손잡이가 둘 다 다른 실행은 비교하지 않는다 — 어느 쪽 효과인지 말할 수 없다 (DESIGN §7.10c)"; }
+break_compare-one-axis() {
+  perl -0pi -e 's/\(a\.docstrings != b\.docstrings\) == 1/(a.docstrings != b.docstrings) >= 1/' \
+    src/codeproof_ai/eval/report.py
+}
+guard_compare-one-axis() { uv run pytest tests/cli/test_commands.py -q -k one_axis_only; }
 
 claim_model-pin() { echo "고정한 모델이 아닌 모델의 답은 실패로 센다 — A2b"; }
 break_model-pin() {

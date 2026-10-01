@@ -22,7 +22,7 @@ from codeproof_ai.analysis.registry import available as analyzer_available
 from codeproof_ai.corpus.decoy import validate_corpus
 from codeproof_ai.domain.reviewer import ReviewerKind
 from codeproof_ai.eval.bait import BaitStatus, measure
-from codeproof_ai.eval.export import export_for_agent
+from codeproof_ai.eval.export import DOCSTRING_MODES, export_for_agent
 from codeproof_ai.eval.grading.base import Outcome
 from codeproof_ai.eval.grading.corroboration import StaticCorroborationGrader
 from codeproof_ai.eval.grading.injected import InjectedDefectGrader
@@ -38,7 +38,7 @@ from codeproof_ai.eval.pairing import (
     pair_summary,
     score_pairs,
 )
-from codeproof_ai.eval.report import AgentSection, render_measurements
+from codeproof_ai.eval.report import SETUP_KEYS, AgentSection, render_measurements
 from codeproof_ai.eval.runner import (
     ReviewerRun,
     run_reviewer,
@@ -265,16 +265,29 @@ def _add_export_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser])
         default="review_v1",
         help="리뷰 지시. 🔴 model_api 와 같은 것을 써야 같은 과제다",
     )
+    ex.add_argument(
+        "--docstrings",
+        choices=DOCSTRING_MODES,
+        default="keep",
+        help="모듈 docstring 손잡이 - neutral 은 기전 문장을 지운다 (DESIGN §7.10c)",
+    )
 
 
-def _cmd_export(corpus: Path, out: Path, prompt_name: str) -> int:
+def _cmd_export(corpus: Path, out: Path, prompt_name: str, docstrings: str = "keep") -> int:
     samples = load_decoy_samples(corpus)
     if not samples:
         print(f"샘플이 없다: {corpus}", file=sys.stderr)
         return 2
-    manifest = export_for_agent(samples, out, prompt_name=prompt_name)
+    try:
+        manifest = export_for_agent(samples, out, prompt_name=prompt_name, docstrings=docstrings)
+    except ValueError as exc:
+        print(exc, file=sys.stderr)
+        return 2
     n = len(manifest["samples"])  # type: ignore[arg-type]
-    print(f"{out} 에 샘플 {n}개를 썼다 (prompt_hash={manifest['prompt_hash']})")
+    print(
+        f"{out} 에 샘플 {n}개를 썼다 (prompt_hash={manifest['prompt_hash']} · "
+        f"docstrings={docstrings})"
+    )
     print("  다음: ./scripts/review-with-agent.sh <claude|codex> "
           f"{out} <출력디렉터리>")
     print("  그다음: codeproof import --from <출력디렉터리> --kind agent "
@@ -988,13 +1001,17 @@ def _agent_sections(root: Path, samples: list[LabeledSample]) -> list[AgentSecti
             )
             return None
         run, reviewer, graders, _ = replay
-        packed = (reviewer.run_record or {}).get("packed_runs")
+        record = reviewer.run_record or {}
+        packed = record.get("packed_runs")
         sections.append(
             AgentSection(
                 run=run,
                 graders=tuple(graders),
                 rejected=len(reviewer.rejected),
                 packed_runs=int(packed) if packed else None,
+                agent=str(record.get("agent", "")),
+                docstrings=str(record.get("docstrings", "")),
+                setup=tuple((k, str(record.get(k, ""))) for k in SETUP_KEYS),
             )
         )
     return sections
@@ -1158,7 +1175,7 @@ _COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
     "report": lambda a: _cmd_report(
         Path(a.corpus), a.analyzer, a.ruff_select, a.out, check=a.check, agents=Path(a.agents)
     ),
-    "export": lambda a: _cmd_export(Path(a.corpus), Path(a.out), a.prompt),
+    "export": lambda a: _cmd_export(Path(a.corpus), Path(a.out), a.prompt, a.docstrings),
     "pack": lambda a: _cmd_pack(Path(a.corpus), Path(a.src), Path(a.out), runs=a.runs),
     "doctor": lambda _a: _cmd_doctor(),
     "history": lambda a: _cmd_history(a.store, a.limit, a.repro),

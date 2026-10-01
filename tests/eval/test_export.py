@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import dataclasses
 import json
 import re
@@ -16,6 +17,7 @@ from codeproof_ai.eval.export import (
     SCHEMA_FILE,
     build_prompt,
     export_for_agent,
+    neutral_docstring,
 )
 from codeproof_ai.llm.render import load_prompt, prompt_hash
 from codeproof_ai.llm.schema import review_schema
@@ -119,3 +121,77 @@ class TestExportedFiles:
         prompt = (tmp_path / PROMPT_FILE).read_text(encoding="utf-8")
         assert m["prompt_hash"] == prompt_hash(prompt)
         assert m["instruction_hash"] != m["prompt_hash"]
+
+
+def _inner_docstrings(source: str) -> list[str | None]:
+    return [
+        ast.get_docstring(n)
+        for n in ast.walk(ast.parse(source))
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+    ]
+
+
+class TestDocstringKnob:
+    """🔴 [실측 · 60쌍] decoy 와 twin 이 안전 기전을 적은 같은 모듈 docstring 을 가졌다.
+
+    twin 에서는 지켜지지 않는 약속이 되어 정답 단서가 된다 - 손잡이로 끄고 효과를 잰다
+    (DESIGN §7.10c).
+    """
+
+    def test_every_shipped_file_keeps_its_lines(
+        self, shipped_samples: list[LabeledSample]
+    ) -> None:
+        """줄 번호가 그대로여야 정답 구간(미끼 · 가드 · twin)이 맞는다 - 바뀌는 줄은 하나뿐이다."""
+        for s in shipped_samples:
+            for f in s.target.files:
+                new = neutral_docstring(f.content)
+                before, after = f.content.splitlines(), new.splitlines()
+                assert len(before) == len(after), s.sample_id
+                changed = [
+                    i for i, (x, y) in enumerate(zip(before, after, strict=True)) if x != y
+                ]
+                assert len(changed) == 1, s.sample_id
+                purpose = (ast.get_docstring(ast.parse(f.content)) or "").partition(" - ")[0]
+                assert ast.get_docstring(ast.parse(new)) == f"{purpose.rstrip('.')}.", s.sample_id
+
+    def test_function_docstrings_are_untouched(
+        self, shipped_samples: list[LabeledSample]
+    ) -> None:
+        """🔴 함수 · 클래스 docstring 은 그 자체가 가드일 수 있다 (D005 · D018 등)."""
+        seen = 0
+        for s in shipped_samples:
+            for f in s.target.files:
+                inner = _inner_docstrings(f.content)
+                assert _inner_docstrings(neutral_docstring(f.content)) == inner, s.sample_id
+                seen += sum(d is not None for d in inner)
+        assert seen > 0, "대조군 - 함수 docstring 이 있는 샘플이 있어야 이 테스트가 뭔가를 본다"
+
+    @pytest.mark.parametrize(
+        "source",
+        ["x = 1\n", '"""두 줄\n짜리 - 설명."""\n', '"""기전 없는 한 줄."""\n'],
+        ids=["없음", "두 줄", "형식 아님"],
+    )
+    def test_rejects_what_it_cannot_neutralize(self, source: str) -> None:
+        """조용히 원문을 내보내면 neutral 이라고 적힌 keep 이 된다."""
+        with pytest.raises(ValueError, match="모듈 docstring"):
+            neutral_docstring(source)
+
+    def test_export_records_the_knob(
+        self, shipped_samples: list[LabeledSample], tmp_path: Path
+    ) -> None:
+        keep = export_for_agent(shipped_samples[:2], tmp_path / "keep")
+        neutral = export_for_agent(shipped_samples[:2], tmp_path / "neutral", docstrings="neutral")
+        assert (keep["docstrings"], neutral["docstrings"]) == ("keep", "neutral")
+        s = shipped_samples[0]
+        f = s.target.files[0]
+        kept = (tmp_path / "keep" / s.sample_id / f.path).read_text(encoding="utf-8")
+        neutralized = (tmp_path / "neutral" / s.sample_id / f.path).read_text(encoding="utf-8")
+        assert kept == f.content
+        assert neutralized == neutral_docstring(f.content)
+        assert neutralized != f.content
+
+    def test_unknown_knob_is_rejected(
+        self, shipped_samples: list[LabeledSample], tmp_path: Path
+    ) -> None:
+        with pytest.raises(ValueError, match="docstring 손잡이"):
+            export_for_agent(shipped_samples[:1], tmp_path, docstrings="strip")

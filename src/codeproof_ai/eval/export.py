@@ -41,6 +41,7 @@
 
 from __future__ import annotations
 
+import ast
 import json
 from typing import TYPE_CHECKING, Any
 
@@ -53,10 +54,49 @@ if TYPE_CHECKING:
 
     from codeproof_ai.eval.sample import LabeledSample
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 PROMPT_FILE = "PROMPT.md"
 SCHEMA_FILE = "SCHEMA.json"
 MANIFEST_FILE = "MANIFEST.json"
+
+DOCSTRING_MODES = ("keep", "neutral")
+"""모듈 docstring 손잡이 - 실행 기록과 설정 지문에 실린다 (DESIGN §7.10c)."""
+
+
+def neutral_docstring(source: str) -> str:
+    """모듈 docstring 의 「목적 - 기전」에서 기전을 지운다. **줄 수는 그대로** 둔다.
+
+    🔴 [실측 · 60쌍] decoy 와 twin 이 안전 기전을 적은 같은 모듈 docstring 을 갖고 있었다
+       (「호출부가 락을 쥔다」). twin 에서는 지켜지지 않는 약속이 되어 정답 단서가 됐다 -
+       docstring 을 언급한 지적이 claude 581건 중 200건이다. 기전은 meta.toml 에 적는 것이
+       템플릿의 규칙이다.
+    🔴 줄 번호가 바뀌면 정답 구간(미끼 · 가드 · twin)이 어긋나므로 그 한 줄만 바꾼다.
+       ast 의 열은 바이트라 바이트로 자른다 (B1).
+    🔴 함수 · 클래스 docstring 은 건드리지 않는다 - 그 자체가 가드인 쌍이 있다 (D005 등).
+    """
+    tree = ast.parse(source)
+    first = tree.body[0] if tree.body else None
+    if not (
+        isinstance(first, ast.Expr)
+        and isinstance(first.value, ast.Constant)
+        and isinstance(first.value.value, str)
+    ):
+        msg = "모듈 docstring 이 없다"
+        raise ValueError(msg)
+    if first.lineno != first.end_lineno or first.end_col_offset is None:
+        msg = f"모듈 docstring 이 한 줄이 아니다 (L{first.lineno}-{first.end_lineno})"
+        raise ValueError(msg)
+    purpose, sep, _ = first.value.value.partition(" - ")
+    if not sep or not purpose.strip():
+        msg = f"모듈 docstring 이 「목적 - 기전」 형식이 아니다: {first.value.value!r}"
+        raise ValueError(msg)
+    lines = source.splitlines(keepends=True)
+    raw = lines[first.lineno - 1].encode("utf-8")
+    literal = f'"""{purpose.strip().rstrip(".")}."""'.encode()
+    lines[first.lineno - 1] = (
+        raw[: first.col_offset] + literal + raw[first.end_col_offset :]
+    ).decode("utf-8")
+    return "".join(lines)
 
 
 def _placeholder(spec: Mapping[str, Any]) -> str:
@@ -145,12 +185,19 @@ def export_for_agent(
     out_dir: Path,
     *,
     prompt_name: str = "review_v1",
+    docstrings: str = "keep",
 ) -> dict[str, object]:
     """샘플마다 디렉터리 하나 + 공통 프롬프트 + 출력 스키마를 쓴다.
+
+    Args:
+        docstrings: `keep` 은 원문 그대로, `neutral` 은 모듈 docstring 의 기전을 지운다.
 
     Returns:
         매니페스트 (호출부가 그대로 출력해도 되는 형태)
     """
+    if docstrings not in DOCSTRING_MODES:
+        msg = f"모르는 docstring 손잡이: {docstrings} ({' | '.join(DOCSTRING_MODES)})"
+        raise ValueError(msg)
     prompt = build_prompt(samples, prompt_name)
     schema = schema_text()
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -164,7 +211,12 @@ def export_for_agent(
         for f in s.target.files:
             dest = box / f.path
             dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.write_text(f.content, encoding="utf-8")
+            try:
+                content = neutral_docstring(f.content) if docstrings == "neutral" else f.content
+            except ValueError as exc:
+                msg = f"{s.sample_id}/{f.path}: {exc}"
+                raise ValueError(msg) from exc
+            dest.write_text(content, encoding="utf-8")
         written.append(
             {"sample_id": s.sample_id, "files": [f.path for f in s.target.files]}
         )
@@ -181,6 +233,8 @@ def export_for_agent(
         "prompt_hash": prompt_hash(prompt),  # 에이전트가 실제로 받은 전문
         "schema": SCHEMA_FILE,
         "schema_hash": prompt_hash(schema),
+        # 🔴 입력 코드가 달라지는 손잡이 - 실행기가 RUN.json 과 설정 지문에 옮긴다.
+        "docstrings": docstrings,
         "samples": written,
     }
     (out_dir / MANIFEST_FILE).write_text(

@@ -63,7 +63,7 @@ set -uo pipefail
 RED=$'\033[31m'; GRN=$'\033[32m'; DIM=$'\033[2m'; BLD=$'\033[1m'; OFF=$'\033[0m'
 [[ -t 1 ]] || { RED=""; GRN=""; DIM=""; BLD=""; OFF=""; }
 
-RUNNER_VERSION=2
+RUNNER_VERSION=3   # 3: MANIFEST 의 docstring 손잡이를 RUN.json 에 싣는다 (리뷰 호출은 2 와 같다)
 HERE=$(cd "$(dirname "$0")" && pwd)
 HELPER="$HERE/agent_output.py"
 
@@ -120,6 +120,11 @@ command -v caffeinate > /dev/null && { caffeinate -i -s -w $$ & }
 manifest() {
   python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))[sys.argv[2]])' "$IN/MANIFEST.json" "$1"
 }
+
+# 🔴 입력 코드가 달라지는 손잡이 (DESIGN §7.10c). 없으면 손잡이 이전의 내보내기다 -
+#    빈 값으로 기록하면 keep 과 neutral 이 같은 설정으로 읽힌다.
+DOCSTRINGS=$(manifest docstrings 2>/dev/null)
+[[ -n $DOCSTRINGS ]] || die "$IN/MANIFEST.json 에 docstrings 가 없다 - codeproof export 를 다시 돌린다"
 
 cli_version() {
   "$AGENT" --version 2>/dev/null | head -1 | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+' | head -1
@@ -197,8 +202,8 @@ diffs=$(python3 "$HELPER" record "$RUN_JSON" \
     model_requested="$REQUESTED" model="$RESOLVED" model_note="$NOTE" effort="$EFFORT" runs="$RUNS" \
     isolation="$ISOLATION" permission="$PERMISSION" \
     prompt_hash="$(manifest prompt_hash)" instruction_hash="$(manifest instruction_hash)" \
-    schema_hash="$(manifest schema_hash)" identity="$IDENTITY" timeout_s="$TIMEOUT" \
-    runner_sha="$RUNNER_SHA" started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)")
+    schema_hash="$(manifest schema_hash)" docstrings="$DOCSTRINGS" identity="$IDENTITY" \
+    timeout_s="$TIMEOUT" runner_sha="$RUNNER_SHA" started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)")
 case $? in
   0) ;;
   3)
@@ -242,7 +247,7 @@ fi
 TOTAL=$(( ${#BOXES[@]} * RUNS ))
 printf '%s%s%s · %s · effort=%s · 샘플 %d개 × %d회 = %d건 · 제한 %ds\n' \
   "$BLD" "$NAME $CLI_VERSION" "$OFF" "$RESOLVED" "$EFFORT" "${#BOXES[@]}" "$RUNS" "$TOTAL" "$TIMEOUT"
-printf '%s격리: %s · 권한: %s%s\n' "$DIM" "$ISOLATION" "$PERMISSION" "$OFF"
+printf '%s격리: %s · 권한: %s · docstring: %s%s\n' "$DIM" "$ISOLATION" "$PERMISSION" "$DOCSTRINGS" "$OFF"
 [[ $RUNS -eq 1 ]] && printf '%s⚠ n=1 — 변동을 말할 수 없다 (F8). 파일럿으로만 쓴다.%s\n' "$DIM" "$OFF"
 echo
 

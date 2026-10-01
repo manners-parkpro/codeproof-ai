@@ -69,6 +69,35 @@ class AgentSection:
     """파서가 버린 지적 수. 🔴 버린 지적은 미탐지와 구별되지 않는다 - 세어서 싣는다."""
     packed_runs: int | None = None
     """앞 N회만 묶었으면 N (`pack --runs`). 실행 기록의 `runs` 는 세션 목표의 최댓값이다."""
+    agent: str = ""
+    """실행 기록의 `agent` (claude · codex). 비교할 짝을 고르는 축 하나."""
+    docstrings: str = ""
+    """실행 기록의 `docstrings` 손잡이 (keep · neutral). 비교할 짝을 고르는 다른 축."""
+    setup: tuple[tuple[str, str], ...] = ()
+    """실행 기록의 `SETUP_KEYS` 값. 손잡이 비교에 다른 설정이 섞였는지 본다."""
+
+
+SETUP_KEYS = (
+    "cli_version",
+    "model",
+    "effort",
+    "isolation",
+    "permission",
+    "instruction_hash",
+    "prompt_hash",
+    "schema_hash",
+    "runner_version",
+)
+"""손잡이 비교에서 같아야 하는 설정 - 다르면 차이에 그 설정도 들어 있다 (DESIGN §7.10c)."""
+
+
+def comparable(a: AgentSection, b: AgentSection) -> bool:
+    """🔴 축 하나만 다른 실행끼리 비교한다 - 리뷰어만 다르거나 docstring 손잡이만 다르거나.
+
+    둘 다 다르면(claude · keep 대 codex · neutral) 차이에 리뷰어와 손잡이가 함께 들어 있어
+    어느 쪽의 효과인지 말할 수 없다.
+    """
+    return (a.agent != b.agent) + (a.docstrings != b.docstrings) == 1
 
 
 def render_measurements(
@@ -105,7 +134,11 @@ def render_measurements(
         _pairs_section(run),
         _mix_section(run, samples),
         *(_agent_section(a, samples) for a in agents),
-        *(_comparison_section(a, b, samples) for a, b in combinations(agents, 2)),
+        *(
+            _comparison_section(a, b, samples)
+            for a, b in combinations(agents, 2)
+            if comparable(a, b)
+        ),
         _caveats(negatives, agents=bool(agents)),
     ]
     return "\n".join(parts).rstrip() + "\n"
@@ -230,6 +263,7 @@ def _agent_section(agent: AgentSection, samples: Sequence[LabeledSample]) -> str
         f"## 에이전트 층 — `{run.reviewer}`",
         "",
         f"리뷰어 `{m.model_id}` · 샘플당 **{m.sample_n}회** 실행{packed} · 짝 **{pairs}쌍** · "
+        f"docstring `{agent.docstrings or '기록 없음'}` · "
         f"캐시 `{m.cache_policy}` · 파서가 버린 지적 {agent.rejected}건",
         "",
         f"설정 `{m.params_sent.get('reviewer_config', '?')}`",
@@ -255,19 +289,29 @@ def _pp(d: Difference) -> tuple[str, str, str]:
 def _comparison_section(
     a: AgentSection, b: AgentSection, samples: Sequence[LabeledSample]
 ) -> str:
-    """🔴 두 리뷰어는 같은 짝 위의 차이로 비교한다 - 두 구간을 눈으로 겹쳐 보지 않는다.
+    """🔴 두 실행은 같은 짝 위의 차이로 비교한다 - 두 구간을 눈으로 겹쳐 보지 않는다.
 
-    설계(주 지표 · 주장 규칙 · 보조)는 수집 전에 선언했다 - DESIGN §7.10b.
+    축 하나만 다르다 (`comparable`). 리뷰어가 다르면 리뷰어 비교, 같으면 docstring 손잡이의
+    효과다. 설계(주 지표 · 주장 규칙 · 보조)는 수집 전에 선언했다 - DESIGN §7.10b · §7.10c.
     """
     ra, rb = a.run, b.run
+    knob = a.agent == b.agent
+    what = (
+        f"같은 리뷰어에서 **docstring 손잡이만** 다르다 (`{a.docstrings}` · `{b.docstrings}`)."
+        if knob
+        else f"docstring 손잡이 `{a.docstrings}` 에서 **리뷰어만** 다르다."
+    )
+    design = "§7.10b" if not knob and a.docstrings == "keep" else "§7.10c"
     lines = [
         f"## 에이전트 비교 — `{ra.reviewer}` vs `{rb.reviewer}`",
         "",
+        what,
+        "",
         f"주 지표는 `{HEADLINE_GRADER}` · slack 0 의 **단일 실행 기대값 짝 차이**다 "
         f"(`{ra.reviewer}` 에서 `{rb.reviewer}` 를 뺀 값). 같은 짝을 "
-        f"두 리뷰어가 **함께** 복원추출하는 부트스트랩 95% (재표집 {RESAMPLES} · 시드 {SEED}). "
+        f"두 실행이 **함께** 복원추출하는 부트스트랩 95% (재표집 {RESAMPLES} · 시드 {SEED}). "
         "구간이 0 을 품으면 이 코퍼스에서 구별되지 않는다. 설계는 수집 전에 선언했다 "
-        "(DESIGN §7.10b).",
+        f"(DESIGN {design}).",
         "",
         f"| 채점자 | `{ra.reviewer}` | `{rb.reviewer}` | 차이 | 95% 구간 | 판정 |",
         "|---|---:|---:|---:|---|---|",
@@ -301,12 +345,25 @@ def _comparison_section(
         "🔴 흔들린다 — slack 에 따라 차이의 방향이나 판정이 바뀐다. 단일 slack 값으로 결론을 "
         "쓰지 않는다." if len(seen) > 1 else "o slack 사다리 전체에서 방향과 판정이 같다.",
         "",
-        "- 도구 · 권한이 제품마다 다르다 (각 절의 설정 `permission=`) — 차이에는 모델과 "
+        _setup_note(a, b)
+        if knob
+        else "- 도구 · 권한이 제품마다 다르다 (각 절의 설정 `permission=`) — 차이에는 모델과 "
         "제품이 함께 들어 있다.",
         "- k-임계는 실행 횟수에 따라 뜻이 달라 **리뷰어 안에서만** 싣는다 (위 각 절).",
         "",
     ]
     return "\n".join(lines)
+
+
+def _setup_note(a: AgentSection, b: AgentSection) -> str:
+    """🔴 손잡이 말고 다른 설정이 섞였으면 그 차이도 손잡이 효과로 읽힌다 - 드러낸다."""
+    sa, sb = dict(a.setup), dict(b.setup)
+    differs = [
+        f"`{k}` {sa.get(k, '?')} → {sb.get(k, '?')}"
+        for k in SETUP_KEYS
+        if sa.get(k) != sb.get(k)
+    ]
+    return "- 손잡이 말고 다른 설정: " + (" · ".join(differs) if differs else "없음")
 
 
 def _views_table(

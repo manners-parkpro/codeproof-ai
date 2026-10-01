@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
+import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
@@ -189,6 +191,14 @@ class TestRunRecordRefusesMixing:
         assert len(diffs) == 1
         assert diffs[0].startswith("effort")
 
+    def test_different_docstring_knob_is_refused(self, tmp_path: Path) -> None:
+        """🔴 손잡이가 다르면 입력 코드가 다르다 - 이어 쓰면 keep 과 neutral 이 한 실행이 된다."""
+        path = tmp_path / "RUN.json"
+        ao.record(path, dict(self.FIELDS) | {"docstrings": "keep"})
+        diffs = ao.record(path, dict(self.FIELDS) | {"docstrings": "neutral"})
+        assert len(diffs) == 1
+        assert diffs[0].startswith("docstrings")
+
     def test_operational_values_are_not_config(self, tmp_path: Path) -> None:
         # 제한시간은 측정 조건이 아니다 - 바꿔도 이어 쓸 수 있어야 한다.
         path = tmp_path / "RUN.json"
@@ -319,3 +329,42 @@ class TestLastFindingsObject:
 
     def test_none_when_absent(self) -> None:
         assert ao.last_findings_object("no json here") is None
+
+
+class TestRunnerNeedsTheDocstringKnob:
+    """🔴 손잡이 이전의 내보내기로 돌리면 빈 값이 기록되어 keep 과 neutral 이 같은 설정이 된다.
+
+    실행기를 진짜 에이전트 없이 돌린다 - 가짜 `claude` 는 아무것도 하지 않는다 (DESIGN §7.10c).
+    """
+
+    RUNNER = SCRIPT.parent / "review-with-agent.sh"
+
+    def _run(self, tmp_path: Path, manifest: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        export = tmp_path / "export"
+        export.mkdir()
+        (export / "PROMPT.md").write_text("p\n", encoding="utf-8")
+        (export / "SCHEMA.json").write_text("{}\n", encoding="utf-8")
+        (export / "MANIFEST.json").write_text(json.dumps(manifest), encoding="utf-8")
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        fake = bin_dir / "claude"
+        fake.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+        fake.chmod(0o755)
+        env = os.environ | {"PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
+        return subprocess.run(
+            ["bash", str(self.RUNNER), "claude", str(export), str(tmp_path / "out"),
+             "--effort", "low"],
+            capture_output=True, text=True, env=env, timeout=60, check=False,
+        )
+
+    def test_an_export_without_the_knob_is_refused(self, tmp_path: Path) -> None:
+        r = self._run(tmp_path, {"prompt_hash": "p"})
+        assert r.returncode == 2
+        assert "docstrings 가 없다" in r.stderr
+
+    def test_an_export_with_the_knob_gets_past_the_check(self, tmp_path: Path) -> None:
+        """대조군 - 손잡이가 있으면 이 검사를 지나 다음 단계(CLI 판 확인)에서 멈춘다."""
+        r = self._run(tmp_path, {"prompt_hash": "p", "docstrings": "neutral"})
+        assert r.returncode != 0
+        assert "docstrings 가 없다" not in r.stderr
+        assert "버전을 읽지 못했다" in r.stderr, "가짜 claude 가 판을 내지 않으니 거기서 멈춘다"

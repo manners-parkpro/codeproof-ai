@@ -64,7 +64,7 @@ bandit -f json -o out/<sample_id>.json -r .
 uv run codeproof import --from out --name bandit --format bandit --identity "1.8"
 
 # 에이전트 CLI - 격리·모델 고정·기록은 실행기가 한다 (DESIGN §7.10)
-uv run codeproof export --out agent-in
+uv run codeproof export --out agent-in   # --docstrings neutral: 모듈 docstring 의 기전 문장을 지운다 (DESIGN §7.10c)
 ./scripts/review-with-agent.sh codex agent-in codex-out --effort low --runs 8   # effort 는 필수 · 반복 횟수는 수집 전에 선언 (F8)
 #   크레딧이 한정이면 --runs 를 1 → 2 → … → 8 로 한 칸씩 올려 이어 돈다 - 샘플마다 N회를 다 돌고 넘어가서 (CLAUDE A2b)
 #   벤더 최상위가 scripts/agent-models.json 의 기준과 다르면 멈춘다 - 따라갈지는 사람이 정한다
@@ -907,7 +907,7 @@ codeproof decoy new D0XX-짧은-설명
 
 # ── 외부 리뷰어 가져오기 (자격증명 불필요) ──────────────
 codeproof import --from out --name semgrep --identity "1.2.3"
-codeproof export --out agent-in                      # 에이전트 입력 (프롬프트 + 스키마)
+codeproof export --out agent-in                      # 에이전트 입력 (프롬프트 + 스키마 · --docstrings keep|neutral)
 scripts/review-with-agent.sh claude agent-in claude-out --effort low
 codeproof import --from claude-out --name claude-code --kind agent   # RUN.json 이 정본
 codeproof pack --from claude-out --out results/agent/claude-code     # 생성물에 싣는 묶음 (두 파일)

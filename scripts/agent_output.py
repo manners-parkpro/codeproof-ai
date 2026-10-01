@@ -38,6 +38,7 @@ CONFIG_KEYS = (
     "prompt_hash",
     "instruction_hash",
     "schema_hash",
+    "docstrings",  # 입력 코드가 달라지는 손잡이 (DESIGN §7.10c)
 )
 
 # 상자(무작위 임시 디렉터리) 밖을 봤다는 흔적. 🔴 실행을 막지 않고 **센다** -
