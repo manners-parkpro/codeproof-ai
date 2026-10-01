@@ -553,7 +553,8 @@ def attack(mod: ModuleType) -> bool:   # 결함이 실현되면 True
 > 경쟁은 줄 단위 추적(`race_window`)으로 창을 벌리지만 확률적이다 —
 > 그것 없이는 16스레드 × 5000회에 갱신 손실이 **0건**이었다.
 
-`corpus/decoys/` 를 편집하면 **훅이 자동으로 규격을 검사**하고, 위반이면 되돌린다
+`corpus/decoys/` 를 편집하면 **훅이 자동으로 규격을 검사**하고, 위반이면 그 이유를 Claude 에게
+돌려줘 고치게 한다 — 편집 자체를 되돌리지는 않는다
 (`.claude/hooks/decoy-validate-guard.sh`). 훅은 형식 12규칙(`proof.py` 존재 포함)만
 보고, 근거가 참인지는 테스트가 돌려서 본다.
 

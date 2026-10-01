@@ -675,6 +675,7 @@ attack(twin)  is True    # 🔴 공격이 실제로 결함을 잡을 수 있다
 |---|---|---|
 | V2~V11 | 형식 — 근거 길이 · 가드 가시성 · 짝 구조 | `decoy validate` (훅 · 테스트가 강제) |
 | **V12** | **proof.py 존재와 서명** | `decoy validate` |
+| **V13** | **`guard_lines` 가 `guard_symbol` 과 관계된 자리인가** | `decoy validate` |
 | **반증 실행** | **근거가 참인가** | `pytest tests/corpus/test_proofs.py` |
 | AST 구조 증명 | 「경로가 **없다**」류 주장 | `tests/corpus/test_safety_claims.py` |
 
@@ -724,7 +725,8 @@ uv run codeproof decoy stats
 ### G3c. 가드 훅이 형식만 막는다
 
 `.claude/hooks/decoy-validate-guard.sh` 가 `corpus/decoys/` 편집 시
-`decoy validate --strict` 를 돌리고, 위반이면 `decision: "block"` 으로 되돌린다.
+`decoy validate --strict` 를 돌리고, 위반이면 `decision: "block"` 으로 이유를 Claude 에게 돌려준다 —
+편집 자체는 되돌리지 않는다.
 
 🔴 **형식(V2~V13)만 잡는다.** G3a 의 「근거가 참인지」는 여전히 사람 몫이다.
    훅이 통과했다고 decoy 가 옳은 것이 아니다 - 바닥선이지 충분조건이 아니다.
