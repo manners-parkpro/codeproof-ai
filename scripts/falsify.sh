@@ -57,7 +57,10 @@ SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict conv
            widened-twin report-widened
            model-drift multirun-views view-regrade view-copy multirun-labels run-gap short-runs
            sweep-ladder sensitivity-views report-partial report-labels pack-partial pack-leftover
-           mix-decoy-unit plan-coverage plan-design)
+           mix-decoy-unit plan-coverage plan-design
+           report-collected report-packed-samples report-bundle-record report-corpus-gone
+           report-half-pair compare-same-samples compare-skip-note pack-records-samples
+           pack-stray-samples)
 
 claim_layering() { echo "런타임(analysis)은 정답 라벨(eval)을 볼 수 없다 — A1"; }
 break_layering() {
@@ -309,7 +312,7 @@ guard_sensitivity-views() { uv run pytest tests/cli/test_commands.py -q -k sensi
 
 claim_report-partial() { echo "생성물에는 모든 회차가 있는 에이전트 실행만 싣는다 — F6"; }
 break_report-partial() {
-  perl -0pi -e 's/(samples, box, name=src\.name, kind=ReviewerKind\.AGENT, )allow_partial=False$/${1}allow_partial=True  # falsify.sh/m' \
+  perl -0pi -e 's/(collected, box, name=src\.name, kind=ReviewerKind\.AGENT, )allow_partial=False$/${1}allow_partial=True  # falsify.sh/m' \
     src/codeproof_ai/cli.py
 }
 guard_report-partial() { uv run pytest tests/cli/test_commands.py -q -k short_agent_runs; }
@@ -344,6 +347,50 @@ guard_plan-coverage() { uv run pytest tests/corpus/test_plan.py -q -k planned_ce
 claim_plan-design() { echo "DESIGN 의 칸별 목표는 corpus/plan.py 와 같다 — 편차를 한쪽에만 적지 않는다 (DESIGN §3.5)"; }
 break_plan-design() { perl -0pi -e 's/(caller_held_lock` \| \S+ \| 4\S+?\*\*)10(\*\*)/${1}9$2/' docs/DESIGN.md; }
 guard_plan-design() { uv run pytest tests/docs/test_consistency.py -q -k design_table_targets; }
+
+claim_report-collected() { echo "에이전트 실행은 잰 샘플로만 재생한다 — 코퍼스가 자라도 숫자가 그대로다 (F6)"; }
+break_report-collected() {
+  perl -0pi -e 's/^(\s+)collected, box, name=src\.name/${1}samples, box, name=src.name/m' src/codeproof_ai/cli.py
+}
+guard_report-collected() { uv run pytest tests/cli/test_commands.py -q -k stay_on_the_samples; }
+
+claim_report-packed-samples() { echo "잰 샘플 기록이 없는 묶음은 싣지 않는다 — 늘어난 코퍼스와 끊긴 실행을 가를 수 없다 (F6)"; }
+break_report-packed-samples() {
+  perl -0pi -e 's/    if not \(isinstance\(packed, list\)/    if False and not (isinstance(packed, list)/' src/codeproof_ai/cli.py
+}
+guard_report-packed-samples() { uv run pytest tests/cli/test_commands.py -q -k without_packed_samples; }
+
+claim_report-bundle-record() { echo "묶음의 행은 잰 샘플 기록과 같아야 한다 — 빠지면 끊긴 실행, 남으면 늘어난 쌍으로 잘못 적힌다 (F6)"; }
+break_report-bundle-record() { perl -0pi -e 's/^    if rows != listed:$/    if False:  # falsify.sh/m' src/codeproof_ai/cli.py; }
+guard_report-bundle-record() { uv run pytest tests/cli/test_commands.py -q -k differs_from_its_record; }
+
+claim_report-corpus-gone() { echo "잰 샘플이 코퍼스에서 빠지면 싣지 않는다 — 빼고 재생하면 비교 대상이 조용히 준다 (F6)"; }
+break_report-corpus-gone() { perl -0pi -e 's/^    if gone:$/    if False:  # falsify.sh/m' src/codeproof_ai/cli.py; }
+guard_report-corpus-gone() { uv run pytest tests/cli/test_commands.py -q -k missing_from_the_corpus; }
+
+claim_report-half-pair() { echo "잰 샘플 목록 안에서 짝이 닫혀 있어야 한다 — 반쪽 짝은 채점에서 조용히 빠진다 (F5 · F6)"; }
+break_report-half-pair() { perl -0pi -e 's/^    if half:$/    if False:  # falsify.sh/m' src/codeproof_ai/cli.py; }
+guard_report-half-pair() { uv run pytest tests/cli/test_commands.py -q -k half_pair_in_the_record; }
+
+claim_compare-same-samples() { echo "잰 샘플이 다른 두 실행은 비교하지 않는다 — 한쪽에만 있는 짝을 빼면 비교 대상이 바뀐다 (F6)"; }
+break_compare-same-samples() {
+  perl -0pi -e 's/return _one_axis\(a, b\) and _measured\(a\) == _measured\(b\)/return _one_axis(a, b)/' src/codeproof_ai/eval/report.py
+}
+guard_compare-same-samples() { uv run pytest tests/cli/test_commands.py -q -k different_samples; }
+
+claim_compare-skip-note() { echo "잰 샘플이 달라 뺀 비교는 생성물에 적는다 — 말없이 빼면 비교가 왜 없는지 모른다"; }
+break_compare-skip-note() {
+  perl -0pi -e 's/if _one_axis\(a, b\) and _measured\(a\) != _measured\(b\)/if False/' src/codeproof_ai/eval/report.py
+}
+guard_compare-skip-note() { uv run pytest tests/cli/test_commands.py -q -k different_samples; }
+
+claim_pack-records-samples() { echo "pack 은 묶은 샘플을 기록에 적는다 — report 가 그 샘플로만 재생한다 (F6)"; }
+break_pack-records-samples() { perl -0pi -e 's/^    record\["packed_samples"\] = .*\n//m' src/codeproof_ai/cli.py; }
+guard_pack-records-samples() { uv run pytest tests/cli/test_commands.py -q -k records_the_samples; }
+
+claim_pack-stray-samples() { echo "pack 은 코퍼스 밖 샘플이 섞인 실행을 묶지 않는다 — 검증 안 된 샘플이 기록에 실린다 (F6)"; }
+break_pack-stray-samples() { perl -0pi -e 's/^    if stray:$/    if False:  # falsify.sh/m' src/codeproof_ai/cli.py; }
+guard_pack-stray-samples() { uv run pytest tests/cli/test_commands.py -q -k samples_outside_the_corpus; }
 
 claim_report-labels() { echo "생성물의 다회 실행 숫자는 관점마다 라벨을 붙인다 — F3 · F6"; }
 break_report-labels() {

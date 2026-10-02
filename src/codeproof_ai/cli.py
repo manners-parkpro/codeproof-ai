@@ -58,6 +58,7 @@ from codeproof_ai.reviewers.imported import (
     BUNDLE_FILE,
     RUN_FILE,
     ImportedReviewer,
+    bundle_sample_ids,
     pack_runs,
     read_run_record,
     unpack_runs,
@@ -969,12 +970,61 @@ def _dispatch_decoy(args: argparse.Namespace) -> int:
     return _cmd_decoy_new(corpus, args.decoy_id)
 
 
+def _collected(src: Path, samples: list[LabeledSample]) -> tuple[list[LabeledSample], int] | None:
+    """묶음이 잰 샘플과, 코퍼스에 있는데 재지 않은 쌍 수. 기록 · 묶음 · 코퍼스가 어긋나면 None.
+
+    🔴 완결을 **지금** 코퍼스로 재면 쌍 하나만 더해도 모든 묶음이 「부분 실행」이 된다
+       [실측 · 적용 범위 120/122]. 그렇다고 묶음의 행에서 집합을 뽑으면, 샘플이 통째로 빠진
+       끊긴 실행이 「작은 코퍼스」로 통과한다. 그래서 pack 이 잰 샘플을 적고(`packed_samples`)
+       report 는 그 샘플만 재생한다 - 그 안에서는 지금처럼 엄격하다 (`_replay`).
+    """
+    packed = (read_run_record(src) or {}).get("packed_samples")
+    if not (isinstance(packed, list) and packed and all(isinstance(p, str) for p in packed)):
+        print(
+            f"  🔴 {src / RUN_FILE} 에 packed_samples 가 없다 - 어느 샘플을 쟀는지 모르면 수집 뒤 "
+            "늘어난 코퍼스와 끊긴 실행을 가를 수 없다. `codeproof pack` 으로 다시 묶는다",
+            file=sys.stderr,
+        )
+        return None
+    listed = set(packed)
+    rows = bundle_sample_ids((src / BUNDLE_FILE).read_text(encoding="utf-8"))
+    if rows != listed:
+        print(
+            f"  🔴 {src} 의 묶음이 packed_samples 와 다르다 - 빠진 샘플 "
+            f"{sorted(listed - rows)[:3]} · 목록 밖 샘플 {sorted(rows - listed)[:3]}",
+            file=sys.stderr,
+        )
+        return None
+    gone = sorted(listed - {s.sample_id for s in samples})
+    if gone:
+        print(
+            f"  🔴 {src} 가 잰 샘플 {len(gone)}개가 코퍼스에 없다 (예: {gone[:3]}) - 코퍼스에서 "
+            "빠졌거나 다른 코퍼스다. 빼고 재생하면 비교 대상이 조용히 줄어든다",
+            file=sys.stderr,
+        )
+        return None
+    collected = [s for s in samples if s.sample_id in listed]
+    # 🔴 재생 집합이 코퍼스 전체이던 때는 짝이 늘 닫혀 있었다. 목록으로 고르면 아니다 -
+    #    반쪽 짝은 `score_pairs` 가 조용히 버린다 [실측: 「짝 59쌍」 · 경고 없음].
+    half = sorted(s.sample_id for s in collected if s.paired_with not in listed)
+    if half:
+        print(
+            f"  🔴 {src} 의 packed_samples 에 짝이 반쪽인 샘플이 있다 (예: {half[:3]}) - "
+            "반쪽 짝은 채점에서 조용히 빠진다",
+            file=sys.stderr,
+        )
+        return None
+    unmeasured = sum(1 for s in samples if s.is_proven_safe and s.sample_id not in listed)
+    return collected, unmeasured
+
+
 def _agent_sections(root: Path, samples: list[LabeledSample]) -> list[AgentSection] | None:
     """저장소에 둔 에이전트 실행을 import 와 **같은 경로**로 재생한다. 못 하면 None.
 
     🔴 `runs.db` 가 아니라 저장소의 묶음에서 읽는다 - `runs.db` 는 로컬이라 클린 클론에서
        `report --check` 가 재현되지 않는다. 층은 디렉터리가 정한다 (`agent`).
-    🔴 부분 실행은 싣지 않는다 - 모자란 회차가 「지적 0건」으로 실린다 (F6).
+    🔴 실행은 **잰 샘플**(`packed_samples`)로만 재생한다 - 코퍼스가 자라도 숫자가 그대로다.
+       그 안의 부분 실행은 싣지 않는다 - 모자란 회차가 「지적 0건」으로 실린다 (F6).
     """
     if not root.is_dir():
         return []
@@ -986,16 +1036,20 @@ def _agent_sections(root: Path, samples: list[LabeledSample]) -> list[AgentSecti
                 file=sys.stderr,
             )
             return None
+        found = _collected(src, samples)
+        if found is None:
+            return None
+        collected, unmeasured = found
         with tempfile.TemporaryDirectory() as tmp:
             box = Path(tmp)  # 분석기의 materialize 와 같다 - 실행기 출력 모양으로 되돌려 읽는다
             shutil.copyfile(src / RUN_FILE, box / RUN_FILE)
             unpack_runs(src / BUNDLE_FILE, box)
             replay = _replay(
-                samples, box, name=src.name, kind=ReviewerKind.AGENT, allow_partial=False
+                collected, box, name=src.name, kind=ReviewerKind.AGENT, allow_partial=False
             )
         if replay is None:
             print(
-                f"  🔴 {src} 를 싣지 않는다 - 생성물에는 모든 샘플의 모든 회차가 있는 "
+                f"  🔴 {src} 를 싣지 않는다 - 생성물에는 잰 샘플의 모든 회차가 있는 "
                 "실행만 싣는다. 이어서 돌려 채우거나 디렉터리를 뺀다.",
                 file=sys.stderr,
             )
@@ -1012,6 +1066,7 @@ def _agent_sections(root: Path, samples: list[LabeledSample]) -> list[AgentSecti
                 agent=str(record.get("agent", "")),
                 docstrings=str(record.get("docstrings", "")),
                 setup=tuple((k, str(record.get(k, ""))) for k in SETUP_KEYS),
+                unmeasured_pairs=unmeasured,
             )
         )
     return sections
@@ -1025,6 +1080,8 @@ def _cmd_pack(corpus: Path, src: Path, out: Path, *, runs: int | None = None) ->
 
     `runs` 는 앞 N회만 묶는다 - 실행 기록의 `runs` 는 세션 목표의 최댓값이라 실제로
     묶은 회차 수와 다를 수 있다. 그래서 묶음의 기록에 `packed_runs` 를 따로 적는다.
+
+    묶은 샘플은 `packed_samples` 로 적는다 - 코퍼스가 자라도 report 가 이 샘플로만 재생한다.
     """
     if runs is not None and runs < 1:
         print(f"--runs 는 1 이상이다 (받은 값 {runs})", file=sys.stderr)
@@ -1038,6 +1095,20 @@ def _cmd_pack(corpus: Path, src: Path, out: Path, *, runs: int | None = None) ->
     )
     if replayed is None:
         return 2
+    # 🔴 묶음은 재생으로 **검증한** 샘플만이다. 실행기 출력에 코퍼스 밖 샘플이 섞이면 다른
+    #    코퍼스로 돈 실행이다 - 그대로 묶으면 검증 안 된 샘플(반쪽 짝 포함)이 기록에 실린다.
+    packed = sorted(s.sample_id for s in replayed[3])
+    body = pack_runs(src, runs)
+    # 코퍼스로 거른다 - 검증 목록(`packed`)으로 거르면 모자란 샘플까지 「코퍼스 밖」으로 잘못 부른다
+    # [실측: falsify pack-partial 이 그 오진 때문에 공허해졌다].
+    stray = sorted(bundle_sample_ids(body) - {s.sample_id for s in labeled})
+    if stray:
+        print(
+            f"{src} 에 코퍼스 밖 샘플이 있다 (예: {stray[:3]}) - 다른 코퍼스로 돈 실행이다. "
+            "그 코퍼스로 묶는다",
+            file=sys.stderr,
+        )
+        return 2
     keep = {RUN_FILE, BUNDLE_FILE}
     extra = sorted(p.name for p in out.iterdir() if p.name not in keep) if out.is_dir() else []
     if extra:
@@ -1045,16 +1116,15 @@ def _cmd_pack(corpus: Path, src: Path, out: Path, *, runs: int | None = None) ->
         print(f"{out} 에 다른 파일이 있다 (예: {extra[:3]}) - 비우고 다시 묶는다", file=sys.stderr)
         return 2
     out.mkdir(parents=True, exist_ok=True)
-    if runs is None:
-        shutil.copyfile(src / RUN_FILE, out / RUN_FILE)
-    else:
-        record = json.loads((src / RUN_FILE).read_text(encoding="utf-8"))
-        record["packed_runs"] = str(runs)
-        (out / RUN_FILE).write_text(
-            json.dumps(record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-        )
-    body = pack_runs(src, runs)
     (out / BUNDLE_FILE).write_text(body, encoding="utf-8")
+    record = json.loads((src / RUN_FILE).read_text(encoding="utf-8"))
+    if runs is not None:
+        record["packed_runs"] = str(runs)
+    # 🔴 묶은 샘플을 적는다 - 없으면 「수집 뒤 늘어난 코퍼스」와 「끊긴 실행」을 가를 수 없다 (F6).
+    record["packed_samples"] = packed
+    (out / RUN_FILE).write_text(
+        json.dumps(record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
     rows = body.count("\n")  # splitlines() 는 문구 안의 U+2028 에서도 끊는다 - unpack_runs
     print(f"{out} 를 썼다: {RUN_FILE} + {BUNDLE_FILE} ({rows}회차)")
     return 0

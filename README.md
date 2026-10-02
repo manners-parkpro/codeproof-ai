@@ -75,6 +75,7 @@ uv run codeproof pack --from codex-out --out results/agent/codex-cli
 #   생성물(docs/MEASUREMENTS.md)에 싣는 묶음 - RUN.json + findings.jsonl 두 파일 (raw/ 는 빼고).
 #   report 가 풀어서 import 와 같은 경로로 재생한다. 회차가 모자란 실행은 묶지도 싣지도 않는다
 #   회차가 고르지 않으면 --runs N 으로 앞 N회만 묶는다 - N 은 수집 전에 선언한 값 (DESIGN §7.10b)
+#   묶은 샘플을 RUN.json 의 packed_samples 로 적는다 - 코퍼스가 자라도 그 샘플로만 재생한다 (§7.10)
 ```
 
 ⚠️ **`agent` 와 `model_api` 는 섞어서 집계하지 않는다.** 에이전트는 파일 탐색·다회 턴·

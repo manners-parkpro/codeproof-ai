@@ -13,7 +13,7 @@ import json
 import re
 import shutil
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
@@ -22,8 +22,15 @@ from codeproof_ai.eval.loader import PRESENTED_FILENAME
 from codeproof_ai.reviewers.imported import BUNDLE_FILE, RUN_FILE, pack_runs
 from codeproof_ai.store.sqlite import Store
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
 ROOT = Path(__file__).resolve().parents[2]
 DECOYS = ROOT / "corpus" / "decoys"
+ADDED_PAIR = "D998-added-after-collection"
+"""묶은 뒤 코퍼스에 더한 쌍 (테스트가 만든다)."""
+GONE = "D006-emptiness-narrowed"
+"""코퍼스나 묶음에서 빼 보는 쌍 - small_corpus 의 하나."""
 
 
 @pytest.fixture
@@ -63,6 +70,48 @@ def _runner_output(
     }
     (src / RUN_FILE).write_text(json.dumps(run), encoding="utf-8")
     return src
+
+
+def _bundle(src: Path, dest: Path) -> None:
+    """`pack` 을 거치지 않은 묶음 - 모자란 묶음도 만들어야 report 가 거부하는지 본다.
+
+    pack 처럼 묶은 샘플을 기록에 적는다 (`packed_samples`). 🔴 목록은 실행기 출력의 파일
+    이름에서 뽑는다 - 검사 대상(`bundle_sample_ids`)으로 만들면 그것이 틀려도 같이 맞는다.
+    """
+    dest.mkdir(parents=True)
+    (dest / BUNDLE_FILE).write_text(pack_runs(src), encoding="utf-8")
+    record = json.loads((src / RUN_FILE).read_text(encoding="utf-8"))
+    record["packed_samples"] = sorted(
+        {p.name.rsplit(".", 2)[0] for p in src.iterdir() if p.name != RUN_FILE}
+    )
+    (dest / RUN_FILE).write_text(json.dumps(record), encoding="utf-8")
+
+
+def _drop_rows(bundle: Path, sample_id: str) -> None:
+    """묶음에서 한 샘플의 행을 지운다 - 끊긴 실행 · 손 편집의 모양."""
+    rows = (bundle / BUNDLE_FILE).read_text(encoding="utf-8").split("\n")
+    kept = [r for r in rows if r and json.loads(r)["sample_id"] != sample_id]
+    assert len(kept) < len([r for r in rows if r]), f"지울 행이 없다: {sample_id}"
+    (bundle / BUNDLE_FILE).write_text("".join(f"{r}\n" for r in kept), encoding="utf-8")
+
+
+def _edit_record(bundle: Path, edit: Callable[[dict[str, Any]], object]) -> None:
+    run = bundle / RUN_FILE
+    record = json.loads(run.read_text(encoding="utf-8"))
+    edit(record)
+    run.write_text(json.dumps(record), encoding="utf-8")
+
+
+def _static_report(corpus: Path, out: Path, *extra: str) -> int:
+    """정적분석기 절만 싣는 생성물 - 저장소의 에이전트 묶음(기본값)을 끌어오지 않는다.
+
+    🔴 기본값을 따르면 4쌍 코퍼스에 120샘플 묶음을 재생한다. 묶음은 잰 샘플로만 재생하므로
+       (`packed_samples`) 그건 「코퍼스에 없다」로 거부된다 - 전에는 4쌍만 조용히 재생했다.
+    """
+    agents = out.parent / "no-agents"
+    return main([
+        "report", "--corpus", str(corpus), "--agents", str(agents), "--out", str(out), *extra,
+    ])
 
 
 class TestExitCodes:
@@ -627,7 +676,7 @@ class TestReport:
         self, small_corpus: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         out = tmp_path / "M.md"
-        assert main(["report", "--corpus", str(small_corpus), "--out", str(out)]) == 0
+        assert _static_report(small_corpus, out) == 0
         body = out.read_text(encoding="utf-8")
         assert "생성된 파일" in body.splitlines()[0]
         assert "codeproof report" in body.splitlines()[0]
@@ -637,8 +686,8 @@ class TestReport:
     def test_output_is_stable_across_runs(self, small_corpus: Path, tmp_path: Path) -> None:
         """🔴 시각·run_id 를 넣지 않는다 - 넣으면 「최신인가」를 물을 수 없다."""
         a, b = tmp_path / "a.md", tmp_path / "b.md"
-        main(["report", "--corpus", str(small_corpus), "--out", str(a)])
-        main(["report", "--corpus", str(small_corpus), "--out", str(b)])
+        _static_report(small_corpus, a)
+        _static_report(small_corpus, b)
         assert a.read_text(encoding="utf-8") == b.read_text(encoding="utf-8")
 
     def test_it_does_not_change_with_the_harness_commit(
@@ -654,7 +703,7 @@ class TestReport:
         지문)를 싣는다. 실행 단위 추적은 runs.db 가 한다.
         """
         out = tmp_path / "M.md"
-        main(["report", "--corpus", str(small_corpus), "--out", str(out)])
+        _static_report(small_corpus, out)
         body = out.read_text(encoding="utf-8")
 
         assert "config_hash" not in body, (
@@ -669,13 +718,13 @@ class TestReport:
     ) -> None:
         out = tmp_path / "M.md"
         out.write_text("낡은 내용\n", encoding="utf-8")
-        assert main(["report", "--corpus", str(small_corpus), "--out", str(out), "--check"]) == 1
+        assert _static_report(small_corpus, out, "--check") == 1
         assert "낡았다" in capsys.readouterr().err
 
     def test_check_passes_on_a_fresh_file(self, small_corpus: Path, tmp_path: Path) -> None:
         out = tmp_path / "M.md"
-        main(["report", "--corpus", str(small_corpus), "--out", str(out)])
-        assert main(["report", "--corpus", str(small_corpus), "--out", str(out), "--check"]) == 0
+        _static_report(small_corpus, out)
+        assert _static_report(small_corpus, out, "--check") == 0
 
     def test_missing_corpus_is_exit_2(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -701,9 +750,7 @@ class TestReport:
         """
         src = _runner_output(root, corpus, runs, short)
         dest = root / "agents" / "claude-code"
-        dest.mkdir(parents=True)
-        shutil.copyfile(src / RUN_FILE, dest / RUN_FILE)
-        (dest / BUNDLE_FILE).write_text(pack_runs(src), encoding="utf-8")
+        _bundle(src, dest)
         return dest.parent
 
     def _report(self, corpus: Path, agents: Path, out: Path) -> int:
@@ -754,10 +801,7 @@ class TestReport:
     def _pack(self, agents: Path, root: Path, corpus: Path, name: str, **run: Any) -> None:
         (root / name).mkdir()
         src = _runner_output(root / name, corpus, run.pop("runs", 1), **run)
-        dest = agents / name
-        dest.mkdir(parents=True)
-        shutil.copyfile(src / RUN_FILE, dest / RUN_FILE)
-        (dest / BUNDLE_FILE).write_text(pack_runs(src), encoding="utf-8")
+        _bundle(src, agents / name)
 
     def test_comparisons_vary_one_axis_only(self, small_corpus: Path, tmp_path: Path) -> None:
         """🔴 리뷰어와 docstring 손잡이가 **둘 다** 다른 실행은 비교하지 않는다 (DESIGN §7.10c).
@@ -854,6 +898,139 @@ class TestReport:
         assert self._report(small_corpus, agents, tmp_path / "M.md") == 2
         assert "codeproof pack" in capsys.readouterr().err
 
+    def _grown(self, corpus: Path, root: Path) -> Path:
+        """코퍼스 사본에 쌍 하나를 더한다 - 내용은 같고 decoy_id 만 새것이다.
+
+        🔴 id 를 바꿔야 새 샘플이다 - [실측] 디렉터리만 복사했을 때는 같은 id 라 늘지 않았다.
+        """
+        grown = root / "grown"
+        shutil.copytree(corpus, grown)
+        new = grown / ADDED_PAIR
+        shutil.copytree(grown / "D013-eval-on-literal", new)
+        meta = new / "meta.toml"
+        text = meta.read_text(encoding="utf-8")
+        renamed = text.replace('decoy_id = "D013-eval-on-literal"', f'decoy_id = "{ADDED_PAIR}"')
+        assert renamed != text, "id 를 못 바꾸면 쌍이 늘지 않는다"
+        meta.write_text(renamed, encoding="utf-8")
+        return grown
+
+    @staticmethod
+    def _agent_part(body: str) -> str:
+        """에이전트 층 · 비교 절. 정적 절과 「읽는 법」(음성 수 경고)은 코퍼스를 따라 바뀐다."""
+        return body.split("## 에이전트 층", 1)[1].split("## 이 숫자를 읽는 법", 1)[0]
+
+    def test_agent_runs_stay_on_the_samples_they_measured(
+        self, small_corpus: Path, tmp_path: Path
+    ) -> None:
+        """🔴 코퍼스가 자라도 에이전트 숫자는 그대로다 - 실행은 잰 샘플만 재생한다 (F6).
+
+        [실측] 완결을 지금 코퍼스로 쟀을 때는 쌍 하나를 더하자 묶음 4개가 전부 「부분 실행」으로
+        거부됐다 (적용 범위 120/122). 늘어난 쌍을 「지적 0건」으로 세면 미측정이 미탐지가 된다.
+        """
+        agents = tmp_path / "agents"
+        for name, agent in (("claude-code", "claude"), ("codex-cli", "codex")):
+            self._pack(agents, tmp_path, small_corpus, name, runs=2, agent=agent)
+        before, after = tmp_path / "before.md", tmp_path / "after.md"
+        assert self._report(small_corpus, agents, before) == 0
+        assert self._report(self._grown(small_corpus, tmp_path), agents, after) == 0
+        b, a = before.read_text(encoding="utf-8"), after.read_text(encoding="utf-8")
+        note = " (코퍼스의 다른 1쌍은 이 실행에 없다)"
+        assert a.count(note) == 2, "에이전트 절마다 늘어난 쌍을 적는다"
+        assert self._agent_part(a).replace(note, "") == self._agent_part(b), (
+            "잰 쌍의 숫자는 그대로다"
+        )
+        assert "## 에이전트 비교" in self._agent_part(a), "같은 샘플을 잰 두 실행은 계속 비교한다"
+        assert a.split("## 에이전트 층", 1)[0] != b.split("## 에이전트 층", 1)[0], (
+            "대조군 - 정적 절은 늘어난 코퍼스를 센다"
+        )
+
+    def test_a_bundle_without_packed_samples_is_refused(
+        self, small_corpus: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """🔴 어느 샘플을 쟀는지 모르면 늘어난 코퍼스와 끊긴 실행을 가를 수 없다 - 싣지 않는다."""
+        agents = self._agents(tmp_path, small_corpus, runs=2)
+        _edit_record(agents / "claude-code", lambda r: r.pop("packed_samples"))
+        out = tmp_path / "M.md"
+        assert self._report(small_corpus, agents, out) == 2
+        assert "packed_samples 가 없다" in capsys.readouterr().err
+        assert not out.exists()
+
+    def test_a_measured_sample_missing_from_the_corpus_is_refused(
+        self, small_corpus: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """🔴 잰 쌍이 코퍼스에서 빠졌으면 빼고 재생하지 않는다 - 비교 대상이 조용히 준다."""
+        agents = self._agents(tmp_path, small_corpus, runs=2)
+        shrunk = tmp_path / "shrunk"
+        shutil.copytree(small_corpus, shrunk)
+        shutil.rmtree(shrunk / GONE)
+        out = tmp_path / "M.md"
+        assert self._report(shrunk, agents, out) == 2
+        err = capsys.readouterr().err
+        assert "코퍼스에 없다" in err
+        assert GONE in err
+        assert not out.exists()
+
+    @pytest.mark.parametrize("side", ["record", "bundle"], ids=["목록 밖 샘플", "빠진 샘플"])
+    def test_a_bundle_that_differs_from_its_record_is_refused(
+        self, small_corpus: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str], side: str
+    ) -> None:
+        """🔴 기록(`packed_samples`)과 묶음의 행이 같아야 한다 - 다르면 무엇을 쟀는지 말할 수 없다.
+
+        빠진 샘플은 끊긴 실행이고, 목록 밖 샘플은 「이 실행에 없는 쌍」으로 잘못 적힌다.
+        """
+        agents = self._agents(tmp_path, small_corpus, runs=2)
+        bundle = agents / "claude-code"
+        if side == "record":
+            _edit_record(bundle, lambda r: r["packed_samples"].remove(GONE))
+        else:
+            _drop_rows(bundle, GONE)
+        out = tmp_path / "M.md"
+        assert self._report(small_corpus, agents, out) == 2
+        err = capsys.readouterr().err
+        assert "packed_samples 와 다르다" in err
+        assert GONE in err
+        assert not out.exists()
+
+    def test_a_half_pair_in_the_record_is_refused(
+        self, small_corpus: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """🔴 목록 안에서 짝이 닫혀 있어야 한다 - 반쪽 짝은 `score_pairs` 가 조용히 버린다.
+
+        [실측] 실제 묶음 둘의 행과 목록에서 twin 하나를 지우자 경고 없이 「짝 59쌍」이 실렸다.
+        """
+        agents = self._agents(tmp_path, small_corpus, runs=2)
+        bundle = agents / "claude-code"
+        twin = f"{GONE}#twin"
+        _drop_rows(bundle, twin)
+        _edit_record(bundle, lambda r: r["packed_samples"].remove(twin))
+        out = tmp_path / "M.md"
+        assert self._report(small_corpus, agents, out) == 2
+        err = capsys.readouterr().err
+        assert "짝이 반쪽인 샘플이 있다" in err
+        assert GONE in err
+        assert not out.exists()
+
+    def test_runs_on_different_samples_are_not_compared(
+        self, small_corpus: Path, tmp_path: Path
+    ) -> None:
+        """🔴 잰 샘플이 다른 실행은 비교하지 않는다 - 한쪽에만 있는 짝을 빼면 비교 대상이 바뀐다.
+
+        수집 시점이 다르면 코퍼스가 달랐다. `difference` 는 짝이 다르면 거부한다.
+        """
+        agents = tmp_path / "agents"
+        older = tmp_path / "older"  # 쌍이 하나 적던 때의 코퍼스
+        shutil.copytree(small_corpus, older)
+        shutil.rmtree(older / GONE)
+        self._pack(agents, tmp_path, older, "claude-code", agent="claude")
+        self._pack(agents, tmp_path, small_corpus, "codex-cli", agent="codex")
+        out = tmp_path / "M.md"
+        assert self._report(small_corpus, agents, out) == 0
+        body = out.read_text(encoding="utf-8")
+        assert "## 에이전트 비교" not in body
+        assert body.count("(코퍼스의 다른 1쌍은 이 실행에 없다)") == 1
+        # 🔴 말없이 빼면 비교가 왜 없는지 모른다 - 뺀 이유를 싣는다.
+        assert "잰 샘플이 달라 비교하지 않았다 — `claude-code` (3쌍) vs `codex-cli` (4쌍)." in body
+
 
 class TestPack:
     """저장소에 싣는 묶음 - 파일 961개 대신 둘. 부분 실행은 묶지 않는다."""
@@ -912,6 +1089,45 @@ class TestPack:
         ]) == 0
         assert "## 에이전트 층 — `claude-code`" in report.read_text(encoding="utf-8")
         capsys.readouterr()
+
+    def test_pack_records_the_samples_it_packed(
+        self, small_corpus: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """🔴 묶은 샘플을 기록에 적는다 - 코퍼스가 자라도 report 가 그 샘플로만 재생한다 (F6)."""
+        out = tmp_path / "out"
+        assert self._pack(small_corpus, _runner_output(tmp_path, small_corpus, runs=2), out) == 0
+        record = json.loads((out / RUN_FILE).read_text(encoding="utf-8"))
+        expected = sorted(
+            f"{d.name}{side}" for d in small_corpus.iterdir() for side in ("", "#twin")
+        )
+        assert record["packed_samples"] == expected
+        capsys.readouterr()
+
+    @pytest.mark.parametrize(
+        "extra", [("D998-extra", "D998-extra#twin"), ("D998-extra",)], ids=["쌍", "반쪽"]
+    )
+    def test_pack_refuses_samples_outside_the_corpus(
+        self,
+        small_corpus: Path,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+        extra: tuple[str, ...],
+    ) -> None:
+        """🔴 묶음은 재생으로 검증한 샘플만이다 - 코퍼스 밖 샘플이 섞이면 다른 코퍼스로 돈 실행이다.
+
+        [실측] 그대로 묶었을 때는 반쪽 여분이 기록에 실렸고, 나중에 그 쌍을 코퍼스에 더하자
+        report 가 경고 없이 반쪽 짝을 버리고 「짝 4쌍」을 냈다.
+        """
+        src = _runner_output(tmp_path, small_corpus, runs=2)
+        for sid in extra:
+            for i in range(2):
+                shutil.copyfile(src / f"D013-eval-on-literal.{i}.json", src / f"{sid}.{i}.json")
+        out = tmp_path / "out"
+        assert self._pack(small_corpus, src, out) == 2
+        err = capsys.readouterr().err
+        assert "코퍼스 밖 샘플이 있다" in err
+        assert "D998-extra" in err
+        assert not out.exists()
 
     def test_pack_refuses_short_runs(
         self, small_corpus: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]

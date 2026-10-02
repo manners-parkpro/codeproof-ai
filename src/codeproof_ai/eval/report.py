@@ -75,6 +75,9 @@ class AgentSection:
     """실행 기록의 `docstrings` 손잡이 (keep · neutral). 비교할 짝을 고르는 다른 축."""
     setup: tuple[tuple[str, str], ...] = ()
     """실행 기록의 `SETUP_KEYS` 값. 손잡이 비교에 다른 설정이 섞였는지 본다."""
+    unmeasured_pairs: int = 0
+    """코퍼스에 있는데 이 실행이 재지 않은 쌍. 대개 묶은 뒤 더한 쌍이지만 묶음만으로는 원인을
+    가를 수 없어 사실만 적는다. 실행은 잰 샘플(`packed_samples`)로만 재생한다."""
 
 
 SETUP_KEYS = (
@@ -96,8 +99,37 @@ def comparable(a: AgentSection, b: AgentSection) -> bool:
 
     둘 다 다르면(claude · keep 대 codex · neutral) 차이에 리뷰어와 손잡이가 함께 들어 있어
     어느 쪽의 효과인지 말할 수 없다.
+
+    🔴 그리고 **같은 샘플**을 잰 실행끼리만. 코퍼스가 자라면 수집 시점이 다른 실행은 잰 짝이
+       다르다 - 한쪽에만 있는 짝을 빼고 비교하면 비교 대상이 조용히 바뀐다 (`difference`).
+       뺀 비교는 생성물에 적는다 (`_skipped`).
     """
+    return _one_axis(a, b) and _measured(a) == _measured(b)
+
+
+def _one_axis(a: AgentSection, b: AgentSection) -> bool:
     return (a.agent != b.agent) + (a.docstrings != b.docstrings) == 1
+
+
+def _measured(agent: AgentSection) -> frozenset[str]:
+    return frozenset(o.sample_id for o in agent.run.outcomes)
+
+
+def _skipped(agents: Sequence[AgentSection]) -> list[str]:
+    """🔴 잰 샘플이 달라 뺀 비교를 적는다 - 말없이 빼면 비교가 왜 없는지 읽는 쪽이 모른다."""
+    skipped = [
+        f"`{a.run.reviewer}` ({len(_measured(a)) // 2}쌍) vs "
+        f"`{b.run.reviewer}` ({len(_measured(b)) // 2}쌍)"
+        for a, b in combinations(agents, 2)
+        if _one_axis(a, b) and _measured(a) != _measured(b)
+    ]
+    if not skipped:
+        return []
+    return [
+        "> ⚠ 잰 샘플이 달라 비교하지 않았다 — " + " · ".join(skipped) + ". 한쪽에만 있는 짝을 "
+        "빼면 비교 대상이 조용히 바뀐다.",
+        "",
+    ]
 
 
 def render_measurements(
@@ -143,6 +175,7 @@ def render_measurements(
             for a, b in combinations(agents, 2)
             if comparable(a, b)
         ),
+        *_skipped(agents),
         _caveats(negatives, agents=bool(agents)),
     ]
     return "\n".join(parts).rstrip() + "\n"
@@ -269,10 +302,12 @@ def _agent_section(agent: AgentSection, samples: Sequence[LabeledSample]) -> str
     m = run.manifest
     pairs = len(score_pairs(run.outcomes, HEADLINE_GRADER))
     packed = f" (앞 {agent.packed_runs}회만 묶음)" if agent.packed_runs else ""
+    unmeasured = f" (코퍼스의 다른 {agent.unmeasured_pairs}쌍은 이 실행에 없다)"
     return "\n".join([
         f"## 에이전트 층 — `{run.reviewer}`",
         "",
-        f"리뷰어 `{m.model_id}` · 샘플당 **{m.sample_n}회** 실행{packed} · 짝 **{pairs}쌍** · "
+        f"리뷰어 `{m.model_id}` · 샘플당 **{m.sample_n}회** 실행{packed} · "
+        f"짝 **{pairs}쌍**{unmeasured if agent.unmeasured_pairs else ''} · "
         f"docstring `{agent.docstrings or '기록 없음'}` · "
         f"캐시 `{m.cache_policy}` · 파서가 버린 지적 {agent.rejected}건",
         "",

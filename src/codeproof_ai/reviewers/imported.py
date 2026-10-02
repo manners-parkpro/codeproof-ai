@@ -98,6 +98,14 @@ def unpack_runs(bundle: Path, dest: Path) -> None:
         )
 
 
+def bundle_sample_ids(body: str) -> set[str]:
+    """묶음 본문(`pack_runs`)에 든 샘플 id - 기록(`packed_samples`)과 묶음이 같은지 보려고.
+
+    🔴 `\\n` 으로만 자른다 - `unpack_runs` 와 같은 이유다.
+    """
+    return {str(json.loads(line)["sample_id"]) for line in body.split("\n") if line}
+
+
 def read_run_record(root: Path) -> dict[str, Any] | None:
     """실행기가 남긴 기록. 없으면 None - 손으로 모은 출력일 수 있다."""
     path = root / RUN_FILE
