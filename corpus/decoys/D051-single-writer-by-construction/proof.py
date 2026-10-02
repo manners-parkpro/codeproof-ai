@@ -9,7 +9,10 @@ from codeproof_ai.corpus.proof import race_window
 # 🔴 경쟁은 비결정적이다 - 양쪽 다 같은 횟수로 시도하므로 완화가 아니다.
 ATTEMPTS = 5
 
-_ITEMS = 300
+# 🔴 워커가 겹쳐야 경쟁이 난다. 일이 적으면 앞 워커가 다음 워커가 뜨기 전에 끝난다 -
+#    [실측] CPU 를 포화시키면 300 개에서 twin 1회 성공 39/100 이었고, CI macOS 에서 5회 전부
+#    실패한 적이 있다. 3000 개면 같은 포화에서 100/100 · decoy 를 깬 횟수 0/100.
+_ITEMS = 3000
 
 
 def attack(mod: ModuleType) -> bool:
