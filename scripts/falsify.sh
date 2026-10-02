@@ -57,7 +57,7 @@ SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict conv
            widened-twin report-widened
            model-drift multirun-views view-regrade view-copy multirun-labels run-gap short-runs
            sweep-ladder sensitivity-views report-partial report-labels pack-partial pack-leftover
-           mix-decoy-unit)
+           mix-decoy-unit plan-coverage plan-design)
 
 claim_layering() { echo "런타임(analysis)은 정답 라벨(eval)을 볼 수 없다 — A1"; }
 break_layering() {
@@ -333,6 +333,17 @@ break_mix-decoy-unit() {
     src/codeproof_ai/eval/mix.py
 }
 guard_mix-decoy-unit() { uv run pytest tests/eval/test_mix.py -q -k loud_decoy; }
+
+claim_plan-coverage() { echo "새 쌍은 계획한 빈 칸에만 들어간다 — 도출한 가드 위치로 센다 (DESIGN §3.5)"; }
+break_plan-coverage() {
+  perl -0pi -e 's/TrapKind\.CALLER_HELD_LOCK: \{GuardShape\.CALLER: 10\}/TrapKind.CALLER_HELD_LOCK: {GuardShape.CALLER: 3}/' \
+    src/codeproof_ai/corpus/plan.py
+}
+guard_plan-coverage() { uv run pytest tests/corpus/test_plan.py -q -k planned_cell; }
+
+claim_plan-design() { echo "DESIGN 의 칸별 목표는 corpus/plan.py 와 같다 — 편차를 한쪽에만 적지 않는다 (DESIGN §3.5)"; }
+break_plan-design() { perl -0pi -e 's/(caller_held_lock` \| \S+ \| 4\S+?\*\*)10(\*\*)/${1}9$2/' docs/DESIGN.md; }
+guard_plan-design() { uv run pytest tests/docs/test_consistency.py -q -k design_table_targets; }
 
 claim_report-labels() { echo "생성물의 다회 실행 숫자는 관점마다 라벨을 붙인다 — F3 · F6"; }
 break_report-labels() {

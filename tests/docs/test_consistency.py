@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import itertools
 import re
 import tomllib
 from pathlib import Path
@@ -19,6 +20,8 @@ import pytest
 
 from codeproof_ai.cli import _COMMANDS, build_parser, main
 from codeproof_ai.corpus.decoy import TrapKind
+from codeproof_ai.corpus.plan import PLAN
+from codeproof_ai.corpus.shape import GuardShape
 
 ROOT = Path(__file__).resolve().parents[2]
 MEASUREMENTS = ROOT / "docs" / "MEASUREMENTS.md"
@@ -303,6 +306,46 @@ class TestTrapTaxonomyIsCovered:
             assert len(list(TrapKind)) in claims, (
                 f"TrapKind 는 {len(list(TrapKind))}종인데 문서는 {sorted(claims)}종"
             )
+
+
+class TestExpansionPlanMatchesDesign:
+    """🔴 DESIGN 의 칸별 표는 공개한 선언이고 `corpus/plan.py` 는 테스트가 쓰는 정본이다.
+
+    편차를 한쪽에만 적으면 발표한 계획과 실제로 지킨 계획이 갈린다. 「현재」 값은
+    시점 표기라 대조하지 않는다 - 목표만 본다.
+    """
+
+    COLUMNS: ClassVar[tuple[GuardShape, ...]] = (
+        GuardShape.LOCAL, GuardShape.CALLER, GuardShape.CALLEE, GuardShape.MODULE,
+    )
+
+    @staticmethod
+    def _target(cell: str) -> int:
+        """`1→**3**` 는 3, `4` 는 4 - 화살표 왼쪽(현재)은 읽지 않는다."""
+        m = re.fullmatch(r"(?:\d+→)?\**(\d+)\**", cell)
+        assert m, f"칸을 읽지 못했다: {cell!r}"
+        return int(m[1])
+
+    def _written(self) -> dict[str, dict[str, int]]:
+        after = _text("docs/DESIGN.md").split("칸별 목표", 1)[1].split("\n")[1:]
+        table = itertools.dropwhile(lambda ln: not ln.startswith("|"), after)
+        written: dict[str, dict[str, int]] = {}
+        for row in itertools.takewhile(lambda ln: ln.startswith("|"), table):
+            m = re.fullmatch(r"\| `([a-z_]+)` \|(.+)\|", row.strip())
+            if m:
+                cells = [c.strip() for c in m.group(2).split("|")][: len(self.COLUMNS)]
+                written[m.group(1)] = {
+                    shape.value: self._target(cell)
+                    for shape, cell in zip(self.COLUMNS, cells, strict=True)
+                    if cell != "—"
+                }
+        return written
+
+    def test_design_table_targets_are_the_plan(self) -> None:
+        plan = {k.value: {s.value: n for s, n in cells.items()} for k, cells in PLAN.items()}
+        assert self._written() == plan, (
+            "DESIGN §3.5 의 칸별 목표와 corpus/plan.py 가 다르다 - 편차는 둘을 같이 고친다"
+        )
 
 
 class TestCliSurfaceMatchesDocs:
