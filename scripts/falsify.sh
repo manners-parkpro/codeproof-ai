@@ -56,7 +56,8 @@ SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict conv
            docstring-neutral signed-docstrings resume-docstrings runner-docstrings compare-one-axis
            widened-twin report-widened
            model-drift multirun-views view-regrade view-copy multirun-labels run-gap short-runs
-           sweep-ladder sensitivity-views report-partial report-labels pack-partial pack-leftover)
+           sweep-ladder sensitivity-views report-partial report-labels pack-partial pack-leftover
+           mix-decoy-unit)
 
 claim_layering() { echo "런타임(analysis)은 정답 라벨(eval)을 볼 수 없다 — A1"; }
 break_layering() {
@@ -325,6 +326,13 @@ break_pack-leftover() {
   perl -0pi -e 's/^    if extra:\n/    if False:  # falsify.sh\n/m' src/codeproof_ai/cli.py
 }
 guard_pack-leftover() { uv run pytest tests/cli/test_commands.py -q -k pack_does_not_mix; }
+
+claim_mix-decoy-unit() { echo "분류 간 차이는 decoy 단위로 판정한다 — 한 decoy 의 지적 여럿을 독립 시행으로 세지 않는다 (F5a)"; }
+break_mix-decoy-unit() {
+  perl -0pi -e 's/tuple\(\(k\.sample_rate\.successes, k\.sample_rate\.total\) for k in self\.kinds if k\.samples\)/tuple((k.rate.successes, k.rate.total) for k in self.kinds if k.samples)/' \
+    src/codeproof_ai/eval/mix.py
+}
+guard_mix-decoy-unit() { uv run pytest tests/eval/test_mix.py -q -k loud_decoy; }
 
 claim_report-labels() { echo "생성물의 다회 실행 숫자는 관점마다 라벨을 붙인다 — F3 · F6"; }
 break_report-labels() {

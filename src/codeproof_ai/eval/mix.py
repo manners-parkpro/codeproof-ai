@@ -11,27 +11,36 @@ D층 집계 FPR 은 「이 도구의 오탐률」이 아니라 **「내가 고�
 
 ## 정직하게 다루기
 
-분류별 표본이 작다(현재 3~17). 그래서 두 가지를 구분해 보고한다:
+분류별 표본이 작다. 그래서 두 가지를 구분해 보고한다:
 
 1. **구성비 선택의 효과** — 「X 만으로 코퍼스를 만들면 R_x 를 보고한다」는
    측정 절차에 대한 참인 진술이다. CI 폭과 무관하게 성립한다.
 2. **분류 간 차이가 실재하는가** — 이건 **모집단에 대한 주장**이라 표본이
-   필요하다. 극단 두 분류의 Wilson CI 가 겹치면 **잡음으로 설명 가능**하고,
-   그러면 "분류마다 다르다"고 말하지 않는다.
+   필요하다. **decoy 단위 순열 검정**으로 분류 전체를 한 번에 본다 - 「분류마다
+   물리는 decoy 비율이 같다」로 설명되면 "분류마다 다르다"고 말하지 않는다.
+   🔴 극단 두 분류의 구간만 견주지 않는다. 14종에서 극단을 고르면 다중 비교가 되고,
+      지적 단위로 세면 decoy 하나의 지적 여럿이 독립 시행으로 셈해진다.
+      [실측 · 모의실험] 차이가 없을 때 「실재한다」가 나오는 비율 - 그 방식 최대 37.6%,
+      이 검정 3.4~4.4% (DESIGN §3.5).
 
 🔴 2가 성립하지 않는데 1의 범위를 「도구의 오탐률 범위」처럼 제시하면
    그게 바로 이 프로젝트가 비판하는 과장이다. `heterogeneity_verdict` 가
    그 구분을 강제한다.
 
-이 관계가 **decoy 150 목표의 진짜 이유**다. 집계 FPR 의 CI 를 좁히려는 게
-아니라 **분류별 이질성을 검정 가능하게** 만들려는 것이다.
+decoy 150 목표(`metrics.TARGET_NEGATIVES`)는 집계 FPR 의 정밀도와 분류당 최소 10쌍을
+함께 채우는 값이다. 🔴 이질성 검정의 검정력은 150 에서도 높지 않다 - [실측 · 모의실험]
+14종 물림이 5~50% 로 고르게 퍼져 있어도 69% 다. 기각하지 못하면 「분류마다 같다」가
+아니라 「이 표본으로는 모른다」다.
 """
 
 from __future__ import annotations
 
+import itertools
+import random
 from collections import defaultdict
 from dataclasses import dataclass
 from enum import StrEnum
+from functools import lru_cache
 from typing import TYPE_CHECKING
 
 from codeproof_ai.eval.grading.base import Outcome
@@ -53,15 +62,54 @@ TARGET_PAIRS_PER_KIND = 10
 
 왜 미리 선언하는가 - **optional stopping 을 막기 위해서다.**
 
-구성비 민감도를 보면 「극단 두 분류의 CI 를 갈라야 이질성을 주장할 수 있다」가
-바로 보인다. 그러면 그 두 분류에만 decoy 를 더 넣고 싶어진다. 그런데
-**CI 가 갈릴 때까지 표본을 늘리다 갈리면 멈추는 것**은 통계적으로 부정이다 -
-어떤 잡음이든 충분히 들여다보면 원하는 모양이 한 번은 나온다.
+구성비 표를 보면 「어느 분류에 decoy 를 더 넣으면 검정이 유의해지겠다」가
+바로 보인다. 그런데 **유의해질 때까지 표본을 늘리다 유의하면 멈추는 것**은
+통계적으로 부정이다 - 어떤 잡음이든 충분히 들여다보면 원하는 모양이 한 번은 나온다.
 
 그래서 **분류마다 같은 목표치를 먼저 박아 두고, 도달한 뒤에 본다.**
 「아직 목표 미달」은 결과가 아니라 진행률이다. `underpowered_kinds` 가
 그 구분을 표에 강제한다.
 """
+
+PERMUTATIONS = 9999
+"""이질성 순열 검정의 반복 수. 🔴 시드와 함께 고정한다 - 생성물이 실행마다 달라지면
+「최신인가」를 물을 수 없다 (F5b). [실측] 150 decoy 에서 0.24초."""
+
+PERMUTATION_SEED = 0
+
+ALPHA = 0.05
+
+
+@lru_cache(maxsize=256)
+def homogeneity_p(counts: tuple[tuple[int, int], ...]) -> float | None:
+    """「분류마다 물리는 decoy 비율이 같다」의 순열 p값 - `(물린 decoy, decoy)` 를 분류마다.
+
+    🔴 단위는 decoy 다. 지적은 독립 시행이 아니다 - decoy 하나가 여럿을 낸다.
+    🔴 분류 전체를 한 번에 본다. 극단 두 분류를 골라 견주면 다중 비교가 된다.
+
+    통계량은 분류별 물린 수의 카이제곱 (전체 비율이 순열에서 변하지 않으므로 상수배는 뺐다).
+    물린 decoy 가 없거나 전부면 변동이 없어 None.
+    """
+    sizes = [n for _, n in counts]
+    bitten = sum(k for k, _ in counts)
+    total = sum(sizes)
+    if len(counts) < MIN_KINDS_FOR_COMPARISON or bitten in (0, total):
+        return None
+    rate = bitten / total
+
+    def stat(hits: Sequence[int]) -> float:
+        return sum((h - n * rate) ** 2 / n for h, n in zip(hits, sizes, strict=True))
+
+    observed = stat([k for k, _ in counts])
+    flags = [1] * bitten + [0] * (total - bitten)
+    bounds = list(itertools.accumulate(sizes, initial=0))
+    rng = random.Random(PERMUTATION_SEED)  # noqa: S311 - 재표집용이다. 재현이 목적이다
+    extreme = 0
+    for _ in range(PERMUTATIONS):
+        rng.shuffle(flags)
+        if stat([sum(flags[a:b]) for a, b in itertools.pairwise(bounds)]) >= observed - 1e-9:
+            extreme += 1
+    return (extreme + 1) / (PERMUTATIONS + 1)
 
 
 @dataclass(frozen=True, slots=True)
@@ -152,28 +200,37 @@ class MixSensitivity:
         )
 
     @property
-    def heterogeneity_verdict(self) -> str:
-        """분류 간 차이가 표본 잡음으로 설명되는가.
+    def homogeneity_p(self) -> float | None:
+        """「분류마다 물리는 decoy 비율이 같다」의 순열 p값. 변동이 없으면 None."""
+        return homogeneity_p(
+            tuple((k.sample_rate.successes, k.sample_rate.total) for k in self.kinds if k.samples)
+        )
 
-        🔴 극단 두 분류의 Wilson 95% CI 가 겹치면 **겹친다고 말한다.**
-           겹치는데도 "분류마다 다르다"고 하면 과장이다.
+    @property
+    def heterogeneity_verdict(self) -> str:
+        """분류 간 차이가 표본 잡음으로 설명되는가 - decoy 단위 순열 검정 (`homogeneity_p`).
+
+        🔴 p 가 유의수준 이상이면 **주장하지 않는다.** 「분류마다 같다」는 뜻도 아니다.
         """
-        usable = [k for k in self.kinds if k.rate.total > 0]
+        usable = [k for k in self.kinds if k.samples]
         if len(usable) < MIN_KINDS_FOR_COMPARISON:
             return "판정 불가 - 분류가 2종 미만이다"
 
-        hi, lo = usable[0], usable[-1]
-        hi_iv, lo_iv = hi.interval, lo.interval
-        if hi_iv is None or lo_iv is None:
-            return "판정 불가 - 신뢰구간을 낼 수 없다"
-
-        if lo_iv[1] < hi_iv[0]:
-            verdict = (
-                f"분류 간 차이가 **실재한다** - 극단 두 분류의 95% CI 가 겹치지 "
-                f"않는다 ({lo.kind} ≤{lo_iv[1]:.1%} < {hi_iv[0]:.1%}≤ {hi.kind})"
+        test = (
+            f"decoy 단위 순열 검정 · {len(usable)}종 · decoy {sum(k.samples for k in usable)}개 "
+            f"· 순열 {PERMUTATIONS}회"
+        )
+        p = self.homogeneity_p
+        if p is None:
+            none = not any(k.sample_rate.successes for k in usable)
+            return (
+                f"분류 간 차이를 **아직 주장할 수 없다** - 물린 decoy 가 "
+                f"{'하나도 없다' if none else '전부다'} - 분류 사이에 변동이 없다 ({test})"
             )
+        if p < ALPHA:
+            verdict = f"분류 간 차이가 **실재한다** - p={p:.4f} ({test})"
             if self.underpowered_kinds:
-                # 🔴 목표 미달 상태에서 갈린 것은 **중간 경과**다. 여기서
+                # 🔴 목표 미달 상태에서 유의한 것은 **중간 경과**다. 여기서
                 #    멈추면 optional stopping 이 된다.
                 return (
                     f"{verdict}. ⚠ 다만 {len(self.underpowered_kinds)}종이 아직 "
@@ -182,9 +239,8 @@ class MixSensitivity:
                 )
             return verdict
         return (
-            f"분류 간 차이를 **아직 주장할 수 없다** - {lo.kind} 와 {hi.kind} 의 "
-            f"95% CI 가 겹친다([{lo_iv[0]:.1%}, {lo_iv[1]:.1%}] vs "
-            f"[{hi_iv[0]:.1%}, {hi_iv[1]:.1%}]). 표본을 늘려야 한다"
+            f"분류 간 차이를 **아직 주장할 수 없다** - p={p:.4f} ({test}). "
+            "같다는 뜻이 아니다 - 이 표본으로는 모른다"
         )
 
     def render(self) -> str:
@@ -193,7 +249,7 @@ class MixSensitivity:
             f"    🔴 코드도 도구도 채점자도 그대로다. **{self.axis.label} 구성비만** 바꾼다.",
             "",
             f"    {self.axis.label:24s} {'물림':>4} {'지적':>5} {'범위밖':>6}"
-            f"  {'물림율':>7} [95% CI]        {'decoy':>6}",
+            f"  {'물림율':>7} [95% CI]        {'decoy':>6} [95% CI]",
         ]
         for k in self.kinds:
             iv = k.interval
@@ -203,9 +259,11 @@ class MixSensitivity:
             per_sample = (
                 f"{sp.successes}/{sp.total}" if sp.total else "0/0"
             )
+            siv = sp.interval
+            sband = f"[{siv[0]:5.1%}, {siv[1]:5.1%}]" if siv else "n/a"
             lines.append(
                 f"    {k.kind:24s} {k.rate.successes:>4} {k.rate.total:>5} "
-                f"{k.undecided:>6}  {point} {band} {per_sample:>6}"
+                f"{k.undecided:>6}  {point} {band} {per_sample:>6} {sband}"
             )
 
         lines.append("")
@@ -224,14 +282,14 @@ class MixSensitivity:
             lines.append(
                 f"    📋 진행률: {len(self.kinds) - short}/{len(self.kinds)}종이 "
                 f"선언 목표({TARGET_PAIRS_PER_KIND}쌍/분류) 달성. "
-                "🔴 목표는 **미리** 박아 둔 값이다 - CI 가 갈릴 때까지 "
+                "🔴 목표는 **미리** 박아 둔 값이다 - 유의해질 때까지 "
                 "늘리다 멈추면 optional stopping 이다"
             )
         lines.append(
             "    ⚠ 지적 단위 CI 는 실제보다 좁다 - decoy 하나가 여러 지적을 내므로"
         )
         lines.append(
-            "      독립 시행이 아니다. 오른쪽 decoy 열(샘플 단위)을 같이 본다."
+            "      독립 시행이 아니다. 판정은 오른쪽 decoy 열(샘플 단위)로 한다."
         )
         return "\n".join(lines)
 
@@ -261,6 +319,9 @@ def mix_sensitivity(
     """증명된 음성만 모아 축별 물림율을 낸다.
 
     🔴 음성만 본다. 양성(twin)의 지적을 섞으면 FP율이 아니라 다른 숫자가 된다.
+    🔴 단일 실행 결과를 받는다 - 다회 실행이면 「물린 decoy」가 N회의 합집합이 된다 (F6).
+       에이전트에 쓰려면 decoy 마다 「N회 중 물린 비율」을 단위로 바꾼다.
+       지금 호출처는 정적분석기뿐이다.
     """
     kind_of = _kinds(samples, axis)
     fp: dict[str, int] = defaultdict(int)

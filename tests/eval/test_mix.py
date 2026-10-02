@@ -82,8 +82,8 @@ class TestDenominatorIsAllFindings:
 class TestItRefusesToOverclaim:
     """🔴 이 파일의 본체."""
 
-    def test_overlapping_intervals_are_not_called_a_difference(self) -> None:
-        """표본이 작아 CI 가 겹치면 **차이를 주장하지 않는다**."""
+    def test_too_few_decoys_are_not_called_a_difference(self) -> None:
+        """decoy 가 분류마다 하나뿐이면 **차이를 주장하지 않는다**."""
         outcomes = [
             _outcome("a", [Outcome.FALSE_POSITIVE, Outcome.UNDECIDABLE]),
             _outcome("b", [Outcome.UNDECIDABLE, Outcome.UNDECIDABLE]),
@@ -94,8 +94,29 @@ class TestItRefusesToOverclaim:
         assert ms.reachable == (0.0, 0.5), "범위 자체는 계산된다"
         assert "아직 주장할 수 없다" in ms.heterogeneity_verdict
 
-    def test_disjoint_intervals_are_called_real(self) -> None:
-        """표본이 충분해 CI 가 갈라지면 실재한다고 말한다."""
+    def test_one_loud_decoy_is_not_a_difference_between_kinds(self) -> None:
+        """🔴 decoy 하나가 지적 30건을 물어도 decoy 10개 중 1개다.
+
+        지적 단위로 세면 30/57 대 0/30 으로 구간이 갈린다 - 같은 decoy 의 지적을
+        독립 시행으로 센 것이다. 판정 단위는 decoy 다 (DESIGN §3.5).
+        """
+        loud = [_outcome("hi0", [Outcome.FALSE_POSITIVE] * 30)]
+        quiet_hi = [_outcome(f"hi{i}", [Outcome.UNDECIDABLE] * 3) for i in range(1, 10)]
+        quiet_lo = [_outcome(f"lo{i}", [Outcome.UNDECIDABLE] * 3) for i in range(10)]
+        samples = _samples(
+            {f"hi{i}": "kind_hi" for i in range(10)} | {f"lo{i}": "kind_lo" for i in range(10)}
+        )
+        outcomes = loud + quiet_hi + quiet_lo
+        ms = mix_sensitivity(outcomes, samples, GRADER)
+
+        hi = next(k for k in ms.kinds if k.kind == "kind_hi")
+        assert (hi.rate.successes, hi.rate.total) == (30, 57), "지적 단위로는 크게 갈린다"
+        assert "아직 주장할 수 없다" in ms.heterogeneity_verdict
+        again = mix_sensitivity(outcomes, samples, GRADER).homogeneity_p
+        assert ms.homogeneity_p == again, "순열 시드가 고정이 아니다 - 생성물이 달라진다 (F5b)"
+
+    def test_clearly_separated_kinds_are_called_real(self) -> None:
+        """decoy 6개가 전부 물리고 6개가 하나도 안 물리면 실재한다고 말한다."""
         outcomes = [
             _outcome(f"hi{i}", [Outcome.FALSE_POSITIVE] * 10) for i in range(6)
         ] + [_outcome(f"lo{i}", [Outcome.UNDECIDABLE] * 10) for i in range(6)]

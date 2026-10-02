@@ -220,16 +220,18 @@ def _mix_section(run: ReviewerRun, samples: Sequence[LabeledSample]) -> str:
             "",
             f"### {axis.label}",
             "",
-            f"| {axis.label} | 물림 | 지적 | 물림율 | 95% CI | decoy |",
-            "|---|---:|---:|---:|---|---:|",
+            f"| {axis.label} | 물림 | 지적 | 물림율 | 95% CI | decoy | decoy 95% CI |",
+            "|---|---:|---:|---:|---|---:|---|",
         ]
         for k in ms.kinds:
             iv = k.interval
             band = f"[{iv[0]:.1%}, {iv[1]:.1%}]" if iv else "n/a"
             point = f"{k.rate.point:.1%}" if k.rate.point is not None else "n/a"
+            siv = k.sample_rate.interval
+            sband = f"[{siv[0]:.1%}, {siv[1]:.1%}]" if siv else "n/a"
             lines.append(
                 f"| `{k.kind}` | {k.rate.successes} | {k.rate.total} | {point} "
-                f"| {band} | {k.sample_rate.successes}/{k.sample_rate.total} |"
+                f"| {band} | {k.sample_rate.successes}/{k.sample_rate.total} | {sband} |"
             )
         reach = ms.reachable
         if reach is None:
@@ -250,9 +252,13 @@ def _mix_section(run: ReviewerRun, samples: Sequence[LabeledSample]) -> str:
             done = len(ms.kinds) - len(ms.underpowered_kinds)
             lines.append(
                 f"📋 {done}/{len(ms.kinds)}종이 선언 목표 달성 — 목표는 "
-                "**미리** 박아 둔 값이다. CI 가 갈릴 때까지 늘리다 멈추면 "
+                "**미리** 박아 둔 값이다. 유의해질 때까지 늘리다 멈추면 "
                 "optional stopping 이다."
             )
+        lines.append(
+            "지적 단위 구간은 실제보다 좁다 — decoy 하나가 여러 지적을 낸다. "
+            "판정은 decoy 단위로 한다 (DESIGN §3.5)."
+        )
     lines.append("")
     return "\n".join(lines)
 
