@@ -1055,7 +1055,8 @@ def _cmd_pack(corpus: Path, src: Path, out: Path, *, runs: int | None = None) ->
         )
     body = pack_runs(src, runs)
     (out / BUNDLE_FILE).write_text(body, encoding="utf-8")
-    print(f"{out} 를 썼다: {RUN_FILE} + {BUNDLE_FILE} ({len(body.splitlines())}회차)")
+    rows = body.count("\n")  # splitlines() 는 문구 안의 U+2028 에서도 끊는다 - unpack_runs
+    print(f"{out} 를 썼다: {RUN_FILE} + {BUNDLE_FILE} ({rows}회차)")
     return 0
 
 

@@ -84,8 +84,14 @@ def pack_runs(root: Path, runs: int | None = None) -> str:
 
 
 def unpack_runs(bundle: Path, dest: Path) -> None:
-    """묶음을 실행기 출력 모양으로 푼다 - import 와 **같은 경로**로 재생하려고."""
-    for line in bundle.read_text(encoding="utf-8").splitlines():
+    """묶음을 실행기 출력 모양으로 푼다 - import 와 **같은 경로**로 재생하려고.
+
+    🔴 `\\n` 으로만 자른다 - `splitlines()` 는 U+2028 · U+2029 · U+0085 에서도 끊는데,
+       JSON 은 그것을 문자열 안에 날것으로 둔다. [실측] 모델 지적 문구에 실려 report 가 멈췄다.
+    """
+    for line in bundle.read_text(encoding="utf-8").split("\n"):
+        if not line:
+            continue
         row = json.loads(line)
         (dest / f"{row['sample_id']}.{row['run']}.json").write_text(
             json.dumps(row["payload"], ensure_ascii=False), encoding="utf-8"

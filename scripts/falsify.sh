@@ -52,7 +52,7 @@ PASS=0; FAIL=0; FAILED_NAMES=()
 
 SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict convention docs-tree generated
            agent-contract span-match llm-symbol import-format import-manifest import-rejected
-           signed-runner pack-first-runs pair-difference model-pin
+           signed-runner pack-first-runs bundle-separators pair-difference model-pin
            docstring-neutral signed-docstrings resume-docstrings runner-docstrings compare-one-axis
            widened-twin report-widened
            model-drift multirun-views view-regrade view-copy multirun-labels run-gap short-runs
@@ -175,6 +175,13 @@ break_pack-first-runs() {
     src/codeproof_ai/reviewers/imported.py
 }
 guard_pack-first-runs() { uv run pytest tests/cli/test_commands.py -q -k first_runs_packs_only; }
+
+claim_bundle-separators() { echo "묶음은 \\n 으로만 자른다 — 지적 문구 안의 U+2028 이 한 회차를 조각내지 않게 (F6)"; }
+break_bundle-separators() {
+  perl -0pi -e 's/\.read_text\(encoding="utf-8"\)\.split\("\\n"\):/.read_text(encoding="utf-8").splitlines():/' \
+    src/codeproof_ai/reviewers/imported.py
+}
+guard_bundle-separators() { uv run pytest tests/reviewers/test_imported.py -q -k line_separators; }
 
 claim_pair-difference() { echo "리뷰어 비교는 같은 짝으로 함께 복원추출한다 — 짝이 어긋나면 자기 자신과의 차이에도 폭이 생긴다"; }
 break_pair-difference() {

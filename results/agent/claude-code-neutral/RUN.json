@@ -1,0 +1,44 @@
+{
+  "runner_version": "3",
+  "agent": "claude",
+  "cli_version": "2.1.284",
+  "model_requested": "claude-fable-5-1",
+  "model": "claude-fable-5-1",
+  "model_note": "claude-fable-5-1 별칭",
+  "effort": "low",
+  "runs": "3",
+  "isolation": "safe-mode,strict-mcp-config,no-session-persistence,DISABLE_AUTOUPDATER=1",
+  "permission": "dontAsk;tools=Read,Grep,Glob",
+  "prompt_hash": "305d8e25f7fdbdafc7b89332",
+  "instruction_hash": "7d1332f82a7d41f3c8daf0b9",
+  "schema_hash": "b957f782e99241837721bb08",
+  "docstrings": "neutral",
+  "identity": "claude-code 2.1.284 · claude-fable-5-1 · effort=low",
+  "timeout_s": "240",
+  "runner_sha": "95e77541c365",
+  "started_at": "2026-10-01T06:57:18Z",
+  "sessions": [
+    {
+      "started_at": "2026-10-01T06:57:18Z",
+      "runs": "1",
+      "runner_sha": "95e77541c365"
+    },
+    {
+      "started_at": "2026-10-01T07:25:04Z",
+      "runs": "2",
+      "runner_sha": "c44d0540aba7"
+    },
+    {
+      "started_at": "2026-10-01T07:53:57Z",
+      "runs": "3",
+      "runner_sha": "c44d0540aba7"
+    }
+  ],
+  "cli_version_end": "2.1.284",
+  "finished_at": "2026-10-01T08:23:18Z",
+  "audit": {
+    "files": 0,
+    "hits": {}
+  },
+  "packed_runs": "3"
+}

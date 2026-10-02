@@ -87,6 +87,27 @@ class TestBundle:
         ids = [json.loads(line)["sample_id"] for line in pack_runs(src).splitlines()]
         assert ids == sorted(ids)
 
+    def test_line_separators_in_a_message_keep_the_run_whole(self, tmp_path: Path) -> None:
+        """[실측] 모델 지적 문구에 U+2028 · U+2029 가 날것으로 실렸다 - JSON 은 escape 하지 않는다.
+
+        `str.splitlines()` 는 그 자리에서도 끊는다 - 한 회차가 조각나 report 가 멈췄다.
+        """
+        src = tmp_path / "src"
+        src.mkdir()
+        message = "줄 구분자 \u2028/\u2029 · NEL \x85 는 걸러지지 않는다"
+        (src / "D1.0.json").write_text(
+            json.dumps({"findings": [{"message": message}]}, ensure_ascii=False), encoding="utf-8"
+        )
+        bundle = tmp_path / BUNDLE_FILE
+        bundle.write_text(pack_runs(src), encoding="utf-8")
+        assert "\u2028" in bundle.read_text(encoding="utf-8"), "날것으로 실려야 이 경로를 본다"
+        dest = tmp_path / "dest"
+        dest.mkdir()
+        unpack_runs(bundle, dest)
+
+        restored = json.loads((dest / "D1.0.json").read_text(encoding="utf-8"))
+        assert restored["findings"][0]["message"] == message
+
 
 class TestConfigSignature:
     """🔴 실행을 가르는 RUN.json 항목은 설정 지문에 싣는다 (F1).
