@@ -111,7 +111,8 @@ class Finding:
     def fingerprint(self) -> str:
         """라인 번호를 배제한 안정 식별자.
 
-        (rule_id, 둘러싼 심볼, 정규화된 인용문) 로 구성한다.
+        (rule_id, 경로, 둘러싼 심볼, 정규화된 인용문) 로 구성한다 (B2). 경로는 줄 번호와 달리
+        위쪽 편집에 흔들리지 않고, 다른 파일의 같은 지적을 가른다.
         SARIF 출력 시 partialFingerprints 에 싣는다 — fingerprints 가 아니다.
         """
         parts = (

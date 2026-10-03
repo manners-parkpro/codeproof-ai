@@ -685,10 +685,13 @@ workspace 는 resolution 을 통합해서 같은 충돌을 되살린다.
 ### 7.2 🔴 지적 식별자에 라인번호를 쓰지 않는다
 
 ```
-fingerprint = hash(rule_id, enclosing_symbol, normalized_snippet)
+fingerprint = hash(rule_id, path, enclosing_symbol, normalized_snippet)
 ```
 
 라인번호를 쓰면 **위쪽 줄만 고쳐도 전부 다른 지적이 된다.**
+경로는 넣는다 — 위쪽 편집에 흔들리지 않고, 대상의 다른 파일에 있는 같은 지적을 가른다.
+GitHub code scanning 도 같은 결과로 맞추려면 `ruleId` 와 파일 경로가 실행마다 같아야 하고,
+줄 번호 대신 줄 내용 해시(`primaryLocationLineHash`)를 쓴다 [소스: GitHub Docs 「SARIF support for code scanning」].
 SARIF 출력 시 `partialFingerprints` 에 싣는다 (`fingerprints` 아님).
 
 ### 7.3 🔴 temperature 는 통제변수가 아니다

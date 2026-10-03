@@ -156,10 +156,11 @@ mypy 텍스트(1-based 바이트) · ast(0-based 바이트) · SARIF(1-based 문
 ### B2. 지적 식별자에 라인 번호를 쓰지 않는다 🔴
 
 ```python
-fingerprint = hash(rule_id, enclosing_symbol, normalized_snippet)
+fingerprint = hash(rule_id, path, enclosing_symbol, normalized_snippet)
 ```
 
-넣으면 위쪽 줄만 고쳐도 모든 지적이 새 지적이 된다.
+줄 번호를 넣으면 위쪽 줄만 고쳐도 모든 지적이 새 지적이 된다. 경로는 넣는다 — 위쪽 편집에
+흔들리지 않고, 다른 파일의 같은 지적을 가른다.
 SARIF 는 `partialFingerprints` 에 싣는다 (`fingerprints` 아님).
 
 ### B3. `enclosing` 추출
