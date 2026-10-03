@@ -216,8 +216,9 @@ decoy 의 안전 주장을 공격으로 반증하듯, 이건 **가드의 주장*
 통째로 무의미해진다** — 맞는 지적을 오답으로 채점하게 되기 때문이다.
 
 ```bash
-uv run codeproof decoy validate --strict   # 형식 12종
+uv run codeproof decoy validate --strict   # 형식 13종
 uv run pytest tests/corpus/test_proofs.py  # 근거가 참인지
+uv run pytest tests/corpus/test_mutants.py # 증명이 그럴듯한 약화를 깨고 안전한 변형은 통과시키는지
 ```
 
 **두 줄이 보는 것이 다르다.** 첫 줄은 형식만 본다 — 근거가 60자 이상인가,

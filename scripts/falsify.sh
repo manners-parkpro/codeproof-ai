@@ -61,7 +61,8 @@ SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict conv
            report-collected report-packed-samples report-bundle-record report-corpus-gone
            report-half-pair compare-same-samples compare-skip-note pack-records-samples
            pack-stray-samples sarif-end bandit-range twin-convention twin-convention-paired
-           repro-unknown repro-kind race-switch-lower race-switch-restore)
+           repro-unknown repro-kind race-switch-lower race-switch-restore invisible-rule invisible-lines
+           ruff-target mypy-python mutant-weakening mutant-safe mutant-stale)
 
 claim_layering() { echo "런타임(analysis)은 정답 라벨(eval)을 볼 수 없다 — A1"; }
 break_layering() {
@@ -102,6 +103,49 @@ break_race-switch-restore() {
   perl -0pi -e 's/\n        sys\.setswitchinterval\(saved_interval\)//' src/codeproof_ai/corpus/proof.py
 }
 guard_race-switch-restore() { uv run pytest tests/corpus/test_proofs.py -q -k RaceWindowAlsoLowers; }
+
+claim_invisible-rule() { echo "쌍의 파일에 원문 보이지 않는 문자가 있으면 검증기가 거부한다 — V14 (G3)"; }
+break_invisible-rule() {
+  perl -0pi -e 's/\n        \*_check_invisible\(rec\),//' src/codeproof_ai/corpus/decoy.py
+}
+guard_invisible-rule() { uv run pytest tests/corpus/test_decoy_validator.py -q -k v14; }
+
+claim_invisible-lines() { echo "V14 는 줄을 \\n 으로만 센다 — splitlines 는 U+2028 을 줄로 끊어 먹는다 (B1)"; }
+break_invisible-lines() {
+  perl -0pi -e 's/path\.read_text\(encoding="utf-8"\)\.split\("\\n"\)/path.read_text(encoding="utf-8").splitlines()/' \
+    src/codeproof_ai/corpus/decoy.py
+}
+guard_invisible-lines() { uv run pytest tests/corpus/test_decoy_validator.py -q -k v14; }
+
+claim_ruff-target() { echo "Ruff 는 코퍼스의 파이썬 판으로 읽는다 — 없으면 3.10 으로 보고 ExceptionGroup 에 F821 (C1a)"; }
+break_ruff-target() {
+  perl -0pi -e 's/\n            f"--target-version=\{_TARGET\}",//' src/codeproof_ai/analysis/python/ruff.py
+}
+guard_ruff-target() { uv run pytest tests/analysis/test_adapters.py -q -k target_version; }
+
+claim_mypy-python() { echo "mypy 는 코퍼스의 파이썬 판으로 읽는다 — 없으면 실행한 인터프리터 판을 따른다 (C1a)"; }
+break_mypy-python() {
+  perl -0pi -e 's/\n        f"--python-version=\{_PYTHON\}",//' src/codeproof_ai/analysis/python/mypy_.py
+}
+guard_mypy-python() { uv run pytest tests/analysis/test_adapters.py -q -k python_version; }
+
+claim_mutant-weakening() { echo "증명이 전에 잡던 약화를 놓치게 되면 변이 테스트가 운다 — 쌍의 mutants.py (G3a1)"; }
+break_mutant-weakening() {
+  perl -0pi -e 's/_UNKNOWN_IS_FREE = True/_UNKNOWN_IS_FREE = False/' corpus/decoys/D115-unknown-plan-read-as-free/proof.py
+}
+guard_mutant-weakening() { uv run pytest tests/corpus/test_mutants.py -q -k D115; }
+
+claim_mutant-safe() { echo "증명이 주장 밖을 묻게 되면 안전한 변형이 깨져 변이 테스트가 운다 — §3.5 반대 방향"; }
+break_mutant-safe() {
+  perl -0pi -e 's/(S112 - 거절 방식은 묻지 않는다\n\s+)continue/$1return True/' corpus/decoys/D115-unknown-plan-read-as-free/proof.py
+}
+guard_mutant-safe() { uv run pytest tests/corpus/test_mutants.py -q -k D115; }
+
+claim_mutant-stale() { echo "decoy 를 고쳐 치환이 빗나가면 변이 테스트가 운다 — 낡은 변이는 원본을 돌려 공허하게 통과한다"; }
+break_mutant-stale() {
+  perl -0pi -e 's/_TIERS\.get\(plan, "free"\)/_TIERS.get(plan, \x27free\x27)/' corpus/decoys/D115-unknown-plan-read-as-free/decoy.py
+}
+guard_mutant-stale() { uv run pytest tests/corpus/test_mutants.py -q -k D115; }
 
 claim_proof-vacuous() { echo "결함을 못 잡는 공격은 안전을 증명하지 못한다 — G3a1"; }
 break_proof-vacuous() {

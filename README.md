@@ -328,10 +328,10 @@ twin 은 인자를 보간해서 진짜 취약하다.
 
 ```
 채점자                     TP   FP  판정불가  FP가능
-provable_safety           0   15     533      o     <- 결함 주장만, 그것도 근거 범위 안만
-injected_defect           0  548       0      o     <- Qodo 정의: 판정 불가 칸이 없다
-paired_fix                0   15     533      o
-static_corroboration      4    0     544      x     <- 구조적으로 FP 를 못 낸다
+provable_safety           0   14     555      o     <- 결함 주장만, 그것도 근거 범위 안만
+injected_defect           0  569       0      o     <- Qodo 정의: 판정 불가 칸이 없다
+paired_fix                0   15     554      o
+static_corroboration      4    0     565      x     <- 구조적으로 FP 를 못 낸다
 ```
 
 편차의 정체는 둘이다 — **① 한쪽이 「판정할 수 없다」고 둔 것을 다른 쪽이
@@ -575,7 +575,7 @@ def attack(mod: ModuleType) -> bool:   # 결함이 실현되면 True
 
 `corpus/decoys/` 를 편집하면 **훅이 자동으로 규격을 검사**하고, 위반이면 그 이유를 Claude 에게
 돌려줘 고치게 한다 — 편집 자체를 되돌리지는 않는다
-(`.claude/hooks/decoy-validate-guard.sh`). 훅은 형식 12규칙(`proof.py` 존재 포함)만
+(`.claude/hooks/decoy-validate-guard.sh`). 훅은 형식 13규칙(`proof.py` 존재 포함)만
 보고, 근거가 참인지는 테스트가 돌려서 본다.
 
 미끼가 실제로 물리는지도 잰다:
@@ -843,7 +843,7 @@ Anthropic 의 `input_tokens` 는 캐시 토큰을 **제외**하고, OpenAI 는 *
 - mypy 증분 캐시가 **이미 삭제된 임시 디렉터리 경로**의 진단을 돌려줬다.
 
 → `--config-file=/dev/null` · `--no-incremental` · `--cache-dir=/dev/null` 로 격리.
-  Ruff 는 `--isolated`.
+  Ruff 는 `--isolated`. 두 도구 모두 코퍼스의 파이썬 판(3.14)을 명시한다 — 없으면 Ruff 는 3.10 으로 본다.
 
 그리고 대상마다 subprocess 를 띄우지 않는다 — **한 번에 일괄 분석**한다.
 [실측] 30 대상 기준 ruff **9.9배**, mypy **33배**. 테스트가 「일괄 == 개별」을 강제해서
@@ -931,9 +931,10 @@ codeproof report                  # docs/MEASUREMENTS.md
 codeproof report --check          # 낡았으면 exit 1 (CI 용)
 
 # ── 코퍼스 ──────────────────────────────────────────────
-codeproof decoy validate --strict # 규격 12종
+codeproof decoy validate --strict # 규격 13종
 codeproof decoy stats             # 미끼가 실제로 물리는지
 codeproof decoy new D0XX-짧은-설명
+codeproof decoy mutants           # 쌍마다 실린 변이로 증명을 다시 깬다 (경쟁 변이는 30번)
 
 # ── 외부 리뷰어 가져오기 (자격증명 불필요) ──────────────
 codeproof import --from out --name semgrep --identity "1.2.3"
@@ -952,6 +953,9 @@ codeproof eval --providers claude,codex --effort high --samples 8
 ```bash
 uv run pytest tests/corpus/test_proofs.py
 ```
+
+증명이 twin 하나만 깨는지, 그럴듯한 약화 전부를 깨는지는 쌍의 `mutants.py` 가 본다 — 약화는 깨야 하고
+주장이 정하지 않은 것만 바꾼 안전한 변형은 통과해야 한다 (`tests/corpus/test_mutants.py`).
 
 ### 처음 받았다면 — 한 줄로 재현 확인
 

@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from codeproof_ai.analysis.base import analyze_batch, materialize
 from codeproof_ai.analysis.python.ast_index import PythonSymbolIndex
+from codeproof_ai.analysis.python.version import TARGET_PYTHON
 from codeproof_ai.analysis.toolchain import run as run_tool
 from codeproof_ai.domain.finding import Category, Finding, Severity
 from codeproof_ai.domain.location import Location, Position, Span
@@ -31,6 +32,9 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from codeproof_ai.domain.target import ReviewTarget
+
+# 🔴 대상 판을 정한다 - 없으면 실행한 인터프리터 판을 따르고 매니페스트에 남지 않는다 (version.py)
+_PYTHON = f"{TARGET_PYTHON[0]}.{TARGET_PYTHON[1]}"
 
 _TYPE_CODES = frozenset(
     {
@@ -60,6 +64,7 @@ class MypyAnalyzer:
         #    재현성 이전에 정확성 문제다.
         "--no-incremental",
         "--cache-dir=/dev/null",
+        f"--python-version={_PYTHON}",
         "--output=json",
         "--show-error-end",
         "--show-absolute-path",
@@ -80,7 +85,7 @@ class MypyAnalyzer:
         return ToolVersion(name="mypy", version=version)
 
     def config_signature(self) -> str:
-        return f"mypy(strict={self.strict},isolated,no-cache)"
+        return f"mypy(strict={self.strict},py={_PYTHON},isolated,no-cache)"
 
     def analyze(self, target: ReviewTarget) -> list[Finding]:
         with materialize(target) as root:

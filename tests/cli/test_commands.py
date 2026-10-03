@@ -391,6 +391,35 @@ class TestDecoyCommands:
         main(["decoy", "new", "D900-x", "--corpus", str(tmp_path)])
         assert main(["decoy", "new", "D900-x", "--corpus", str(tmp_path)]) == 2
 
+    def test_mutants_passes_on_the_stored_mutants(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert main(["decoy", "mutants", "D115", "--race-runs", "0"]) == 0
+        assert "기대와 다름 0" in capsys.readouterr().out
+
+    def test_mutants_fails_when_a_weakening_survives(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """🔴 경쟁 변이는 race_runs 번 **모두** 깨져야 한다 - 결정적 약화 하나를 놓쳐도 실패다."""
+        pair = tmp_path / "D999-fake"
+        pair.mkdir()
+        (pair / "decoy.py").write_text("VALUE = 1\nOTHER = 0\n", encoding="utf-8")
+        (pair / "proof.py").write_text(
+            "def attack(mod: object) -> bool:\n    return mod.VALUE != 1\n", encoding="utf-8"
+        )
+        (pair / "mutants.py").write_text(
+            'WEAKENED = {"값을 바꿈": [("VALUE = 1\\n", "VALUE = 2\\n")]}\n'
+            'RACY = {"경쟁 흉내": [("VALUE = 1\\n", "VALUE = 3\\n")]}\n'
+            'SAFE = {"옆 값만 바꿈": [("OTHER = 0\\n", "OTHER = 5\\n")]}\n',
+            encoding="utf-8",
+        )
+        assert main(["decoy", "mutants", "--corpus", str(tmp_path), "--race-runs", "2"]) == 0
+        (pair / "mutants.py").write_text(
+            'WEAKENED = {"못 잡는 약화": [("OTHER = 0\\n", "OTHER = 9\\n")]}\n', encoding="utf-8"
+        )
+        assert main(["decoy", "mutants", "--corpus", str(tmp_path)]) == 1
+        assert "기대와 다름 1" in capsys.readouterr().out
+
     def test_stats_reports_bait_coverage(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:

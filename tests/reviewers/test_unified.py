@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from codeproof_ai.analysis.python.ruff import RuffAnalyzer
+from codeproof_ai.analysis.python.version import TARGET_PYTHON
 from codeproof_ai.domain.reviewer import Reviewer, ReviewerKind
 from codeproof_ai.eval.grading.safety import ProvableSafetyGrader
 from codeproof_ai.eval.loader import load_decoy_samples
@@ -41,6 +42,8 @@ def sarif_dir() -> Path:
                     "uv", "run", "ruff", "check", str(root),
                     "--output-format=sarif", "--no-cache", "--exit-zero",
                     "--isolated", "--ignore-noqa", "--select=S,B,F,SIM",
+                    # 직접 실행 경로(RuffAnalyzer)와 같은 대상 판 - 없으면 3.10 으로 본다
+                    "--target-version=py{}{}".format(*TARGET_PYTHON),
                 ],
                 capture_output=True, text=True, check=False,
             )

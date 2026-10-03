@@ -26,6 +26,7 @@ uv run codeproof report          # docs/MEASUREMENTS.md 생성 (--check 로 최�
 uv run codeproof pack --from <실행기 출력> --out results/agent/<이름> [--runs N]  # 에이전트 묶음 (N = 수집 전에 선언한 회차 수)
 uv run codeproof decoy validate  # decoy 규격 검사
 uv run codeproof decoy new <id>  # 템플릿에서 새 decoy
+uv run codeproof decoy mutants [D104 ...]  # 쌍의 mutants.py 로 증명을 다시 깬다 (경쟁 변이는 30번)
 ```
 
 **코퍼스 구축 환경은 별도다** — `cd corpus && uv sync`. 본 패키지의 `>=3.14` 와
@@ -201,6 +202,7 @@ span_start = min(node.lineno, *(d.lineno for d in node.decorator_list))
 | ruff | `--isolated` | 호스트 `pyproject.toml` 의 select·exclude 적용 |
 | mypy | `--config-file=/dev/null` | [실측] 이 레포의 `strict = true` 를 주워왔다 |
 | mypy | `--no-incremental` `--cache-dir=/dev/null` | [실측] **삭제된 임시 디렉터리 경로**의 진단이 섞여 나왔다 |
+| ruff · mypy | 대상 판 (`analysis/python/version.py` 한 곳) | [실측] Ruff 는 3.10 으로 보고 `ExceptionGroup` 에 F821 (D109 FP) · mypy 는 실행한 인터프리터 판을 따르고 기록이 없다 |
 
 🔴 **`config_signature()` 가 거짓을 적지 않게 한다.** 격리 전에는 `mypy(strict=False)` 라고
 기록하면서 실제로는 strict 로 돌고 있었다 — 매니페스트가 거짓이면 재현성 설계가 무의미하다.
@@ -644,6 +646,7 @@ uv run codeproof decoy validate          # 훅 · 테스트는 --strict (경고�
 | V11 | 쓰이지 않는 수용 표기 |
 | V12 | `proof.py` 존재와 `attack(mod)` 서명 (G3a1) |
 | **V13** | **`guard_lines` 가 `guard_symbol` 과 실제로 관계된 자리** — 정의든 사용부든 |
+| **V14** | **쌍의 파일(meta · decoy · twin · proof · mutants)에 원문 보이지 않는 문자가 없다** — 제어 · 서식 · 줄 구분자 · 비문자. 문자열 안이면 이스케이프로 쓴다 |
 
 🔴 V13 이 있는 이유: V4 는 「구간이 파일 안인가」와 「심볼이 파일에 있는가」를
 **따로** 본다. 둘 다 통과하면서 서로 다른 곳을 가리킬 수 있다.
@@ -698,6 +701,7 @@ attack(twin)  is True    # 🔴 공격이 실제로 결함을 잡을 수 있다
 | V2~V11 | 형식 — 근거 길이 · 가드 가시성 · 짝 구조 | `decoy validate` (훅 · 테스트가 강제) |
 | **V12** | **proof.py 존재와 서명** | `decoy validate` |
 | **V13** | **`guard_lines` 가 `guard_symbol` 과 관계된 자리인가** | `decoy validate` |
+| **V14** | **원문 보이지 않는 문자가 없는가** (줄은 `\n` 으로만 센다) | `decoy validate` |
 | **반증 실행** | **근거가 참인가** | `pytest tests/corpus/test_proofs.py` |
 | AST 구조 증명 | 「경로가 **없다**」류 주장 | `tests/corpus/test_safety_claims.py` |
 
@@ -717,6 +721,9 @@ attack(twin)  is True    # 🔴 공격이 실제로 결함을 잡을 수 있다
     그 칸으로만 잡히는 변이, 주장이 정하지 않은 것(예외 타입 · 컨테이너 · import 꼴)을 바꾼 안전한 변형을 먼저
     적는다. 안전한 변형은 주장 오라클로 먼저 확인한다. 지난 검토가 찾은 종류 목록은 그 표의 빠진 칸을 찾는
     대조용이다 (DESIGN §3.5 「쓰는 단계에서 먼저 치는 것」).
+    변이는 쌍의 `mutants.py` 에 싣는다 — WEAKENED · SAFE 는 `tests/corpus/test_mutants.py` 가 돌리고, 경쟁에 기대는
+    RACY 는 `codeproof decoy mutants` 가 30번씩 잰다. scratch 에만 둔 변이로 낸 숫자는 다시 돌릴 수 없다 —
+    [실측] 1·2라운드 변이가 그렇게 사라졌다.
     [실측 · 2라운드] 증명 공백 8쌍 중 4쌍이 1라운드가 이미 찾은 종류였고, [실측 · 3라운드] 목록을 써도 12쌍에서
     탐침이 주장의 양화보다 좁았다 — 종류만 쌓아서는 같은 구멍이 다른 모양으로 다시 난다. [실측 · 4라운드] 축
     제거로 축마다 잡히는 변이를 보여도 빠진 축은 주장 문장에 있었고(5쌍), 「안전」이라 적은 변형 넷이 약화였다.
@@ -758,7 +765,7 @@ uv run codeproof decoy stats
 `decoy validate --strict` 를 돌리고, 위반이면 `decision: "block"` 으로 이유를 Claude 에게 돌려준다 —
 편집 자체는 되돌리지 않는다.
 
-🔴 **형식(V2~V13)만 잡는다.** G3a 의 「근거가 참인지」는 여전히 사람 몫이다.
+🔴 **형식(V2~V14)만 잡는다.** G3a 의 「근거가 참인지」는 여전히 사람 몫이다.
    훅이 통과했다고 decoy 가 옳은 것이 아니다 - 바닥선이지 충분조건이 아니다.
 
 🔴 **훅은 Write·Edit 로 고칠 때만 돈다.** Bash·편집기로 고친 decoy 는

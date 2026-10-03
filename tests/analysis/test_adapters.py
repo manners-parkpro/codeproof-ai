@@ -5,9 +5,11 @@ from __future__ import annotations
 import pytest
 
 from codeproof_ai.analysis.base import materialize
+from codeproof_ai.analysis.python import ruff as ruff_module
 from codeproof_ai.analysis.python.ast_index import PythonSymbolIndex
 from codeproof_ai.analysis.python.mypy_ import MypyAnalyzer
 from codeproof_ai.analysis.python.ruff import RuffAnalyzer
+from codeproof_ai.analysis.python.version import TARGET_PYTHON
 from codeproof_ai.domain.target import ReviewTarget, SourceFile
 
 
@@ -80,6 +82,24 @@ class TestRuffAdapter:
         assert a.config_signature() != b.config_signature()
         assert "F+E" in a.config_signature()
 
+    def test_target_version_is_pinned(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """🔴 [실측] 대상 판이 없으면 `--isolated` 의 Ruff 는 3.10 으로 보고
+        3.11 의 ExceptionGroup 에 F821 을 낸다 - D109 에서 덮는 범위 안의
+        결함 주장(FP)이 됐다.
+
+        같은 입력을 3.10 으로 보게 한 대조군이 F821 을 내야 공허하지 않다.
+        """
+        src = 'raise ExceptionGroup("x", [ValueError()])\n'
+        pinned = RuffAnalyzer(select=("F",)).analyze(_target(src))
+        assert not any(f.rule_id == "F821" for f in pinned)
+        monkeypatch.setattr(ruff_module, "_TARGET", "py310")
+        older = RuffAnalyzer(select=("F",)).analyze(_target(src))
+        assert any(f.rule_id == "F821" for f in older), "대조군이 F821 을 내지 않는다"
+
+    def test_target_version_is_recorded_in_signature(self) -> None:
+        major, minor = TARGET_PYTHON
+        assert f"target=py{major}{minor}" in RuffAnalyzer(select=("F",)).config_signature()
+
     def test_rule_selection_changes_finding_count(self) -> None:
         src = "import os\ndef f():\n    pass\n"
         few = RuffAnalyzer(select=("F",)).analyze(_target(src))
@@ -96,6 +116,13 @@ class TestRuffAdapter:
 
 
 class TestMypyAdapter:
+    def test_python_version_is_pinned(self) -> None:
+        """🔴 판을 주지 않으면 mypy 는 실행한 인터프리터 판을 따르고,
+        그 판은 매니페스트에 남지 않는다."""
+        major, minor = TARGET_PYTHON
+        assert f"--python-version={major}.{minor}" in MypyAnalyzer.DEFAULT_FLAGS
+        assert f"py={major}.{minor}" in MypyAnalyzer().config_signature()
+
     def test_finds_a_type_error(self) -> None:
         src = 'def f(x: int) -> str:\n    return x\n'
         findings = MypyAnalyzer().analyze(_target(src))

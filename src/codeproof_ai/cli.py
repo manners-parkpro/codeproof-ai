@@ -20,6 +20,7 @@ from codeproof_ai.analysis.registry import (
 )
 from codeproof_ai.analysis.registry import available as analyzer_available
 from codeproof_ai.corpus.decoy import validate_corpus
+from codeproof_ai.corpus.mutants import breaks, load_mutants
 from codeproof_ai.domain.reviewer import ReviewerKind
 from codeproof_ai.eval.bait import BaitStatus, measure
 from codeproof_ai.eval.export import DOCSTRING_MODES, export_for_agent
@@ -159,6 +160,18 @@ def build_parser() -> argparse.ArgumentParser:
     ds.add_argument(
         "--ruff-select", default="ALL", help="좁히면 물리는 비율이 떨어진다"
     )
+
+    dmu = decoy_sub.add_parser(
+        "mutants", help="쌍마다 실린 변이로 증명을 다시 깨 본다 - 경쟁 변이는 여러 번"
+    )
+    dmu.add_argument("--corpus", default="corpus/decoys")
+    dmu.add_argument(
+        "--race-runs",
+        type=int,
+        default=30,
+        help="경쟁 변이를 몇 번 돌릴지 (0 이면 건너뛴다) - 약화는 매번 깨져야 한다",
+    )
+    dmu.add_argument("pairs", nargs="*", help="쌍 접두사 (예: D104) - 없으면 전부")
 
     dn = decoy_sub.add_parser("new", help="템플릿에서 새 decoy 를 만든다")
     dn.add_argument("decoy_id", help="예: D003-caller-held-lock")
@@ -328,6 +341,51 @@ def _cmd_decoy_validate(corpus: Path, *, strict: bool) -> int:
     if strict and report.warn_count:
         return 1
     return 0
+
+
+def _cmd_decoy_mutants(corpus: Path, race_runs: int, prefixes: Sequence[str]) -> int:
+    """쌍의 mutants.py 를 돌린다 - 결정적 변이는 한 번, 경쟁 변이(RACY)는 race_runs 번.
+
+    🔴 경쟁 약화는 race_runs 번 **모두** 깨져야 한다 -
+       한 번이라도 놓치면 그 증명은 flaky 한 관문이다 (교훈 #51).
+    """
+    if race_runs < 0:
+        print("--race-runs 는 0 이상이다", file=sys.stderr)
+        return 2
+    pairs = sorted(
+        d
+        for d in corpus.glob("D*")
+        if d.is_dir() and (not prefixes or d.name.split("-")[0] in prefixes)
+    )
+    wrong: list[str] = []
+    counted = 0
+    with tempfile.TemporaryDirectory(prefix="codeproof-mutants-") as tmp:
+        workdir = Path(tmp)
+        for pair in pairs:
+            mutants = load_mutants(pair)
+            if not mutants:
+                continue
+            print(pair.name)
+            for i, mutant in enumerate(mutants):
+                runs = race_runs if mutant.racy else 1
+                if runs == 0:
+                    print(f"  —  {mutant.label} (경쟁 · 건너뜀)")
+                    continue
+                broke = sum(
+                    breaks(pair, mutant, workdir, f"_cli_{pair.name[:4]}_{i}_{r}")
+                    for r in range(runs)
+                )
+                counted += 1
+                ok = broke == runs if mutant.expect_broken else broke == 0
+                want = "약화" if mutant.expect_broken else "안전"
+                mark = "✓" if ok else "✗"
+                print(f"  {mark}  {mutant.label} ({want} · 깨짐 {broke}/{runs})")
+                if not ok:
+                    wrong.append(f"{pair.name[:4]} {mutant.label} {broke}/{runs}")
+    print(f"\n변이 {counted}개 · 기대와 다름 {len(wrong)}")
+    for w in wrong:
+        print(f"  ✗ {w}")
+    return 1 if wrong else 0
 
 
 def _cmd_decoy_new(corpus: Path, decoy_id: str) -> int:
@@ -969,6 +1027,8 @@ def _dispatch_decoy(args: argparse.Namespace) -> int:
         return _cmd_decoy_validate(corpus, strict=args.strict)
     if args.decoy_command == "stats":
         return _cmd_decoy_stats(corpus, args.ruff_select)
+    if args.decoy_command == "mutants":
+        return _cmd_decoy_mutants(corpus, args.race_runs, args.pairs)
     return _cmd_decoy_new(corpus, args.decoy_id)
 
 

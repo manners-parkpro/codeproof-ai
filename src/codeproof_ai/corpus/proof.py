@@ -173,10 +173,10 @@ def run_proof(pair_dir: Path) -> ProofResult:
     """
     attack, attempts = load_attack(pair_dir)
     name = pair_dir.name.replace("-", "_")
-    broke_decoy = _any_attempt(
+    broke_decoy = any_attempt(
         attack, pair_dir / "decoy.py", f"_decoy_{name}", attempts
     )
-    broke_twin = _any_attempt(attack, pair_dir / "twin.py", f"_twin_{name}", attempts)
+    broke_twin = any_attempt(attack, pair_dir / "twin.py", f"_twin_{name}", attempts)
     return ProofResult(
         decoy_id=pair_dir.name,
         broke_decoy=broke_decoy,
@@ -185,7 +185,7 @@ def run_proof(pair_dir: Path) -> ProofResult:
     )
 
 
-def _any_attempt(attack: Attack, path: Path, alias: str, attempts: int) -> bool:
+def any_attempt(attack: Attack, path: Path, alias: str, attempts: int) -> bool:
     """최대 attempts 회 시도해 한 번이라도 깨지면 True. 깨지면 즉시 멈춘다."""
     return any(
         _attempt(attack, path, f"{alias}_{i}") for i in range(attempts)

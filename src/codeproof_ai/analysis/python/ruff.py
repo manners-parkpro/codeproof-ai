@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from codeproof_ai.analysis.base import analyze_batch, materialize
 from codeproof_ai.analysis.python.ast_index import PythonSymbolIndex
+from codeproof_ai.analysis.python.version import TARGET_PYTHON
 from codeproof_ai.analysis.toolchain import run as run_tool
 from codeproof_ai.domain.finding import Category, Finding, Severity
 from codeproof_ai.domain.location import Location, Position, Span
@@ -24,6 +25,9 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from codeproof_ai.domain.target import ReviewTarget
+
+# 🔴 대상 판을 정한다 - 없으면 Ruff 는 3.10 으로 본다 (version.py)
+_TARGET = f"py{TARGET_PYTHON[0]}{TARGET_PYTHON[1]}"
 
 # Ruff severity -> 내부 규약
 _SEVERITY: dict[str, Severity] = {
@@ -152,7 +156,7 @@ class RuffAnalyzer:
         # 🔴 분류 출처를 매니페스트에 적는다. introspect 와 접두사 추정은
         #    다른 숫자를 내므로, 어느 쪽이었는지 모르면 재현이 안 된다.
         src = "cat=tool" if self._categories else "cat=prefix"
-        return f"ruff(select={'+'.join(self.select)},{noqa},{src})"
+        return f"ruff(select={'+'.join(self.select)},target={_TARGET},{noqa},{src})"
 
     def _category(self, code: str) -> Category:
         """도구가 말한 분류를 쓰고, 없으면 접두사로 degrade 한다."""
@@ -182,6 +186,7 @@ class RuffAnalyzer:
             "--no-cache",
             "--exit-zero",
             "--isolated",
+            f"--target-version={_TARGET}",
             f"--select={','.join(self.select)}",
         ]
         if self.ignore_noqa:

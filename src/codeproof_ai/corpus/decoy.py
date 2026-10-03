@@ -19,6 +19,7 @@ from __future__ import annotations
 import ast
 import difflib
 import tomllib
+import unicodedata
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING, Self
@@ -572,6 +573,63 @@ def _check_proof(rec: DecoyRecord) -> list[Violation]:
     return []
 
 
+# V14 가 읽는 쌍의 파일 - 없는 파일은 건너뛴다 (mutants.py 는 3라운드부터)
+_PAIR_TEXT_FILES = ("meta.toml", "decoy.py", "twin.py", "proof.py", "mutants.py")
+
+# 제어 · 서식(보이지 않는 폭 · 방향 제어 · BOM) · 줄 구분자 · 문단 구분자 · 사용자 정의 · 대리 문자
+_INVISIBLE_CATEGORIES = frozenset({"Cc", "Cf", "Zl", "Zp", "Co", "Cs"})
+_ALLOWED_CONTROLS = frozenset({"\t", "\n"})
+_NONCHARACTER_BLOCK = range(0xFDD0, 0xFDF0)
+_PLANE_END = 0xFFFE  # 평면마다 끝의 두 비문자 (U+FFFE · U+FFFF · U+1FFFE ...)
+
+
+def _invisible(ch: str) -> bool:
+    if ch in _ALLOWED_CONTROLS:
+        return False
+    code = ord(ch)
+    return (
+        unicodedata.category(ch) in _INVISIBLE_CATEGORIES
+        or code & _PLANE_END == _PLANE_END
+        or code in _NONCHARACTER_BLOCK
+    )
+
+
+def _check_invisible(rec: DecoyRecord) -> list[Violation]:
+    """V14 - 쌍의 파일에 원문 보이지 않는 문자가 없는가.
+
+    🔴 도구 입력(JSON)에 쓴 유니코드 이스케이프는 실제 문자로 풀려 파일에 들어간다.
+       [실측 · 4라운드] D113 의 decoy · twin 정규식에 원문 U+FFFE · U+FFFF 가, proof.py 에 원문
+       U+2028 이 들어갔고 손으로 찾았다. 보이지 않아 사람도 리뷰어도 못 보고, U+2028 같은 줄
+       구분자는 `str.splitlines` 와 도구가 세는 줄 번호를 어긋나게 한다 (B1).
+
+    줄은 `\\n` 으로만 센다 - splitlines 는 U+2028 에서도 끊어 위치를 잘못 알려 준다.
+    `results/` 의 모델 원문은 그대로 보존하는 데이터라 여기서 보지 않는다 (D1).
+    """
+    out: list[Violation] = []
+    for name in _PAIR_TEXT_FILES:
+        path = rec.directory / name
+        if not path.is_file():
+            continue
+        found = [
+            (lineno, ch)
+            for lineno, line in enumerate(path.read_text(encoding="utf-8").split("\n"), 1)
+            for ch in line
+            if _invisible(ch)
+        ]
+        if found:
+            lineno, ch = found[0]
+            what = unicodedata.name(ch, unicodedata.category(ch))
+            out.append(
+                Violation(
+                    "V14",
+                    Level.ERROR,
+                    f"{name}:{lineno} 에 원문 U+{ord(ch):04X} ({what}) 이 있다 - 이 파일에 "
+                    f"{len(found)}개. 문자열 안이면 이스케이프로 쓰고, 아니면 지운다",
+                )
+            )
+    return out
+
+
 def validate_decoy(rec: DecoyRecord) -> list[Violation]:
     """decoy 1건의 내용 규칙을 검사한다.
 
@@ -586,6 +644,7 @@ def validate_decoy(rec: DecoyRecord) -> list[Violation]:
         *_check_visibility(rec, decoy_lines),
         *_check_twin(rec),
         *_check_proof(rec),
+        *_check_invisible(rec),
     ]
     # 작성자가 수용한 WARN 은 내린다. ERROR 는 수용 대상이 아니다 -
     # 수용 가능한 규칙이면 애초에 ERROR 로 두면 안 된다.

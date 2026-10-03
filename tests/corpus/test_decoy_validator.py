@@ -157,6 +157,55 @@ class TestCatchesViolations:
         )
         assert "V13" not in _errors(decoy_dir)
 
+    def test_v14_raw_line_separator(self, decoy_dir: Path) -> None:
+        """🔴 [실측 · 4라운드] 도구 입력의 유니코드 이스케이프가 원문 문자로 풀려 D113 에 들어갔다.
+
+        U+2028 은 splitlines 가 줄로 끊어 먹으므로, splitlines 로 훑으면 보이지도 않는다.
+        """
+        src = (decoy_dir / "decoy.py").read_text(encoding="utf-8")
+        (decoy_dir / "decoy.py").write_text(
+            f"{src}# 줄{chr(0x2028)}구분자\n", encoding="utf-8"
+        )
+        assert "V14" in _errors(decoy_dir)
+
+    def test_v14_reads_every_pair_file(self, decoy_dir: Path) -> None:
+        """meta.toml · proof.py 도 본다 - 근거 문장과 증명에 숨은 문자도 사람이 못 본다."""
+        (decoy_dir / "meta.toml").write_text(
+            _meta(claim=f"반환문의 dict 접근은{chr(0x200B)} KeyError 를 낼 수 없다"),
+            encoding="utf-8",
+        )
+        proof = (decoy_dir / "proof.py").read_text(encoding="utf-8")
+        (decoy_dir / "proof.py").write_text(f"{proof}_MARK = '{chr(0xFFFE)}'\n", encoding="utf-8")
+        found = [
+            v.message
+            for v in validate_decoy(load_decoy(decoy_dir))
+            if v.rule == "V14"
+        ]
+        assert any(m.startswith("meta.toml:") for m in found), found
+        assert any(m.startswith("proof.py:") for m in found), found
+
+    def test_v14_reports_the_line_counted_by_newlines(self, decoy_dir: Path) -> None:
+        """줄 번호는 `\\n` 으로 센다 - 앞줄에 U+2028 이 있어도 밀리지 않는다."""
+        src = (decoy_dir / "decoy.py").read_text(encoding="utf-8")
+        line = src.count("\n") + 1
+        (decoy_dir / "decoy.py").write_text(
+            f"{src}# 보이지 않는 폭{chr(0x200B)}\n", encoding="utf-8"
+        )
+        [message] = [
+            v.message
+            for v in validate_decoy(load_decoy(decoy_dir))
+            if v.rule == "V14"
+        ]
+        assert message.startswith(f"decoy.py:{line} "), message
+
+    def test_v14_accepts_escape_text(self, decoy_dir: Path) -> None:
+        """이스케이프로 쓴 글자(백슬래시 + u2028)는 보이므로 통과한다 - 대조군."""
+        src = (decoy_dir / "decoy.py").read_text(encoding="utf-8")
+        (decoy_dir / "decoy.py").write_text(
+            f'{src}_SEPARATOR = "{chr(92)}u2028"\n', encoding="utf-8"
+        )
+        assert "V14" not in _errors(decoy_dir)
+
     def test_v12_missing_proof(self, decoy_dir: Path) -> None:
         (decoy_dir / "proof.py").unlink()
         assert "V12" in _errors(decoy_dir)
