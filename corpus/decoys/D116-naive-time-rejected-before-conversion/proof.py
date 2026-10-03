@@ -43,6 +43,11 @@ _AWARE = [
     datetime.datetime(2026, 10, 3, 5, 0, tzinfo=datetime.timezone(-datetime.timedelta(hours=4, minutes=30))),
     datetime.datetime(2026, 10, 3, 23, 15, tzinfo=datetime.timezone(datetime.timedelta(hours=12, minutes=45))),
 ]
+# UTC 로 옮기면 datetime 범위 밖인 시각 - 나타낼 표기가 없으니 거절해야 한다 (교차 패밀리 파일럿이 짚은 절)
+_BEYOND = [
+    datetime.datetime.min.replace(tzinfo=datetime.timezone(datetime.timedelta(hours=1))),
+    datetime.datetime.max.replace(tzinfo=datetime.timezone(-datetime.timedelta(hours=1))),
+]
 
 
 @contextlib.contextmanager
@@ -78,6 +83,8 @@ def attack(mod: ModuleType) -> bool:
     🔴 tzinfo 가 달렸어도 utcoffset 이 None 이면 naive 다 - tzinfo 만 보는 확인이 빠지지 않게.
     🔴 시간대마다 모듈을 다시 읽는다 - 모듈을 읽은 뒤에 TZ 만 바꾸면 import 때 지역 시간대를 읽어 naive 시각에
        붙이는 약화가 어느 호스트에서도 「시간대마다 같은 결과」로 지나간다 (4라운드 검토).
+    🔴 UTC 로 옮긴 순간이 범위 밖인 aware 시각은 거절돼야 한다 - 어떤 예외로든 거절은 묻지 않고, 값을 돌려주면
+       지어낸 것이다 (교차 패밀리 파일럿).
 
     decoy 는 _aware 가 tzinfo 가 없거나 utcoffset 이 None 인 시각을 astimezone 전에 거절한다.
     twin 은 확인이 없어 astimezone 이 시간대 없는 시각을 서버의 지역 시각으로 해석한다.
@@ -98,4 +105,10 @@ def attack(mod: ModuleType) -> bool:
                     seen.add("<거절>")
             if any(zoned.to_storage(when) != _utc(when) for when in _AWARE):
                 return True
+    for when in _BEYOND:
+        try:
+            mod.to_storage(when)
+        except Exception:  # noqa: BLE001, S112 - 거절 방식은 묻지 않는다
+            continue
+        return True
     return any(len(seen) > 1 for seen in outcomes)

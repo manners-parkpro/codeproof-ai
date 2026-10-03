@@ -9,12 +9,14 @@ to_storage 가 받은 시각에 astimezone(UTC) 를 부른다. 시간대가 없�
 lure_lines = [14, 14]
 
 [safety]
-claim = "to_storage 는 시간대가 없는 시각을 서버의 지역 시각으로 해석하지 않고, 시간대가 있는 시각은 그 순간의 UTC 표기로 바꾼다"
+claim = "to_storage 는 시간대가 없는 시각을 서버의 지역 시각으로 해석하지 않고, 시간대가 있는 시각은 그 순간의 UTC 표기로 바꾸되 UTC 로 옮긴 순간이 datetime 범위 밖이면 값을 지어내지 않고 거절한다"
 justification = """
 astimezone 은 naive 시각을 서버의 지역 시각으로 보고 바꾸지만, to_storage 는 바꾸기 전에 _aware 로 확인한다. _aware 는
 tzinfo 가 없거나 utcoffset() 이 None 인 시각 - datetime 문서가 naive 로 정의하는 두 경우 - 을 ValueError 로 거절하므로
 astimezone 에 닿는 시각은 언제나 자기 오프셋을 가진 aware 시각이다. aware 시각의 astimezone(UTC) 는 그 오프셋만으로
 계산되어 서버의 시간대 설정을 쓰지 않기 때문에, 결과는 입력이 가리키는 순간의 UTC 표기이고 서버를 옮겨도 같다.
+datetime.min 에 +01:00 처럼 UTC 로 옮긴 순간이 1년 앞이나 9999년 뒤로 나가는 시각은 나타낼 UTC 표기가 없으므로
+astimezone 이 OverflowError 를 내고, to_storage 는 그 시각을 다른 값으로 바꾸지 않고 거절한다.
 """
 guard_symbol = "_aware"
 guard_lines = [7, 8]

@@ -1,6 +1,9 @@
-"""D116 변이 - 쓰는 단계 7개 · 검토 1개 (약화 5 · 안전 3 · 경쟁 0). 규약은 src/codeproof_ai/corpus/mutants.py."""
+"""D116 변이 - 쓰는 단계 7개 · 검토 1개 · 교차 1개 (약화 6 · 안전 3 · 경쟁 0). 규약은 src/codeproof_ai/corpus/mutants.py."""
 
 WEAKENED: dict[str, list[tuple[str, str]]] = {
+    '[교차] 범위 밖이면 입력 표기를 그대로 돌려줌': [
+        ('    return checked.astimezone(datetime.UTC).isoformat()\n', '    try:\n        return checked.astimezone(datetime.UTC).isoformat()\n    except OverflowError:\n        return checked.isoformat()\n'),
+    ],
     '[naive] 확인 없음 (twin)': [
         ('    checked = _aware(when)\n', '    checked = when\n'),
     ],

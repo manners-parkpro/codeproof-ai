@@ -1,0 +1,35 @@
+{
+  "what": "교차 패밀리 라벨 감사 파일럿 - 선언은 DESIGN §9 의 5 (커밋 7f06aab)",
+  "date": "2026-10-03",
+  "sample_rule": "1~4라운드(D061~D116)에서 라운드마다 3쌍 + 나머지에서 2쌍 · random.Random(\"codeproof-cross-family-pilot-2026-10-03\")",
+  "pairs": [
+    "D064",
+    "D065",
+    "D072",
+    "D076",
+    "D082",
+    "D083",
+    "D091",
+    "D097",
+    "D101",
+    "D105",
+    "D107",
+    "D112",
+    "D113",
+    "D116"
+  ],
+  "cli": "codex-cli 0.158.0",
+  "model": "gpt-6-astra",
+  "effort": "high",
+  "flags": "exec --ignore-user-config --ignore-rules --ephemeral --skip-git-repo-check --sandbox read-only --color never --output-schema schema.json --json (빈 작업 디렉터리)",
+  "prompt_head_sha256": "4e24fe21b4673033d86c41203747fcc1b0b7f1a1464fdeeca2ef4dbabc75e8ca",
+  "schema_sha256": "04c80bb60b53ad47ba7d45ac65676c79a3617d3cab6086ece74d92d9f45d24ad",
+  "prompt": "prompt_head.md 뒤에 meta.toml · decoy.py · twin.py · proof.py 를 줄 번호와 함께 붙인다 (쌍마다 prompt_sha256)",
+  "usage_total": {
+    "input_tokens": 234106,
+    "cached_input_tokens": 12288,
+    "output_tokens": 8983,
+    "reasoning_output_tokens": 6589
+  },
+  "result": "재현 6/6 · 위협 모델 안 3/14 (D072 · D112 · D116) · 밖 3 (D076 · D083 · D113)"
+}

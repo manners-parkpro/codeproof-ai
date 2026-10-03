@@ -14,4 +14,4 @@ class Reading:
 
 
 def to_celsius(reading: Reading) -> float:
-    return (reading.fahrenheit - 32) * 5 / 9
+    return (reading.fahrenheit - 32) / 9 * 5
