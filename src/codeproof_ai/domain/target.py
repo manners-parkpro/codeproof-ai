@@ -66,6 +66,13 @@ class ReviewTarget:
         """제시된 파일을 찾는다. 없으면 None - 리뷰어에게도 없는 파일이다."""
         return self._index.get(path)
 
+    def match_file(self, reported: str) -> SourceFile | None:
+        """도구가 보고한 경로의 끝이 맞는 첫 제시 파일. 없으면 None.
+
+        분석기는 복원한 임시 디렉터리의 절대경로를 보고하므로 경로 끝으로 되찾는다.
+        """
+        return next((f for f in self.files if reported.endswith(f.path)), None)
+
     def is_visible(self, path: str, line: int) -> bool:
         """그 위치가 리뷰어에게 실제로 보이는가.
 
@@ -77,7 +84,3 @@ class ReviewTarget:
     @property
     def visible_paths(self) -> tuple[str, ...]:
         return tuple(f.path for f in self.files)
-
-    @property
-    def total_lines(self) -> int:
-        return sum(f.line_count for f in self.files)

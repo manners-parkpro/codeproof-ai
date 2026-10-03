@@ -19,11 +19,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from codeproof_ai.analysis.base import (
-    materialize,
-    materialize_many,
-    split_batch_path,
-)
+from codeproof_ai.analysis.base import analyze_batch, materialize
 from codeproof_ai.analysis.python.ast_index import PythonSymbolIndex
 from codeproof_ai.analysis.toolchain import run as run_tool
 from codeproof_ai.domain.finding import Category, Finding, Severity
@@ -102,25 +98,10 @@ class MypyAnalyzer:
         [실측] mypy 는 파일 1개든 30개든 ~113ms 다. 대상마다 띄우면 선형으로 는다.
         디렉터리 슬러그가 유효한 식별자라 `Duplicate module named "decoy"` 도 안 난다.
         """
-        if not targets:
-            return {}
-        by_id = {t.target_id: t for t in targets}
-        out: dict[str, list[Finding]] = {t.target_id: [] for t in targets}
-
         # mypy 는 모듈명 해소가 필요하다 - 상자를 패키지로 만든다.
-        with materialize_many(targets, as_packages=True) as (root, mapping):
-            for rec in self._run(root):
-                split = split_batch_path(root, str(rec.get("file", "")))
-                if split is None:
-                    continue
-                slug, rel = split
-                tid = mapping.get(slug)
-                if tid is None:
-                    continue
-                out[tid].extend(
-                    self._to_findings([{**rec, "file": rel}], by_id[tid])
-                )
-        return out
+        return analyze_batch(
+            targets, self._run, self._to_findings, path_key="file", as_packages=True
+        )
 
     def _run(self, root: Path) -> list[dict[str, Any]]:
         args = list(self.DEFAULT_FLAGS)
@@ -152,10 +133,7 @@ class MypyAnalyzer:
             if str(rec.get("severity", "error")) != "error":
                 continue
 
-            path = self._relative(str(rec.get("file", "")), target)
-            if path is None:
-                continue
-            src = target.file(path)
+            src = target.match_file(str(rec.get("file", "")))
             if src is None:
                 continue
 
@@ -180,7 +158,7 @@ class MypyAnalyzer:
                 source=self.name,
                 rule_id=code,
                 message=str(rec.get("message", "")),
-                location=Location(path=path, span=Span(start=start, end=end)),
+                location=Location(path=src.path, span=Span(start=start, end=end)),
                 category=Category.TYPE_SAFETY if code in _TYPE_CODES else Category.CORRECTNESS,
                 severity=Severity.ERROR,
                 quoted_code=source_line.strip() or None,
@@ -190,10 +168,3 @@ class MypyAnalyzer:
             symbol, kind = self._index.enclosing_symbol(src.content, line)
             out.append(finding.with_symbol(symbol, kind))
         return out
-
-    @staticmethod
-    def _relative(filename: str, target: ReviewTarget) -> str | None:
-        for p in target.visible_paths:
-            if filename.endswith(p):
-                return p
-        return None

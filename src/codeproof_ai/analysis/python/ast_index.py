@@ -14,8 +14,6 @@ from dataclasses import dataclass
 class _Scope:
     name: str
     kind: str
-    start: int
-    end: int
 
 
 def _span(node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef) -> tuple[int, int]:
@@ -63,7 +61,7 @@ class PythonSymbolIndex:
                     start, end = _span(child)
                     if start <= line <= end:
                         kind = "class" if isinstance(child, ast.ClassDef) else "function"
-                        chain.append(_Scope(child.name, kind, start, end))
+                        chain.append(_Scope(child.name, kind))
                         visit(child)
                         return
                 else:

@@ -9,10 +9,10 @@ from __future__ import annotations
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator, Sequence
+    from collections.abc import Callable, Iterator, Sequence
 
     from codeproof_ai.domain.finding import Finding
     from codeproof_ai.domain.run import ToolVersion
@@ -88,6 +88,37 @@ def split_batch_path(root: Path, filename: str) -> tuple[str, str] | None:
     if len(parts) < 2:  # noqa: PLR2004
         return None
     return parts[0], str(Path(*parts[1:]))
+
+
+def analyze_batch(
+    targets: Sequence[ReviewTarget],
+    run: Callable[[Path], list[dict[str, Any]]],
+    to_findings: Callable[[list[dict[str, Any]], ReviewTarget], list[Finding]],
+    *,
+    path_key: str,
+    as_packages: bool = False,
+) -> dict[str, list[Finding]]:
+    """대상 전부를 상자별로 복원해 `run` **한 번**으로 분석하고, 보고 경로로 대상을 되찾는다.
+
+    `path_key` 는 도구 레코드의 파일 경로 칸이다 - 대상 상대경로로 바꿔 `to_findings` 에
+    넘긴다. 상자로 되돌릴 수 없는 레코드는 버린다.
+    """
+    if not targets:
+        return {}
+    by_id = {t.target_id: t for t in targets}
+    out: dict[str, list[Finding]] = {t.target_id: [] for t in targets}
+
+    with materialize_many(targets, as_packages=as_packages) as (root, mapping):
+        for rec in run(root):
+            split = split_batch_path(root, str(rec.get(path_key, "")))
+            if split is None:
+                continue
+            slug, rel = split
+            tid = mapping.get(slug)
+            if tid is None:
+                continue
+            out[tid].extend(to_findings([{**rec, path_key: rel}], by_id[tid]))
+    return out
 
 
 @runtime_checkable

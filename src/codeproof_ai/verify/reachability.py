@@ -62,7 +62,7 @@ class ReachabilityVerifier:
                 detail=f"{symbol} 은 공개 이름이라 파일 밖에서 불릴 수 있다",
             )
 
-        referenced = self._referenced_names(tree, exclude_def=leaf)
+        referenced = self._referenced_names(tree)
         if leaf in referenced:
             return Evidence(
                 kind=EvidenceKind.REACHABILITY,
@@ -80,20 +80,13 @@ class ReachabilityVerifier:
             ),
         )
 
-    def _referenced_names(self, tree: ast.Module, exclude_def: str) -> frozenset[str]:
-        """정의 자체를 뺀 참조 이름들."""
-        defined_at: set[int] = set()
-        for node in ast.walk(tree):
-            if (
-                isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
-                and node.name == exclude_def
-            ):
-                defined_at.add(id(node))
+    def _referenced_names(self, tree: ast.Module) -> frozenset[str]:
+        """Name · Attribute 로 참조되는 이름들. `def` 의 이름은 Name 노드가 아니라 들어오지 않는다.
 
+        ⚠ 함수 몸통 안의 자기 참조(재귀)는 참조로 센다.
+        """
         names: set[str] = set()
         for node in ast.walk(tree):
-            if id(node) in defined_at:
-                continue
             if isinstance(node, ast.Name):
                 names.add(node.id)
             elif isinstance(node, ast.Attribute):

@@ -23,13 +23,12 @@ from codeproof_ai.corpus.decoy import validate_corpus
 from codeproof_ai.domain.reviewer import ReviewerKind
 from codeproof_ai.eval.bait import BaitStatus, measure
 from codeproof_ai.eval.export import DOCSTRING_MODES, export_for_agent
-from codeproof_ai.eval.grading.base import Outcome
 from codeproof_ai.eval.grading.corroboration import StaticCorroborationGrader
 from codeproof_ai.eval.grading.injected import InjectedDefectGrader
 from codeproof_ai.eval.grading.paired import PairedFixGrader
 from codeproof_ai.eval.grading.safety import ProvableSafetyGrader
 from codeproof_ai.eval.loader import load_decoy_samples
-from codeproof_ai.eval.metrics import credibility_warning
+from codeproof_ai.eval.metrics import MIN_CREDIBLE_NEGATIVES, TARGET_NEGATIVES, credibility_warning
 from codeproof_ai.eval.mix import Axis, mix_sensitivity
 from codeproof_ai.eval.multirun import EXPECTATION_LABEL, at_least, expectation, thresholds
 from codeproof_ai.eval.pairing import (
@@ -73,11 +72,6 @@ if TYPE_CHECKING:
     from codeproof_ai.domain.reviewer import Reviewer
     from codeproof_ai.eval.grading.base import Grader
     from codeproof_ai.eval.sample import LabeledSample
-
-# 음성 100건 미만이면 FPR 의 Wilson 95% CI 반폭이 ±6pp 를 넘는다.
-# 그 아래로는 숫자가 아니라 느낌이다 (DESIGN §3.5).
-MIN_CREDIBLE_NEGATIVES = 100
-TARGET_NEGATIVES = 150
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -369,9 +363,7 @@ def _cmd_decoy_new(corpus: Path, decoy_id: str) -> int:
 
 def _print_spread(run: ReviewerRun, graders: Sequence[Grader]) -> None:
     """🔴 채점 기준 편차 - 이 프로젝트의 헤드라인."""
-    defs = {g.name: g.definition for g in graders}
-    fp_capable = {g.name for g in graders if Outcome.FALSE_POSITIVE in g.emits}
-    sp = compute_spread(run.outcomes, defs, fp_capable, negatives_only=True)
+    sp = compute_spread(run.outcomes, graders, negatives_only=True)
     if sp.findings == 0:
         print("\n  [채점 기준 편차] 증명된 음성 위에 지적이 없어 편차를 낼 수 없다")
         return
@@ -516,6 +508,30 @@ def _print_strata(run: ReviewerRun) -> None:
     print()
 
 
+def _print_header(run: ReviewerRun, title: str) -> None:
+    """리뷰어 줄과 매니페스트 공개 블록 - measure · eval · import 의 머리."""
+    print("=" * 74)
+    print(f"리뷰어: {title}")
+    print("-" * 74)
+    print(run.manifest.disclosure_block())
+    print("-" * 74)
+
+
+def _print_scoring(
+    run: ReviewerRun, graders: Sequence[Grader], samples: Sequence[LabeledSample]
+) -> None:
+    """채점 절 - measure · eval · import 가 이 한 곳으로 같은 절을 같은 순서로 낸다.
+
+    셋이 따로 부를 때는 절을 더하거나(`_print_mix`) 서명을 바꿀 때(`_print_pairs`)마다
+    세 곳을 고쳤다.
+    """
+    _print_spread(run, graders)
+    _print_pairs(run, graders, samples)
+    _print_sensitivity(run, samples, "provable_safety")
+    _print_mix(run, samples, "provable_safety")
+    _print_strata(run)
+
+
 def _print_repro(check: ReproCheck, reviewer: str) -> None:
     """🔴 같은 설정의 결과가 같은가. 해석은 리뷰어 종류에 달려 있다."""
     n = len(check.runs)
@@ -612,18 +628,10 @@ def _cmd_eval(
             prompt_hash=prompt_hash,
         )
 
-        print("=" * 74)
-        print(f"리뷰어: {run.reviewer}  ({run.manifest.model_id})")
-        print("-" * 74)
-        print(run.manifest.disclosure_block())
-        print("-" * 74)
+        _print_header(run, f"{run.reviewer}  ({run.manifest.model_id})")
         print(f"  텔레메트리: {run.telemetry.render()}")
         _print_observations(run)
-        _print_spread(run, graders)
-        _print_pairs(run, graders, labeled)
-        _print_sensitivity(run, labeled, "provable_safety")
-        _print_mix(run, labeled, "provable_safety")
-        _print_strata(run)
+        _print_scoring(run, graders, labeled)
         _persist(run, store_path)
 
     return 0
@@ -795,11 +803,7 @@ def _cmd_import(
             "  같은 표에 놓되 섞어서 집계하지 않는다.\n"
         )
 
-    print("=" * 74)
-    print(f"리뷰어: {run.reviewer}  ({reviewer.identity})  [{kind.value}]")
-    print("-" * 74)
-    print(run.manifest.disclosure_block())
-    print("-" * 74)
+    _print_header(run, f"{run.reviewer}  ({reviewer.identity})  [{kind.value}]")
     if reviewer.rejected:
         # 🔴 버린 지적은 미탐지와 구별되지 않는다 - 세어서 보인다.
         print(
@@ -809,11 +813,7 @@ def _cmd_import(
         for r in reviewer.rejected[:5]:
             print(f"      {r}")
     _print_observations(run)
-    _print_spread(run, graders)
-    _print_pairs(run, graders, labeled)
-    _print_sensitivity(run, labeled, "provable_safety")
-    _print_mix(run, labeled, "provable_safety")
-    _print_strata(run)
+    _print_scoring(run, graders, labeled)
     _persist(run, store_path)
     return 0
 
@@ -929,11 +929,7 @@ def _cmd_measure(
     for analyzer in analyzers:
         graders = _graders_for(analyzer.name, slack, samples)
         run = run_reviewer(AnalyzerReviewer(analyzer), samples, graders)
-        print("=" * 74)
-        print(f"리뷰어: {run.reviewer}")
-        print("-" * 74)
-        print(run.manifest.disclosure_block())
-        print("-" * 74)
+        _print_header(run, run.reviewer)
 
         for sc in run.outcomes:
             obs = sc.observations.observed
@@ -947,12 +943,7 @@ def _cmd_measure(
                         f"({g_name})"
                     )
 
-        _print_spread(run, graders)
-        _print_pairs(run, graders, samples)
-        _print_sensitivity(run, samples, "provable_safety")
-        _print_mix(run, samples, "provable_safety")
-        _print_strata(run)
-
+        _print_scoring(run, graders, samples)
         _persist(run, store_path)
 
     if warning := credibility_warning(sum(1 for s in samples if s.is_proven_safe)):

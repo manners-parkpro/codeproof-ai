@@ -46,11 +46,9 @@ class Position:
             raise ValueError(msg)
 
     @classmethod
-    def from_char_1based(
-        cls, line: int, column_1based: int, *, byte_column: int | None = None
-    ) -> Self:
+    def from_char_1based(cls, line: int, column_1based: int) -> Self:
         """Ruff·SARIF 처럼 1-based 문자 열을 쓰는 원본에서 변환한다."""
-        return cls(line=line, column=column_1based - 1, byte_column=byte_column)
+        return cls(line=line, column=column_1based - 1)
 
     @classmethod
     def from_byte_0based(cls, line: int, byte_column: int, source_line: str) -> Self:
@@ -78,14 +76,6 @@ class Span:
         if (self.end.line, self.end.column) < (self.start.line, self.start.column):
             msg = f"end 가 start 보다 앞선다: {self.start} → {self.end}"
             raise ValueError(msg)
-
-    @property
-    def is_single_line(self) -> bool:
-        return self.end is None or self.end.line == self.start.line
-
-    def covers_line(self, line: int) -> bool:
-        last = self.end.line if self.end is not None else self.start.line
-        return self.start.line <= line <= last
 
     def overlaps(self, lo: int, hi: int) -> bool:
         """보고된 줄 범위가 [lo, hi] 와 겹치는가 - **위치 매칭의 유일한 정의.**

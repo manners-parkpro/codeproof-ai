@@ -24,6 +24,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Self
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     from pathlib import Path
 
 # 가드와 무관한 변경이 얼마나 섞여도 "가드만 다르다" 로 볼 것인가.
@@ -235,19 +236,21 @@ def load_decoy(directory: Path) -> DecoyRecord:
         raise DecoyLoadError(msg) from exc
 
 
+def _opcodes(decoy_src: str, twin_src: str) -> Sequence[tuple[str, int, int, int, int]]:
+    """decoy -> twin 줄 단위 diff. 아래 넷이 이것 하나를 본다 - 같은 쌍이면 같은 diff 다."""
+    return difflib.SequenceMatcher(
+        None, decoy_src.splitlines(), twin_src.splitlines()
+    ).get_opcodes()
+
+
 def changed_lines_in_decoy(decoy_src: str, twin_src: str) -> list[LineRange]:
     """decoy 기준으로 twin 과 달라진 구간을 돌려준다 (1-based 포함)."""
-    a = decoy_src.splitlines()
-    b = twin_src.splitlines()
-    ranges: list[LineRange] = []
-    for tag, i1, i2, _j1, _j2 in difflib.SequenceMatcher(None, a, b).get_opcodes():
-        if tag == "equal":
-            continue
-        # 순수 삽입(i1 == i2)은 decoy 쪽에 폭이 없다 - 경계 한 줄로 본다.
-        start = i1 + 1
-        end = max(i2, i1 + 1)
-        ranges.append(LineRange(start=start, end=end))
-    return ranges
+    # 순수 삽입(i1 == i2)은 decoy 쪽에 폭이 없다 - 경계 한 줄로 본다.
+    return [
+        LineRange(start=i1 + 1, end=max(i2, i1 + 1))
+        for tag, i1, i2, _j1, _j2 in _opcodes(decoy_src, twin_src)
+        if tag != "equal"
+    ]
 
 
 def twin_changed_lines(decoy_src: str, twin_src: str) -> list[LineRange]:
@@ -256,14 +259,11 @@ def twin_changed_lines(decoy_src: str, twin_src: str) -> list[LineRange]:
     changed_lines_in_decoy 의 반대편이다. twin 의 결함 위치를 정하는 데 쓴다 -
     가드가 제거된 자리가 곧 결함 자리다.
     """
-    a = decoy_src.splitlines()
-    b = twin_src.splitlines()
-    ranges: list[LineRange] = []
-    for tag, _i1, _i2, j1, j2 in difflib.SequenceMatcher(None, a, b).get_opcodes():
-        if tag == "equal":
-            continue
-        ranges.append(LineRange(start=j1 + 1, end=max(j2, j1 + 1)))
-    return ranges
+    return [
+        LineRange(start=j1 + 1, end=max(j2, j1 + 1))
+        for tag, _i1, _i2, j1, j2 in _opcodes(decoy_src, twin_src)
+        if tag != "equal"
+    ]
 
 
 def decoy_lines_in_twin(decoy_src: str, twin_src: str, start: int, end: int) -> list[int]:
@@ -272,10 +272,8 @@ def decoy_lines_in_twin(decoy_src: str, twin_src: str, start: int, end: int) -> 
     twin_changed_lines 와 같은 diff 를 쓴다. 바뀐 블록 안의 줄은 대응이 없어 버린다 -
     짐작으로 옮기면 정답 구간이 근거 없이 넓어진다 (DESIGN §7.10c 보조 ③).
     """
-    a = decoy_src.splitlines()
-    b = twin_src.splitlines()
     out: list[int] = []
-    for tag, i1, i2, j1, _j2 in difflib.SequenceMatcher(None, a, b).get_opcodes():
+    for tag, i1, i2, j1, _j2 in _opcodes(decoy_src, twin_src):
         if tag != "equal":
             continue
         out.extend(j1 + (ln - 1 - i1) + 1 for ln in range(start, end + 1) if i1 < ln <= i2)
@@ -288,13 +286,11 @@ def diff_size(decoy_src: str, twin_src: str) -> int:
     🔴 decoy 쪽만 세면 안 된다 - decoy 가 11줄이면 twin 이 40줄 늘어나도
        decoy 쪽 변경은 11줄을 넘을 수 없어서 V6 이 영원히 발동하지 않는다.
     """
-    a = decoy_src.splitlines()
-    b = twin_src.splitlines()
-    total = 0
-    for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(None, a, b).get_opcodes():
-        if tag != "equal":
-            total += (i2 - i1) + (j2 - j1)
-    return total
+    return sum(
+        (i2 - i1) + (j2 - j1)
+        for tag, i1, i2, j1, j2 in _opcodes(decoy_src, twin_src)
+        if tag != "equal"
+    )
 
 
 def _parses(source: str) -> str | None:
@@ -450,40 +446,28 @@ def _check_guard_points_at_the_symbol(rec: DecoyRecord) -> list[Violation]:
       호출부(15-16)가 가드이고 그게 맞다 - 처음에 정의만 허용했다가
       정당한 decoy 둘을 잘못 잡았다.
     """
-    lines = rec.decoy_source.splitlines()
-    window = lines[rec.guard.start - 1 : rec.guard.end]
-    if any(rec.guard_symbol in line for line in window):
+    if _mentions_symbol(rec, rec.guard):
         return []
 
     span = _symbol_span(rec.decoy_source, rec.guard_symbol)
-    if span is None:
+    if span is None or rec.guard.overlaps(span):
         return []
-    if rec.guard.end < span.start or span.end < rec.guard.start:
-        return [
-            Violation(
-                "V13",
-                Level.ERROR,
-                f"guard_lines {rec.guard.start}-{rec.guard.end} 에 "
-                f"guard_symbol '{rec.guard_symbol}' 이 나오지도 않고 "
-                f"그 정의({span.start}-{span.end})와 겹치지도 않는다 - "
-                "「가드가 여기 있다」가 거짓이다",
-            )
-        ]
-    return []
+    return [
+        Violation(
+            "V13",
+            Level.ERROR,
+            f"guard_lines {rec.guard.start}-{rec.guard.end} 에 "
+            f"guard_symbol '{rec.guard_symbol}' 이 나오지도 않고 "
+            f"그 정의({span.start}-{span.end})와 겹치지도 않는다 - "
+            "「가드가 여기 있다」가 거짓이다",
+        )
+    ]
 
 
-def _diff_touches_symbol(rec: DecoyRecord, diffs: list[LineRange]) -> bool:
-    """변경 구간 안에서 guard_symbol 을 참조하는 줄이 있는가.
-
-    가드 우회(호출 제거)를 잡기 위한 것이다 - 가드 자체는 그대로 있고
-    아무도 부르지 않게 되는 결함 형태.
-    """
-    lines = rec.decoy_source.splitlines()
-    for d in diffs:
-        for n in range(d.start, min(d.end, len(lines)) + 1):
-            if rec.guard_symbol in lines[n - 1]:
-                return True
-    return False
+def _mentions_symbol(rec: DecoyRecord, window: LineRange) -> bool:
+    """decoy.py 의 그 줄 구간에 guard_symbol 이 **글자로** 나오는가 (V13 사용 자리 · V9 우회)."""
+    lines = rec.decoy_source.splitlines()[window.start - 1 : window.end]
+    return any(rec.guard_symbol in line for line in lines)
 
 
 def _check_twin(rec: DecoyRecord) -> list[Violation]:
@@ -514,7 +498,8 @@ def _check_twin(rec: DecoyRecord) -> list[Violation]:
     # 그래서 diff 가 가드 구간을 건드리거나, guard_symbol 을 참조하는 줄을
     # 건드리면 통과시킨다. 무관한 변경은 여전히 둘 다 만족하지 못한다.
     touches_guard = any(d.overlaps(rec.guard) for d in diffs)
-    bypasses_guard = _diff_touches_symbol(rec, diffs)
+    # 우회(호출 제거) - 가드 자체는 그대로 있고 아무도 부르지 않게 되는 결함 형태.
+    bypasses_guard = any(_mentions_symbol(rec, d) for d in diffs)
     if not (touches_guard or bypasses_guard):
         spans = ", ".join(f"{d.start}-{d.end}" for d in diffs)
         out.append(

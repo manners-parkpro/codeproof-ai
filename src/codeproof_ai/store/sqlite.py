@@ -36,10 +36,7 @@ class RunRow:
     run_id: str
     config_hash: str
     reviewer: str
-    model_id: str
     effort: str
-    sample_n: int
-    created_at: str
     findings: int
 
 
@@ -75,7 +72,6 @@ class Store:
     """실행 결과 저장소."""
 
     def __init__(self, path: Path | str) -> None:
-        self.path = path
         self._conn = sqlite3.connect(path)
         self._conn.row_factory = sqlite3.Row
         self._conn.executescript(DDL)
@@ -225,10 +221,7 @@ class Store:
                 run_id=row["run_id"],
                 config_hash=row["config_hash"],
                 reviewer=row["reviewer"],
-                model_id=row["model_id"],
                 effort=row["effort"],
-                sample_n=row["sample_n"],
-                created_at=row["created_at"],
                 findings=row["n"],
             )
             for row in cur

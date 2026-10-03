@@ -22,12 +22,13 @@ from codeproof_ai.eval.multirun import (
     total_runs,
 )
 from codeproof_ai.eval.pairing import PairVerdict, pair_summary, score_pairs
-from codeproof_ai.eval.runner import SampleOutcome
+from codeproof_ai.eval.runner import regrade_view
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from codeproof_ai.eval.metrics import Proportion
+    from codeproof_ai.eval.runner import SampleOutcome
     from codeproof_ai.eval.sample import LabeledSample
 
 # 🔴 (0,2,5) 는 좁다 - 전이점이 slack 6 으로 옮겨가자 안정으로 보였다 (DESIGN #31).
@@ -41,20 +42,10 @@ def regrade_safety(
     """지적은 그대로 두고 `provable_safety` 만 slack 을 바꿔 다시 채점한다.
 
     🔴 import 출력과 생성물이 **같은 함수**로 스윕한다 - 한 곳만 다르면 같은 실행이
-       곳마다 다른 민감도를 낸다 (A2a).
+       곳마다 다른 민감도를 낸다 (A2a). 재채점도 관점과 같은 `runner.regrade_view` 를
+       탄다 - `at_least=1` 은 나온 지적 전부(합집합)다.
     """
-    by_id = {s.sample_id: s for s in samples}
-    g = ProvableSafetyGrader(overlap_slack=slack)
-    return [
-        SampleOutcome(
-            sample_id=o.sample_id,
-            is_proven_safe=o.is_proven_safe,
-            observations=o.observations,
-            judgments={g.name: tuple(g.judge(by_id[o.sample_id], o.observations.observed))},
-        )
-        for o in outcomes
-        if o.sample_id in by_id
-    ]
+    return regrade_view(outcomes, samples, [ProvableSafetyGrader(overlap_slack=slack)], at_least=1)
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,13 +142,13 @@ class Sensitivity:
         return tuple(out)
 
 
-def _count(outcomes: Sequence[SampleOutcome], grader: str) -> SlackPoint | None:
+def _count(outcomes: Sequence[SampleOutcome], grader: str, slack: int) -> SlackPoint | None:
     pairs = score_pairs(outcomes, grader)
     if not pairs:
         return None
     c = pair_summary(pairs)
     return SlackPoint(
-        slack=-1,
+        slack=slack,
         correct=c[PairVerdict.CORRECT],
         over_flag=c[PairVerdict.OVER_FLAG],
         under_flag=c[PairVerdict.UNDER_FLAG],
@@ -183,16 +174,7 @@ def sweep(
 
     points: list[SlackPoint] = []
     for s in slacks:
-        outcomes = regrade(s)
-        pt = _count(outcomes, grader_name)
+        pt = _count(regrade(s), grader_name, s)
         if pt is not None:
-            points.append(
-                SlackPoint(
-                    slack=s,
-                    correct=pt.correct,
-                    over_flag=pt.over_flag,
-                    under_flag=pt.under_flag,
-                    reversed_=pt.reversed_,
-                )
-            )
+            points.append(pt)
     return Sensitivity(grader=grader_name, points=tuple(points))

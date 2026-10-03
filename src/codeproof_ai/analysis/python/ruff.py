@@ -12,11 +12,7 @@ import json
 import subprocess
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from codeproof_ai.analysis.base import (
-    materialize,
-    materialize_many,
-    split_batch_path,
-)
+from codeproof_ai.analysis.base import analyze_batch, materialize
 from codeproof_ai.analysis.python.ast_index import PythonSymbolIndex
 from codeproof_ai.analysis.toolchain import run as run_tool
 from codeproof_ai.domain.finding import Category, Finding, Severity
@@ -176,24 +172,7 @@ class RuffAnalyzer:
         각 대상이 별도 하위 디렉터리에 들어가므로 결과를 디렉터리 슬러그로
         되돌린다. 대상 간 파일명이 겹쳐도(모두 decoy.py) 문제없다.
         """
-        if not targets:
-            return {}
-        by_id = {t.target_id: t for t in targets}
-        out: dict[str, list[Finding]] = {t.target_id: [] for t in targets}
-
-        with materialize_many(targets) as (root, mapping):
-            payload = self._run(root)
-            for item in payload:
-                split = split_batch_path(root, str(item.get("filename", "")))
-                if split is None:
-                    continue
-                slug, rel = split
-                tid = mapping.get(slug)
-                if tid is None:
-                    continue
-                rebased = {**item, "filename": rel}
-                out[tid].extend(self._to_findings([rebased], by_id[tid]))
-        return out
+        return analyze_batch(targets, self._run, self._to_findings, path_key="filename")
 
     def _run(self, root: Path) -> list[dict[str, Any]]:
         args = [
@@ -228,22 +207,20 @@ class RuffAnalyzer:
             # ⚠ 구문 오류는 code == "invalid-syntax" 로 온다 - 룰 코드가 아니다.
             is_syntax = code == "invalid-syntax"
 
-            path = self._relative(str(item.get("filename", "")), target)
-            if path is None:
+            src = target.match_file(str(item.get("filename", "")))
+            if src is None:
                 continue
 
             loc = item.get("location") or {}
             end = item.get("end_location") or {}
             row = int(loc.get("row", 1))
-            src = target.file(path)
-            source_text = src.content if src is not None else ""
 
             finding = Finding(
                 source=self.name,
                 rule_id=code or "unknown",
                 message=str(item.get("message", "")),
                 location=Location(
-                    path=path,
+                    path=src.path,
                     span=Span(
                         # Ruff: 1-based 문자 -> 0-based 문자
                         start=Position.from_char_1based(row, int(loc.get("column", 1))),
@@ -254,24 +231,16 @@ class RuffAnalyzer:
                 ),
                 category=Category.OTHER if is_syntax else self._category(code),
                 severity=_SEVERITY.get(str(item.get("severity", "warning")), Severity.WARNING),
-                quoted_code=self._line(source_text, row),
+                quoted_code=self._line(src.content, row),
                 rule_name=str(item.get("name") or "") or None,
                 suppression=(
                     f"noqa:{item['noqa_row']}" if item.get("noqa_row") is not None else None
                 ),
                 raw=dict(item),
             )
-            symbol, kind = self._index.enclosing_symbol(source_text, row)
+            symbol, kind = self._index.enclosing_symbol(src.content, row)
             out.append(finding.with_symbol(symbol, kind))
         return out
-
-    @staticmethod
-    def _relative(filename: str, target: ReviewTarget) -> str | None:
-        """임시 디렉터리 절대경로를 target 상대경로로 되돌린다."""
-        for p in target.visible_paths:
-            if filename.endswith(p):
-                return p
-        return None
 
     @staticmethod
     def _line(source: str, row: int) -> str | None:

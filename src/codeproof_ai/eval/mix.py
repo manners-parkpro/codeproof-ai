@@ -330,7 +330,6 @@ def mix_sensitivity(
     seen: dict[str, set[str]] = defaultdict(set)
     bitten: dict[str, set[str]] = defaultdict(set)
 
-    obs_fp = obs_total = 0
     for o in outcomes:
         if not o.is_proven_safe:
             continue
@@ -342,12 +341,10 @@ def mix_sensitivity(
             #    범위 밖 지적은 「이 미끼와 무관한 지적」이라 분모에 남아야
             #    「나온 지적 중 몇이 물렸나」가 된다.
             total[kind] += 1
-            obs_total += 1
             if j.outcome is Outcome.UNDECIDABLE:
                 undecided[kind] += 1
             elif j.outcome is Outcome.FALSE_POSITIVE:
                 fp[kind] += 1
-                obs_fp += 1
                 bitten[kind].add(o.sample_id)
 
     kinds = tuple(
@@ -370,7 +367,7 @@ def mix_sensitivity(
         grader=grader,
         axis=axis,
         kinds=kinds,
-        observed=Proportion(successes=obs_fp, total=obs_total),
+        observed=Proportion(successes=sum(fp.values()), total=sum(total.values())),
     )
 
 

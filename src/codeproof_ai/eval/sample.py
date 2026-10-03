@@ -108,13 +108,6 @@ class SafetyRationale:
                 msg = f"covered_lines 가 잘못됐다: {self.covered_lines}"
                 raise ValueError(msg)
 
-    def covers(self, path: str, line: int) -> bool:
-        """이 주장이 그 위치를 덮는가."""
-        if self.covered_path is None or self.covered_lines is None:
-            return False
-        lo, hi = self.covered_lines
-        return path == self.covered_path and lo <= line <= hi
-
 
 # 짝 채점이 성립하는 층. 두 층 모두 "가드만 다른" 쌍으로 구성된다.
 _PAIRED_STRATA = frozenset({Stratum.PAIRED_FIX, Stratum.DECOY})

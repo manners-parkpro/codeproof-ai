@@ -81,13 +81,3 @@ class VerifiedFinding:
         if not 0.0 <= self.confidence <= 1.0:
             msg = f"confidence 는 [0,1] 이다: {self.confidence}"
             raise ValueError(msg)
-
-    def verdict_of(self, kind: EvidenceKind) -> Verdict:
-        for ev in self.evidence:
-            if ev.kind is kind:
-                return ev.verdict
-        return Verdict.NOT_APPLICABLE
-
-    @property
-    def has_refutation(self) -> bool:
-        return any(ev.verdict is Verdict.REFUTES for ev in self.evidence)

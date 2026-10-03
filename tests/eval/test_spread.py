@@ -47,9 +47,7 @@ def _run(
     run = run_reviewer(
         analyzed("ruff", select), samples, graders, harness_sha="test"
     )
-    defs = {g.name: g.definition for g in graders}
-    fp_capable = {g.name for g in graders if Outcome.FALSE_POSITIVE in g.emits}
-    return compute_spread(run.outcomes, defs, fp_capable, negatives_only=True)
+    return compute_spread(run.outcomes, graders, negatives_only=True)
 
 
 class TestVerdictVocabulary:

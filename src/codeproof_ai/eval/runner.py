@@ -310,7 +310,7 @@ def run_reviewer(
         raise ValueError(msg)
 
     policy = grouper or FingerprintGrouper()
-    tele = _Accumulator()
+    calls: list[ReviewTelemetry] = []
 
     # 🔴 일괄 경로가 있으면 쓴다 - 대상마다 subprocess 를 띄우면
     #    300 샘플에서 mypy 만 37초다 ([실측] 일괄은 0.16초).
@@ -331,7 +331,7 @@ def run_reviewer(
                 else reviewer.review(s.target)
             )
             runs.append(_with_symbols(result.findings, s.target, reviewer))
-            tele.add(result.telemetry)
+            calls.append(result.telemetry)
             if result.raw:
                 raws.append(result.raw)
         observed.append(
@@ -383,7 +383,7 @@ def run_reviewer(
         manifest=manifest,
         outcomes=tuple(outcomes),
         results=_summarize_strata(outcomes, graders),
-        telemetry=tele.build(),
+        telemetry=_telemetry(calls),
     )
 
 
@@ -404,38 +404,17 @@ def _batch_reviews(
     return {tid: [res] for tid, res in results.items()}
 
 
-class _Accumulator:
+def _telemetry(calls: Sequence[ReviewTelemetry]) -> Telemetry:
     """호출별 텔레메트리를 모은다."""
-
-    def __init__(self) -> None:
-        self.calls = 0
-        self.tok_in = 0
-        self.tok_out = 0
-        self.cache = 0
-        self.reasoning = 0
-        self.refusals = 0
-        self.latencies: list[float] = []
-
-    def add(self, t: ReviewTelemetry) -> None:
-        self.calls += 1
-        self.tok_in += t.input_tokens or 0
-        self.tok_out += t.output_tokens or 0
-        self.cache += t.cache_read or 0
-        self.reasoning += t.reasoning_tokens or 0
-        self.refusals += int(t.refused)
-        if t.total_ms is not None:
-            self.latencies.append(t.total_ms)
-
-    def build(self) -> Telemetry:
-        return Telemetry(
-            calls=self.calls,
-            input_tokens=self.tok_in,
-            output_tokens=self.tok_out,
-            cache_read=self.cache,
-            reasoning_tokens=self.reasoning,
-            refusals=self.refusals,
-            latencies_ms=tuple(self.latencies),
-        )
+    return Telemetry(
+        calls=len(calls),
+        input_tokens=sum(t.input_tokens or 0 for t in calls),
+        output_tokens=sum(t.output_tokens or 0 for t in calls),
+        cache_read=sum(t.cache_read or 0 for t in calls),
+        reasoning_tokens=sum(t.reasoning_tokens or 0 for t in calls),
+        refusals=sum(t.refused for t in calls),
+        latencies_ms=tuple(t.total_ms for t in calls if t.total_ms is not None),
+    )
 
 
 def _corpus_hash(samples: Sequence[LabeledSample]) -> str:

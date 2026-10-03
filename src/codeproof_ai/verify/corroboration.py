@@ -51,10 +51,6 @@ class CorroborationVerifier:
             (f.location.path, f.location.line) for f in reference
         )
 
-    @property
-    def reference_sources(self) -> frozenset[str]:
-        return self._sources
-
     def config_signature(self) -> str:
         who = "+".join(sorted(self._sources)) or "none"
         return f"corroboration(ref={who},slack={self.line_slack},match=span)"

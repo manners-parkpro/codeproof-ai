@@ -34,10 +34,6 @@ if TYPE_CHECKING:
 
     from codeproof_ai.corpus.decoy import DecoyRecord
 
-DECOY_FILENAME = "decoy.py"
-TWIN_FILENAME = "twin.py"
-"""저장소 안의 파일명. **리뷰어에게 보여주는 이름이 아니다.**"""
-
 PRESENTED_FILENAME = "module.py"
 """🔴 리뷰어가 보는 파일명 - decoy 와 twin 이 **같은 이름**이어야 한다.
 

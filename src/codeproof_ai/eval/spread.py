@@ -16,6 +16,7 @@ from codeproof_ai.eval.grading.base import Outcome
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    from codeproof_ai.eval.grading.base import Grader
     from codeproof_ai.eval.runner import SampleOutcome
 
 
@@ -37,10 +38,6 @@ class GraderColumn:
     @property
     def total(self) -> int:
         return self.true_positive + self.false_positive + self.undecidable
-
-    @property
-    def decided(self) -> int:
-        return self.true_positive + self.false_positive
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,12 +78,13 @@ class Spread:
 
 def compute_spread(
     outcomes: Sequence[SampleOutcome],
-    definitions: dict[str, str],
-    fp_capable: set[str] | None = None,
+    graders: Sequence[Grader],
     *,
     negatives_only: bool = False,
 ) -> Spread:
     """같은 지적 집합에 대한 채점자별 결과를 모은다.
+
+    FP 를 낼 수 있는지는 채점자의 어휘(`Grader.emits`)에서 읽는다 (F3).
 
     Args:
         negatives_only: 증명된 음성 샘플만 본다.
@@ -97,10 +95,10 @@ def compute_spread(
     findings = sum(len(o.observations.observed) for o in subset)
 
     columns: list[GraderColumn] = []
-    for grader, definition in definitions.items():
+    for g in graders:
         tp = fp = un = 0
         for o in subset:
-            for j in o.judgments.get(grader, ()):
+            for j in o.judgments.get(g.name, ()):
                 if j.outcome is Outcome.TRUE_POSITIVE:
                     tp += 1
                 elif j.outcome is Outcome.FALSE_POSITIVE:
@@ -109,12 +107,12 @@ def compute_spread(
                     un += 1
         columns.append(
             GraderColumn(
-                grader=grader,
-                definition=definition,
+                grader=g.name,
+                definition=g.definition,
                 true_positive=tp,
                 false_positive=fp,
                 undecidable=un,
-                can_emit_fp=fp_capable is None or grader in fp_capable,
+                can_emit_fp=Outcome.FALSE_POSITIVE in g.emits,
             )
         )
 

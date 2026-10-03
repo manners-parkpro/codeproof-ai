@@ -16,7 +16,10 @@ OpenAI strict 가 요구하는 것:
 
 from __future__ import annotations
 
-from typing import Any, Final
+from typing import TYPE_CHECKING, Any, Final
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 CATEGORIES: Final = (
     "correctness",
@@ -108,19 +111,20 @@ def review_schema() -> dict[str, Any]:
     }
 
 
+def _objects(node: object) -> Iterator[dict[str, Any]]:
+    """스키마 안의 모든 객체(dict) - 아래 두 검사가 같은 순회를 쓴다."""
+    if isinstance(node, dict):
+        yield node
+        for v in node.values():
+            yield from _objects(v)
+    elif isinstance(node, list):
+        for v in node:
+            yield from _objects(v)
+
+
 def is_flat(schema: dict[str, Any]) -> bool:
     """재귀 참조가 없는지 - Anthropic 통과 조건."""
-
-    def walk(node: object) -> bool:
-        if isinstance(node, dict):
-            if "$ref" in node:
-                return False
-            return all(walk(v) for v in node.values())
-        if isinstance(node, list):
-            return all(walk(v) for v in node)
-        return True
-
-    return walk(schema)
+    return not any("$ref" in obj for obj in _objects(schema))
 
 
 _BANNED_KEYWORDS: Final = frozenset(
@@ -134,16 +138,4 @@ def unsupported_keywords(schema: dict[str, Any]) -> set[str]:
     SDK 가 조용히 제거하고 description 에 접어버리므로,
     보내기 전에 우리가 먼저 안다.
     """
-    found: set[str] = set()
-
-    def walk(node: object) -> None:
-        if isinstance(node, dict):
-            found.update(_BANNED_KEYWORDS & node.keys())
-            for v in node.values():
-                walk(v)
-        elif isinstance(node, list):
-            for v in node:
-                walk(v)
-
-    walk(schema)
-    return found
+    return {k for obj in _objects(schema) for k in _BANNED_KEYWORDS & obj.keys()}

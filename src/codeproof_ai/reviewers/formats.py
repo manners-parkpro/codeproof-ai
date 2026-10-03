@@ -48,13 +48,6 @@ def _has_list(payload: Any, key: str) -> bool:
     return isinstance(payload, dict) and isinstance(payload.get(key), list)
 
 
-def _match_path(uri: str, target: ReviewTarget) -> str | None:
-    for p in target.visible_paths:
-        if uri.endswith(p):
-            return p
-    return None
-
-
 def _quoted(target: ReviewTarget, path: str, line: int) -> str | None:
     src = target.file(path)
     if src is None:
@@ -116,9 +109,10 @@ class SarifFormat:
         uri = str((phys.get("artifactLocation") or {}).get("uri", ""))
         region = phys.get("region") or {}
 
-        path = _match_path(uri, target)
-        if path is None:
+        src = target.match_file(uri)
+        if src is None:
             return f"제시되지 않은 파일을 가리킨다: {uri!r}"
+        path = src.path
         line = int(region.get("startLine", 1))
         if not target.is_visible(path, line):
             return f"범위 밖을 가리킨다: {path}:{line}"
@@ -222,10 +216,11 @@ class BanditFormat:
                 rejected.append(f"[{i}] 객체가 아니다")
                 continue
             filename = str(res.get("filename", ""))
-            path = _match_path(filename, target)
-            if path is None:
+            src = target.match_file(filename)
+            if src is None:
                 rejected.append(f"[{i}] 제시되지 않은 파일을 가리킨다: {filename!r}")
                 continue
+            path = src.path
             line = int(res.get("line_number", 1))
             if not target.is_visible(path, line):
                 rejected.append(f"[{i}] 범위 밖을 가리킨다: {path}:{line}")

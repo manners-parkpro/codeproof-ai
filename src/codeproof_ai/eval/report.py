@@ -20,7 +20,6 @@ from dataclasses import dataclass
 from itertools import combinations
 from typing import TYPE_CHECKING
 
-from codeproof_ai.eval.grading.base import Outcome
 from codeproof_ai.eval.grading.safety import ProvableSafetyGrader
 from codeproof_ai.eval.metrics import credibility_warning
 from codeproof_ai.eval.mix import Axis, mix_sensitivity
@@ -182,9 +181,7 @@ def render_measurements(
 
 
 def _spread_section(run: ReviewerRun, graders: Sequence[Grader]) -> str:
-    defs = {g.name: g.definition for g in graders}
-    fp_capable = {g.name for g in graders if Outcome.FALSE_POSITIVE in g.emits}
-    sp = compute_spread(run.outcomes, defs, fp_capable, negatives_only=True)
+    sp = compute_spread(run.outcomes, graders, negatives_only=True)
 
     lines = [
         "## 채점 기준 편차 — 헤드라인",
@@ -196,7 +193,7 @@ def _spread_section(run: ReviewerRun, graders: Sequence[Grader]) -> str:
         "|---|---:|---:|---:|:---:|",
     ]
     for c in sp.columns:
-        mark = "o" if c.grader in fp_capable else "x"
+        mark = "o" if c.can_emit_fp else "x"
         lines.append(
             f"| `{c.grader}` | {c.true_positive} | {c.false_positive} "
             f"| {c.undecidable} | {mark} |"

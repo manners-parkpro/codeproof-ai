@@ -127,8 +127,8 @@ def load_module(path: Path, alias: str) -> ModuleType:
     return mod
 
 
-def load_attack(pair_dir: Path) -> Attack:
-    """decoy 디렉터리의 `proof.py` 에서 `attack` 을 꺼낸다."""
+def load_attack(pair_dir: Path) -> tuple[Attack, int]:
+    """decoy 디렉터리의 `proof.py` 에서 `attack` 과 선언한 시도 횟수(없으면 1회)를 꺼낸다."""
     path = pair_dir / PROOF_FILE
     if not path.is_file():
         msg = f"{pair_dir.name}: {PROOF_FILE} 이 없다 - 실행 가능한 안전 근거가 필수다"
@@ -138,7 +138,11 @@ def load_attack(pair_dir: Path) -> Attack:
     if not callable(fn):
         msg = f"{pair_dir.name}/{PROOF_FILE}: `{ATTACK}(mod) -> bool` 이 없다"
         raise ProofError(msg)
-    return fn  # type: ignore[no-any-return]
+    raw = getattr(mod, ATTEMPTS, DEFAULT_ATTEMPTS)
+    if not isinstance(raw, int) or raw < 1:
+        msg = f"{pair_dir.name}: {ATTEMPTS} 는 1 이상의 정수다 (지금 {raw!r})"
+        raise ProofError(msg)
+    return fn, min(raw, MAX_ATTEMPTS)
 
 
 def run_proof(pair_dir: Path) -> ProofResult:
@@ -162,8 +166,7 @@ def run_proof(pair_dir: Path) -> ProofResult:
     🔴 두 방향이 같은 부등호를 쓴다는 점이 중요하다. 시도를 늘려도 decoy 쪽이
        느슨해지지 않으므로 **완화가 아니라 강화**다. 상한은 MAX_ATTEMPTS 다.
     """
-    attack = load_attack(pair_dir)
-    attempts = _declared_attempts(pair_dir)
+    attack, attempts = load_attack(pair_dir)
     name = pair_dir.name.replace("-", "_")
     broke_decoy = _any_attempt(
         attack, pair_dir / "decoy.py", f"_decoy_{name}", attempts
@@ -175,18 +178,6 @@ def run_proof(pair_dir: Path) -> ProofResult:
         broke_twin=broke_twin,
         attempts=attempts,
     )
-
-
-def _declared_attempts(pair_dir: Path) -> int:
-    """`proof.py` 가 선언한 시도 횟수. 없으면 1회."""
-    mod = load_module(
-        pair_dir / PROOF_FILE, f"_proof_{pair_dir.name.replace('-', '_')}"
-    )
-    raw = getattr(mod, ATTEMPTS, DEFAULT_ATTEMPTS)
-    if not isinstance(raw, int) or raw < 1:
-        msg = f"{pair_dir.name}: {ATTEMPTS} 는 1 이상의 정수다 (지금 {raw!r})"
-        raise ProofError(msg)
-    return min(raw, MAX_ATTEMPTS)
 
 
 def _any_attempt(attack: Attack, path: Path, alias: str, attempts: int) -> bool:

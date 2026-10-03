@@ -129,10 +129,3 @@ class StaticCorroborationGrader:
                 "동의가 없는 것이지 반증된 것이 아니다"
             ),
         )
-
-
-def reference_from(
-    analyzer_findings: Mapping[str, Sequence[Finding]],
-) -> Mapping[str, Sequence[Finding]]:
-    """`Analyzer.analyze_many()` 결과를 그대로 쓸 수 있게 하는 얇은 별칭."""
-    return analyzer_findings

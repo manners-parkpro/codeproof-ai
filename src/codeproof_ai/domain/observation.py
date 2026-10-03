@@ -210,21 +210,15 @@ def group_runs(
         raise MixedReviewerError(msg)
 
     who = reviewer or (next(iter(sources)) if sources else "unknown")
-    order: list[str] = []
-    first: dict[str, Finding] = {}
+    # dict 는 삽입 순서를 지킨다 - 관측 순서는 첫 등장 순서이고, 대표는 묶음의 첫 지적이다.
     seen_in: dict[str, set[int]] = {}
     variants: dict[str, list[Finding]] = {}
 
     for idx, findings in enumerate(materialized):
         for f in findings:
             k = policy.key(f)
-            if k not in first:
-                order.append(k)
-                first[k] = f
-                seen_in[k] = set()
-                variants[k] = []
-            seen_in[k].add(idx)
-            variants[k].append(f)
+            seen_in.setdefault(k, set()).add(idx)
+            variants.setdefault(k, []).append(f)
 
     return ObservationSet(
         target_id=target_id,
@@ -233,11 +227,11 @@ def group_runs(
         grouper=policy.name,
         observed=tuple(
             ObservedFinding(
-                finding=first[k],
+                finding=group[0],
                 runs=frozenset(seen_in[k]),
                 total_runs=total,
-                variants=tuple(variants[k]),
+                variants=tuple(group),
             )
-            for k in order
+            for k, group in variants.items()
         ),
     )
