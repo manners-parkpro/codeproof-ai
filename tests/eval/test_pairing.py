@@ -104,19 +104,27 @@ class TestPerFindingHidesWhatPairingShows:
 
 class TestAgainstShippedCorpus:
     def test_ruff_discriminates_poorly(self) -> None:
-        """실측 - Ruff 는 이 코퍼스에서 한 쌍도 구별하지 못한다.
+        """실측 - Ruff 가 구별하는 쌍은 위험 패턴이 twin 에만 남는 경우뿐이다.
 
-        숫자가 바뀌면 코퍼스나 분석기가 바뀐 것이다. 확인하고 갱신한다.
+        [실측 · 74쌍] 기본 룰로 구별한 쌍은 D067 하나다 - 가드를 지우자 twin 에
+        `except Exception: continue` 만 남아 S112 가 twin 에서만 운다. 나머지는 둘 다
+        침묵하거나(P-B) 둘 다 지적하거나(P-V) 안전한 쪽만 지적한다(P-R).
+
+        🔴 개수가 아니라 **어느 쌍인지**를 본다. 구별한 쌍이 바뀌면 코퍼스나 분석기가
+           바뀐 것이다 - 그 쌍의 지적을 열어 보고 갱신한다.
         """
         samples = load_decoy_samples(DECOYS)
         run = run_reviewer(
 AnalyzerReviewer(RuffAnalyzer()), samples, [ProvableSafetyGrader()], harness_sha="test"
         )
         pairs = score_pairs(run.outcomes, G)
-        hit, total = discrimination_rate(pairs)
+        _, total = discrimination_rate(pairs)
 
         assert total == len(samples) // 2, "모든 decoy 가 짝을 이뤄야 한다"
-        assert hit == 0, f"Ruff 가 {hit}/{total} 을 구별했다 - 실측이 바뀌었다"
+        discriminated = {p.pair_id for p in pairs if p.verdict is PairVerdict.CORRECT}
+        assert discriminated == {"D067-only-best-effort-hooks-are-swallowed"}, (
+            f"Ruff 가 구별한 쌍이 바뀌었다: {sorted(discriminated)} - 실측이 바뀌었다"
+        )
 
         counts = pair_summary(pairs)
         assert counts[PairVerdict.OVER_FLAG] >= 1, "D002 의 P-V 가 사라졌다"

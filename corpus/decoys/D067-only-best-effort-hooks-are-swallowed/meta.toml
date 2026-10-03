@@ -1,0 +1,27 @@
+decoy_id = "D067-only-best-effort-hooks-are-swallowed"
+trap_kind = "exception_absorbed"
+
+[bait]
+apparent_defect = """
+dispatch 가 훅마다 except Exception 으로 실패를 잡고 continue 로 다음 훅에 넘어간다. 광범위
+except 가 실패를 삼키는 모양이라, 저장 같은 핵심 훅이 실패해도 호출자는 모른 채 성공으로 읽는
+조용한 오류 은폐로 보인다.
+"""
+lure_lines = [15, 18]
+
+[safety]
+claim = "dispatch 는 부가 훅이 아닌 훅의 실패를 삼키지 않는다"
+justification = """
+except 블록은 먼저 훅의 종류가 _BEST_EFFORT 에 드는지 보고, 들지 않으면 잡은 예외를 그대로 다시
+던지므로 continue 에 닿는 것은 metrics 와 cache_warm 의 실패뿐이다. _BEST_EFFORT 는 모듈 수준의
+frozenset 이라 실행 중에 늘어나지 않고, 따라서 저장 같은 핵심 훅의 실패는 언제나 호출자에게
+올라가며 삼켜지는 것은 실패해도 결과가 바뀌지 않는 부가 작업뿐이다.
+"""
+guard_symbol = "_BEST_EFFORT"
+guard_lines = [16, 17]
+
+[twin]
+defect = """
+except 블록이 종류를 보지 않고 모든 훅의 실패를 continue 로 넘긴다. 저장 훅이 실패해도
+예외가 사라져 호출자는 이벤트가 처리된 것으로 안다.
+"""

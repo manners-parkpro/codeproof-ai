@@ -1,0 +1,26 @@
+decoy_id = "D064-caller-passes-one-past-the-end"
+trap_kind = "contract_half_open"
+
+[bait]
+apparent_defect = """
+_numbers 가 range(start, stop) 으로 번호를 만든다. range 는 stop 을 빼므로 마지막 쪽 번호가
+목록에서 빠지는 off-by-one 으로 읽힌다 — 페이지 이동 줄에서 끝 쪽(또는 현재 쪽)이 사라지는 결함.
+"""
+lure_lines = [4, 5]
+
+[safety]
+claim = "page_links 는 first 부터 final 까지의 번호를 하나도 빠뜨리지 않는다"
+justification = """
+page_links 가 보여 줄 마지막 번호 final 을 포함 상한으로 계산한 뒤 _numbers 에 final + 1 을
+넘기므로, _numbers 가 받는 stop 은 계약상 배타적 상한이다. range(start, stop) 은 stop 을 빼고
+만드는 반열린 구간이라 결과는 first 부터 final 까지 빠짐없이 들어 있고, off-by-one 처럼 보이는
+range 가 이 계약에 맞는 쪽이다.
+"""
+guard_symbol = "page_links"
+guard_lines = [12, 13]
+
+[twin]
+defect = """
+page_links 가 final 을 그대로 넘긴다. range 가 final 을 빼서 끝 번호가 빠진다 —
+현재 쪽이 마지막 쪽이면 현재 쪽 번호까지 사라진다.
+"""

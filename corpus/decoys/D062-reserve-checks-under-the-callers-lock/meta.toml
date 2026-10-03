@@ -1,0 +1,26 @@
+decoy_id = "D062-reserve-checks-under-the-callers-lock"
+trap_kind = "caller_held_lock"
+
+[bait]
+apparent_defect = """
+_take 가 재고를 읽고(available), 모자라지 않은지 확인한 뒤, 다른 줄에서 차감해 다시 쓴다.
+모듈이 threading 을 쓰는데 이 확인-후-차감에 락이 없어서, 두 스레드가 같은 재고를 읽고
+둘 다 승인하는 초과 판매(check-then-act 경쟁)로 읽힌다.
+"""
+lure_lines = [12, 15]
+
+[safety]
+claim = "_take 의 확인과 차감은 다른 스레드와 겹칠 수 없다"
+justification = """
+_take 를 부르는 곳은 reserve 하나뿐이고 reserve 는 모듈 락 _lock 을 쥔 채로 부르므로,
+어느 순간에도 _take 를 실행하는 스레드는 하나다. 따라서 available 을 읽은 뒤 차감을 쓰기
+전까지 다른 스레드가 재고를 바꿀 수 없고, 확인과 차감은 하나의 임계 구역 안에서 일어난다.
+"""
+guard_symbol = "reserve"
+guard_lines = [19, 21]
+
+[twin]
+defect = """
+reserve 가 락 없이 _take 를 부른다. 두 스레드가 같은 available 을 읽고 둘 다 승인해
+재고보다 많은 예약이 나간다.
+"""

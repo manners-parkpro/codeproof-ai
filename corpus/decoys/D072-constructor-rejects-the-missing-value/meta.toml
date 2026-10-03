@@ -1,0 +1,29 @@
+decoy_id = "D072-constructor-rejects-the-missing-value"
+trap_kind = "type_narrowed"
+
+[bait]
+apparent_defect = """
+Reading.fahrenheit 가 float | None 으로 선언돼 있는데 to_celsius 는 None 검사 없이 그 값에서 32 를
+뺀다. 값이 빠진 측정값이 들어오면 None 과 int 의 뺄셈이 TypeError 로 변환을 죽이는 결함으로 보이고,
+타입 검사기도 같은 줄을 연산자 오류로 보고한다.
+"""
+lure_lines = [16, 17]
+
+[safety]
+claim = "to_celsius 는 fahrenheit 가 None 인 측정값을 받을 수 없다"
+justification = """
+Reading 의 __post_init__ 은 생성자가 끝나기 전에 fahrenheit 가 None 이면 ValueError 를 던지므로 None
+을 담은 인스턴스는 호출자에게 돌아가지 않는다. dataclasses.replace 도 같은 생성자를 지나고,
+frozen=True 라 만든 뒤에 fahrenheit 에 None 을 대입하는 것도 FrozenInstanceError 로 막히기 때문에
+to_celsius 가 받는 Reading 의 fahrenheit 는 None 이 아니다. 이것은 실행 중의 주장이다 - 선언 타입이
+None 을 허용하므로 타입 검사기는 17행을 연산자 오류로 보고하는데, 그 보고가 말하는 None 과 int 의
+뺄셈은 실행 중에 일어날 수 없다. object.__setattr__ 로 frozen 을 우회하는 의도적 조작은 범위 밖이다.
+"""
+guard_symbol = "Reading"
+guard_lines = [11, 13]
+
+[twin]
+defect = """
+Reading 이 생성 시점에 fahrenheit 를 검사하지 않는다. 값이 빠진 측정값이 그대로 만들어져
+to_celsius 에서 None - 32 가 TypeError 를 낸다.
+"""

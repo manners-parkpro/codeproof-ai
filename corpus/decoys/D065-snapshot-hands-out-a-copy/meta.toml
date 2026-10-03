@@ -1,0 +1,26 @@
+decoy_id = "D065-snapshot-hands-out-a-copy"
+trap_kind = "defensive_copy"
+
+[bait]
+apparent_defect = """
+preview 가 대기열 목록을 받아 items.sort() 로 제자리 정렬하고 del items[limit:] 로 잘라낸다.
+받은 목록이 대기열의 _pending 자체라면, 미리보기 한 번에 보낼 메시지의 순서가 바뀌고 limit 뒤의
+메시지가 대기열에서 사라지는 결함으로 읽힌다.
+"""
+lure_lines = [18, 19]
+
+[safety]
+claim = "preview 는 대기열의 _pending 을 바꾸지 않는다"
+justification = """
+preview 가 정렬하고 자르는 items 는 _snapshot 의 반환값이고, _snapshot 은 list(self._pending) 으로
+매번 새 리스트를 만들어 돌려준다. 따라서 sort 와 del 은 그 사본에만 작용하고 _pending 과는 다른
+객체이므로, 대기열의 순서와 길이는 미리보기 전과 같다.
+"""
+guard_symbol = "_snapshot"
+guard_lines = [11, 12]
+
+[twin]
+defect = """
+_snapshot 이 self._pending 을 그대로 돌려준다. preview 가 실제 대기열을 정렬하고 잘라내
+limit 뒤의 메시지가 사라진다.
+"""

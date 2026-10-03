@@ -1,0 +1,26 @@
+decoy_id = "D073-currency-check-blocks-the-branch"
+trap_kind = "unreachable_branch"
+
+[bait]
+apparent_defect = """
+to_minor 가 BHD 의 보조 단위 배율을 100 으로 잡는다. 바레인 디나르는 1 디나르가 1000 필스라 이
+분기로 환산한 금액은 실제의 10분의 1이 되므로, 결제 금액을 조용히 잘못 매기는 배율 오류로 보인다.
+"""
+lure_lines = [17, 18]
+
+[safety]
+claim = "to_minor 의 BHD 분기는 실행될 수 없다"
+justification = """
+to_minor 는 분기에 들어가기 전에 _currency 를 부르고, _currency 는 코드의 공백을 떼고 대문자로 맞춘
+뒤 _SUPPORTED 튜플에 없으면 ValueError 를 던지므로 돌려주는 값은 KRW · USD · JPY 중 하나뿐이다.
+따라서 currency 가 BHD 와 같아질 수 없어 배율 100 이 BHD 금액에 쓰이는 일은 없고, _SUPPORTED 는
+튜플이라 실행 중에 늘어나지도 않는다.
+"""
+guard_symbol = "_currency"
+guard_lines = [10, 11]
+
+[twin]
+defect = """
+_currency 가 코드를 정리만 하고 지원 목록을 검사하지 않는다. BHD 가 그 분기에 닿아 1.5 디나르가
+150 필스로 환산되고(참값 1500), 목록에 없는 다른 통화도 배율 1 로 환산된다.
+"""

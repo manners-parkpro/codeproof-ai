@@ -1,0 +1,28 @@
+decoy_id = "D063-status-url-from-a-fixed-table"
+trap_kind = "constant_only_sink"
+
+[bait]
+apparent_defect = """
+check 가 호출자가 준 region 으로 주소를 만들어 urllib.request.urlopen 으로 바로 요청한다.
+외부 입력이 요청 주소를 정하는 모양이라, 내부 메타데이터 주소(169.254.169.254)나 임의 호스트로
+요청을 보내게 하는 SSRF 로 읽힌다.
+"""
+lure_lines = [21, 22]
+
+[safety]
+claim = "check 가 urlopen 에 넘기는 주소는 _STATUS_URLS 의 세 상수 중 하나뿐이다"
+justification = """
+urlopen 에 넘어가는 값은 _status_url 의 반환값이고, _status_url 은 region 이 표의 키가 아니면
+ValueError 로 거절하고 키이면 표에 적힌 문자열 상수를 그대로 돌려준다. 따라서 region 은 세 상수
+중 하나를 고르는 데만 쓰이고 주소 문자열에는 한 글자도 들어가지 않으므로, 외부 입력이 호스트나
+경로를 바꿀 길이 없다. 응답이 리다이렉트하면 urlopen 이 따라가는데, 그 행선지는 세 상수 호스트가
+정하는 것이지 region 이 정하는 것이 아니므로 이 주장의 범위 밖이다.
+"""
+guard_symbol = "_status_url"
+guard_lines = [13, 16]
+
+[twin]
+defect = """
+_status_url 이 region 을 호스트 자리에 그대로 끼워 넣는다. "evil.example.net/x?" 를 주면
+요청이 evil.example.net 으로 간다 (SSRF).
+"""

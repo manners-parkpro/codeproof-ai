@@ -1,0 +1,27 @@
+decoy_id = "D071-real-encoder-beside-tidier"
+trap_kind = "noop_shim_neighbor"
+
+[bait]
+apparent_defect = """
+search_url 이 사용자 검색어를 f-string 으로 쿼리 문자열에 바로 이어 붙인다. 검색어에 & 나 # 이
+섞이면 page 를 덮어쓰는 매개변수가 더해지거나 뒤가 잘리는 매개변수 주입으로 읽히고, 바로 위에는
+공백만 정리하는 함수가 쓰이지 않는 것처럼 놓여 있다.
+"""
+lure_lines = [17, 18]
+
+[safety]
+claim = "search_url 의 검색어는 쿼리에 매개변수를 더하거나 page 를 바꿀 수 없다"
+justification = """
+search_url 이 부르는 것은 공백만 정리하는 tidy_param 이 아니라 encode_param 이고, 그 함수는
+quote(value, safe="") 로 영숫자와 - _ . ~ 를 뺀 모든 문자를 퍼센트 인코딩하므로 & 와 = 와 # 이
+각각 %26 · %3D · %23 이 된다. 따라서 검색어는 q 의 값 안에만 머물고, 새 매개변수를 더하거나 page 를
+하나 더 붙이거나 뒤를 프래그먼트로 잘라 낼 수 없다.
+"""
+guard_symbol = "encode_param"
+guard_lines = [13, 14]
+
+[twin]
+defect = """
+search_url 이 encode_param 대신 tidy_param 을 부른다. 공백 정리는 & 와 # 을 그대로 두어
+"shoes&page=999" 같은 검색어가 page 를 하나 더 붙이고, # 뒤의 매개변수는 서버에 가지 않는다.
+"""

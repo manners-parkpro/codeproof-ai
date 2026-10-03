@@ -1,0 +1,26 @@
+decoy_id = "D061-dimension-digits-cap-the-buffer"
+trap_kind = "bounded_input"
+
+[bait]
+apparent_defect = """
+frame_buffer 가 호출자가 준 크기 문자열("640x480")에서 width·height 를 읽어 곱한 만큼
+bytearray 를 잡는다. 할당 전에 상한 검사가 보이지 않아 "100000x100000" 같은 입력이면
+수십 GB 를 잡으려 하는 무제한 할당(메모리 고갈 DoS)으로 읽힌다.
+"""
+lure_lines = [13, 14]
+
+[safety]
+claim = "frame_buffer 가 잡는 버퍼는 999×999×4 바이트를 넘을 수 없다"
+justification = """
+_DIMENSIONS 가 각 변을 [1-9][0-9]{0,2} 로 받고 fullmatch 가 문자열 전체를 요구하므로 width 와
+height 는 0 으로 시작하지 않는 세 자리 이하의 ASCII 숫자, 즉 1~999 를 벗어날 수 없다. 따라서 곱은 999×999×4 = 3,992,004 바이트가
+상한이고, 그보다 큰 크기 문자열은 match 가 None 이 되어 할당 전에 ValueError 로 거절된다.
+"""
+guard_symbol = "_DIMENSIONS"
+guard_lines = [5, 5]
+
+[twin]
+defect = """
+_DIMENSIONS 가 자릿수 제한 없이 ([1-9][0-9]*) 로 받아 width·height 에 상한이 없다.
+"100000x100000" 이면 4×10^10 바이트 할당을 시도한다.
+"""

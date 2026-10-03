@@ -1,0 +1,30 @@
+decoy_id = "D066-wrapping-transaction-rolls-back"
+trap_kind = "enclosing_context"
+
+[bait]
+apparent_defect = """
+transfer 가 보내는 사람의 포인트를 먼저 깎고, 두 지갑 중 하나라도 갱신되지 않으면 LookupError
+를 던진다. 그 시점에 이미 실행된 차감을 되돌리는 코드가 transfer 안에 보이지 않아, 받는 사람이
+없을 때 포인트가 사라진 채 남는 부분 갱신으로 읽힌다.
+"""
+lure_lines = [21, 25]
+
+[safety]
+claim = "이체가 실패하면 두 지갑의 포인트는 연결의 트랜잭션 모드와 상관없이 이체 전과 같다"
+justification = """
+두 UPDATE 와 LookupError 는 모두 with _transaction(conn) 블록 안에서 일어나고, _transaction 은
+블록에 들어가기 전에 SAVEPOINT 를 직접 만들고 블록에서 어떤 예외가 나든 그 세이브포인트까지
+ROLLBACK TO 한 뒤 다시 던지므로 차감만 반영된 상태가 남을 수 없다. 세이브포인트는 연결이
+autocommit 이든 이미 열린 트랜잭션 안이든 똑같이 만들어지고 그 뒤의 변경만 되돌리기 때문에,
+실패한 이체는 호출자가 먼저 한 변경을 건드리지 않고 자기 흔적만 지운다. 두 UPDATE 의 rowcount
+를 모두 보므로 어느 쪽 지갑이 없어도 예외가 나고 되돌림이 일어난다.
+"""
+guard_symbol = "_transaction"
+guard_lines = [8, 17]
+
+[twin]
+defect = """
+_transaction 이 예외에서 되돌리지 않고 finally 의 RELEASE 만 한다. 받는 사람이 없어 LookupError
+가 나도 이미 실행된 차감이 남는다 - 세이브포인트가 가장 바깥이면 RELEASE 가 곧 커밋이고, 바깥
+트랜잭션 안이면 호출자가 커밋할 때 함께 확정되어 보내는 사람의 포인트가 사라진다.
+"""

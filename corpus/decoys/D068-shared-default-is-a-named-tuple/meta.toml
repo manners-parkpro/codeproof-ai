@@ -1,0 +1,28 @@
+decoy_id = "D068-shared-default-is-a-named-tuple"
+trap_kind = "frozen_after_init"
+
+[bait]
+apparent_defect = """
+policy_for 가 재정의가 없는 엔드포인트에 모듈 전역 DEFAULT_POLICY 객체를 복사 없이 그대로 돌려준다.
+받은 쪽이 자기 정책의 attempts 를 늘리면 같은 객체를 공유하는 모든 엔드포인트의 기본값이 함께
+바뀌는 별칭 결함으로 보인다.
+"""
+lure_lines = [14, 15]
+
+[safety]
+claim = "policy_for 가 돌려준 객체의 필드에 대입해서는 공유 기본값 DEFAULT_POLICY 를 바꿀 수 없다"
+justification = """
+RetryPolicy 는 NamedTuple 이라 인스턴스가 튜플이고 필드는 대입을 거부하는 읽기 전용 속성이므로,
+attempts 에 값을 넣으려 하면 AttributeError 가 난다. 인스턴스에 __dict__ 도 없고 필드 값도 int 와
+float 같은 불변 값뿐이라 받은 쪽이 같은 객체를 공유해도 필드 대입으로는 내용을 바꿀 길이 없고,
+따라서 다른 엔드포인트가 보는 기본값의 필드는 처음 만든 그대로다. 클래스 자체를 고치거나 객체의
+__class__ 를 갈아 끼우는 의도적 조작은 이 주장의 범위 밖이다.
+"""
+guard_symbol = "RetryPolicy"
+guard_lines = [6, 8]
+
+[twin]
+defect = """
+RetryPolicy 가 frozen 이 아닌 dataclass 라 필드에 대입할 수 있다. 한 호출자가 받은 기본 정책의
+attempts 를 바꾸면 모듈 전역 DEFAULT_POLICY 가 바뀌어 재정의가 없는 모든 엔드포인트가 그 값을 쓴다.
+"""
