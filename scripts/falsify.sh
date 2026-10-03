@@ -60,7 +60,7 @@ SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict conv
            mix-decoy-unit plan-coverage plan-design
            report-collected report-packed-samples report-bundle-record report-corpus-gone
            report-half-pair compare-same-samples compare-skip-note pack-records-samples
-           pack-stray-samples sarif-end bandit-range)
+           pack-stray-samples sarif-end bandit-range twin-convention twin-convention-paired)
 
 claim_layering() { echo "런타임(analysis)은 정답 라벨(eval)을 볼 수 없다 — A1"; }
 break_layering() {
@@ -402,6 +402,20 @@ guard_sarif-end() { uv run pytest tests/reviewers/test_formats.py -q -k "end_of_
 claim_bandit-range() { echo "bandit 지적의 범위는 line_range 다 — 대표 줄에 다른 줄의 열을 붙이지 않는다 (A2a · B1)"; }
 break_bandit-range() { perl -0pi -e 's/^    if not lines:$/    if True:  # falsify.sh/m' src/codeproof_ai/reviewers/formats.py; }
 guard_bandit-range() { uv run pytest tests/reviewers/test_formats.py -q -k "reported_range_is or first_line_of_the_range"; }
+
+claim_twin-convention() { echo "twin 쪽에서도 관례 주장을 탐지로 세지 않는다 — 결함 구간에 걸린 docstring 지적이 「구별 성공」이 된다 (F4a)"; }
+break_twin-convention() {
+  perl -0pi -e 's/^        if not o\.finding\.category\.is_defect_claim:  # twin 쪽도 같다 \(F4a\)$/        if False:  # falsify.sh/m' \
+    src/codeproof_ai/eval/grading/safety.py
+}
+guard_twin-convention() { uv run pytest tests/eval/test_convention_claims.py -q -k twin_defect_is_not_a_detection; }
+
+claim_twin-convention-paired() { echo "paired_fix 도 twin 쪽 관례 주장을 탐지로 세지 않는다 — 두 채점자의 경계가 같다 (F4a)"; }
+break_twin-convention-paired() {
+  perl -0pi -e 's/^        if not o\.finding\.category\.is_defect_claim:  # twin 쪽도 같다 \(F4a\)$/        if False:  # falsify.sh/m' \
+    src/codeproof_ai/eval/grading/paired.py
+}
+guard_twin-convention-paired() { uv run pytest tests/eval/test_convention_claims.py -q -k positive_is_not_a_detection; }
 
 claim_report-labels() { echo "생성물의 다회 실행 숫자는 관점마다 라벨을 붙인다 — F3 · F6"; }
 break_report-labels() {

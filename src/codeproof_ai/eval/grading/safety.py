@@ -30,8 +30,8 @@ class ProvableSafetyGrader:
 
     name = "provable_safety"
     definition = (
-        "서면 안전 근거가 덮는 범위 안의 **결함 주장**은 FP. "
-        "범위 밖이거나 관례 주장이면 판정 불가."
+        "서면 안전 근거가 덮는 범위 안의 **결함 주장**은 FP, twin 의 결함 구간에 겹친 "
+        "**결함 주장**은 TP. 범위 밖이거나 관례 주장이면 판정 불가."
     )
     emits = frozenset({Outcome.TRUE_POSITIVE, Outcome.FALSE_POSITIVE, Outcome.UNDECIDABLE})
     uses_llm_judge = False
@@ -110,6 +110,20 @@ class ProvableSafetyGrader:
         self, sample: LabeledSample, o: ObservedFinding
     ) -> Judgment:
         """진짜 결함이 있는 샘플(twin) 위의 지적."""
+        # 🔴 관례 주장은 결함을 짚은 것이 아니다 - 음성 쪽과 같은 경계다 (F4a). [실측 · 60쌍]
+        #    이 줄이 없을 때 Ruff ALL 의 「구별 성공」 11/60 이 전부 twin 위의 docstring ·
+        #    스타일 지적(D101 · D103 · RET504 …)이 결함 구간에 겹친 것이었다 (→ 0/60).
+        if not o.finding.category.is_defect_claim:  # twin 쪽도 같다 (F4a)
+            return Judgment(
+                finding_key=o.finding.fingerprint,
+                outcome=Outcome.UNDECIDABLE,
+                grader=self.name,
+                rationale=(
+                    f"{o.finding.rule_id} 는 관례 주장이다 "
+                    f"({o.finding.category.value}) - 결함을 짚은 것이 아니므로 "
+                    "결함 구간에 겹쳐도 탐지로 세지 않는다"
+                ),
+            )
         loc = o.finding.location
         for i, defect in enumerate(sample.defects):
             d = defect.location

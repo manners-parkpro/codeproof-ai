@@ -7,7 +7,7 @@ apparent_defect = """
 없으므로 AttributeError 이고, 설령 set 이었다 해도 임의 원소를 꺼내는
 비결정적 반환이다. 어느 쪽이든 명백한 버그로 보인다.
 """
-lure_lines = [13, 13]
+lure_lines = [14, 14]
 
 [safety]
 claim = "_TERMINAL.pop() 은 실행될 수 없다"

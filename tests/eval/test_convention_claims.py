@@ -31,7 +31,13 @@ from codeproof_ai.domain.target import ReviewTarget, SourceFile
 from codeproof_ai.eval.grading.base import Outcome
 from codeproof_ai.eval.grading.paired import PairedFixGrader
 from codeproof_ai.eval.grading.safety import ProvableSafetyGrader
-from codeproof_ai.eval.sample import LabeledSample, SafetyRationale, Stratum
+from codeproof_ai.eval.sample import (
+    Defect,
+    DefectOrigin,
+    LabeledSample,
+    SafetyRationale,
+    Stratum,
+)
 
 
 def _finding(rule: str, line: int, category: Category) -> Finding:
@@ -60,6 +66,26 @@ def _negative() -> LabeledSample:
             category="constant_only_sink",
         ),
         paired_with="d#twin",
+    )
+
+
+def _positive() -> LabeledSample:
+    """가드를 지운 twin - 결함 구간은 5-10 행이다 (로더가 만드는 모양과 같다)."""
+    return LabeledSample(
+        target=ReviewTarget(
+            target_id="d#twin",
+            files=(SourceFile("decoy.py", "\n".join(f"L{i}" for i in range(20))),),
+        ),
+        stratum=Stratum.DECOY,
+        defects=(
+            Defect(
+                location=Location(path="decoy.py", span=Span(Position(5, 0), Position(10, 0))),
+                origin=DefectOrigin.INJECTED,
+                description="가드가 빠져 외부 입력이 셸에 닿는다",
+                category="constant_only_sink",
+            ),
+        ),
+        paired_with="d",
     )
 
 
@@ -97,6 +123,21 @@ class TestProvableSafetyIgnoresConventionClaims:
         (j,) = ProvableSafetyGrader().judge(_negative(), obs.observed)
         assert j.outcome is Outcome.UNDECIDABLE
 
+    def test_style_finding_on_the_twin_defect_is_not_a_detection(self) -> None:
+        """🔴 twin 쪽도 같다 - 결함 구간에 우연히 걸린 docstring 지적은 탐지가 아니다.
+
+        [실측 · 60쌍] 이 구분이 없을 때 Ruff ALL 의 「구별 성공」 11/60 이 전부 이것이었다.
+        """
+        obs = group_runs("d#twin", [[_finding("D103", 7, Category.STYLE)]])
+        (j,) = ProvableSafetyGrader().judge(_positive(), obs.observed)
+        assert j.outcome is Outcome.UNDECIDABLE, "docstring 누락을 결함 탐지로 셌다"
+        assert "관례 주장" in j.rationale
+
+    def test_defect_finding_on_the_twin_defect_is_a_detection(self) -> None:
+        obs = group_runs("d#twin", [[_finding("S602", 7, Category.SECURITY)]])
+        (j,) = ProvableSafetyGrader().judge(_positive(), obs.observed)
+        assert j.outcome is Outcome.TRUE_POSITIVE
+
 
 class TestPairedFixHasTheSameRule:
     """같은 결함이 두 채점자에 있었다 - 한쪽만 고치면 또 갈린다."""
@@ -107,6 +148,20 @@ class TestPairedFixHasTheSameRule:
         obs = group_runs("d", [[_finding("D103", 7, Category.STYLE)]])
         (j,) = g.judge(_negative(), obs.observed)
         assert j.outcome is Outcome.UNDECIDABLE
+
+    def test_style_on_a_positive_is_not_a_detection(self) -> None:
+        g = PairedFixGrader()
+        g.bind_run({})
+        obs = group_runs("d#twin", [[_finding("D103", 7, Category.STYLE)]])
+        (j,) = g.judge(_positive(), obs.observed)
+        assert j.outcome is Outcome.UNDECIDABLE
+
+    def test_defect_on_a_positive_absent_from_the_pair_is_a_detection(self) -> None:
+        g = PairedFixGrader()
+        g.bind_run({})
+        obs = group_runs("d#twin", [[_finding("S602", 7, Category.SECURITY)]])
+        (j,) = g.judge(_positive(), obs.observed)
+        assert j.outcome is Outcome.TRUE_POSITIVE
 
     def test_defect_on_a_negative_is_a_false_positive(self) -> None:
         g = PairedFixGrader()

@@ -42,9 +42,9 @@ class PairedFixGrader:
 
     name = "paired_fix"
     definition = (
-        "짝에 없는 지적이 결함 위치와 겹치면 TP. "
+        "짝에 없는 **결함 주장**이 결함 위치와 겹치면 TP. "
         "짝에도 있으면 변별력 없음(판정 불가). "
-        "음성 위의 **결함 주장**은 FP, 관례 주장은 판정 불가."
+        "음성 위의 **결함 주장**은 FP. 관례 주장은 어느 쪽에서도 판정 불가."
     )
     emits = frozenset({Outcome.TRUE_POSITIVE, Outcome.FALSE_POSITIVE, Outcome.UNDECIDABLE})
     uses_llm_judge = False
@@ -110,6 +110,15 @@ class PairedFixGrader:
                 outcome=Outcome.FALSE_POSITIVE,
                 grader=self.name,
                 rationale="증명된 음성 위의 결함 주장",
+            )
+
+        # 🔴 양성 쪽도 같다 - 관례 주장이 결함 위치에 겹친 것은 탐지가 아니다 (F4a).
+        if not o.finding.category.is_defect_claim:  # twin 쪽도 같다 (F4a)
+            return Judgment(
+                finding_key=key,
+                outcome=Outcome.UNDECIDABLE,
+                grader=self.name,
+                rationale=f"{o.finding.rule_id} 는 관례 주장이다 - 결함을 짚은 것이 아니다",
             )
 
         matched = self._matching_defect(sample, loc)
