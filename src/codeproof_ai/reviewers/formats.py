@@ -130,14 +130,7 @@ class SarifFormat:
             rule_id=rule_id,
             message=str((res.get("message") or {}).get("text", "")),
             # SARIF: 1-based 문자 -> 내부 규약 0-based 문자 (B1)
-            location=Location(
-                path=path,
-                span=Span(
-                    start=Position.from_char_1based(
-                        line, int(region.get("startColumn", 1))
-                    )
-                ),
-            ),
+            location=Location(path=path, span=_sarif_span(region, line)),
             category=Category.OTHER,
             severity=_SARIF_LEVEL.get(
                 str(res.get("level", "warning")), Severity.WARNING
@@ -146,6 +139,55 @@ class SarifFormat:
             rule_name=str(rule.get("name") or "") or None,
             raw=dict(res),
         )
+
+
+def _sarif_span(region: dict[str, Any], line: int) -> Span:
+    """SARIF region 의 보고 범위.
+
+    열은 1-based 문자이고 endColumn 은 배타적이다 - Ruff JSON 과 같은 변환이다 (B1).
+
+    🔴 끝을 버리면 여러 줄 지적이 시작 줄로만 맞춰진다 (A2a). [실측] Ruff S112 를 직접 돌리면
+       15-16 행, SARIF 로 가져오면 15 행만 남아 결함 구간과 엇갈렸다 - 같은 지적이 경로마다
+       다른 자리에 있었다.
+    끝이 없거나 시작보다 앞서는 깨진 region 이면 시작 줄 하나로 둔다 - 지적은 버리지 않는다 (I).
+    """
+    start = Position.from_char_1based(line, int(region.get("startColumn", 1)))
+    end_line = int(region.get("endLine", line))
+    end_column = int(region.get("endColumn", 0))
+    if end_column >= 1:
+        end = Position.from_char_1based(end_line, end_column)
+    elif end_line > line:
+        # 끝 열이 없으면 그 줄 끝까지다 - 매칭은 줄만 본다
+        end = Position(line=end_line, column=0)
+    else:
+        return Span(start=start)
+    if (end.line, end.column) < (start.line, start.column):
+        return Span(start=start)
+    return Span(start=start, end=end)
+
+
+def _bandit_span(res: dict[str, Any], line: int) -> Span:
+    """bandit 의 보고 범위. line_range 는 노드가 걸친 줄이고 col_offset · end_col_offset 은
+    그 첫 줄과 끝 줄의 0-based 문자 열이다 (B1). line_number 는 대표 줄일 뿐 범위의 시작이 아니다.
+
+    🔴 line_number 에 col_offset 을 붙이면 다른 줄의 열이 섞인다 - [실측] D002 twin 의 B602 는
+       line_number 11 · line_range 9-14 · col_offset 16 (9 행 `subprocess.run(` 의 시작).
+       대표 줄로만 맞추면 같은 호출을 Ruff(9 행)와 bandit(11 행)이 다른 자리에 둔다 (A2a).
+    line_range 가 없는 출력이면 대표 줄 하나로 둔다.
+    """
+    column = int(res.get("col_offset", 0) or 0)
+    lines = [n for n in res.get("line_range") or [] if isinstance(n, int) and n >= 1]
+    if not lines:
+        return Span(start=Position(line=line, column=column))
+    start = Position(line=min(lines), column=column)
+    end_column = res.get("end_col_offset")
+    end = Position(
+        line=max(lines),
+        column=end_column if isinstance(end_column, int) and end_column >= 0 else 0,
+    )
+    if (end.line, end.column) < (start.line, start.column):
+        return Span(start=start)
+    return Span(start=start, end=end)
 
 
 _BANDIT_SEVERITY: dict[str, Severity] = {
@@ -159,7 +201,8 @@ class BanditFormat:
     """bandit `-f json`.
 
     [실측] bandit 은 SARIF 를 지원하지 않는다. 자기 JSON 을 낸다.
-           `col_offset` 은 **0-based 문자**라 내부 규약과 이미 같다.
+           `col_offset` 은 **0-based 문자**라 내부 규약과 이미 같다 - 다만 그 열은
+           line_range 첫 줄의 열이다 (`_bandit_span`).
     """
 
     name = "bandit"
@@ -193,14 +236,7 @@ class BanditFormat:
                     source=source,
                     rule_id=str(res.get("test_id") or "unknown"),
                     message=str(res.get("issue_text", "")),
-                    location=Location(
-                        path=path,
-                        span=Span(
-                            start=Position(
-                                line=line, column=int(res.get("col_offset", 0) or 0)
-                            )
-                        ),
-                    ),
+                    location=Location(path=path, span=_bandit_span(res, line)),
                     # bandit 은 보안 전용 스캐너다.
                     category=Category.SECURITY,
                     severity=_BANDIT_SEVERITY.get(

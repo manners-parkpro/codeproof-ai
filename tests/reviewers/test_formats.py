@@ -107,12 +107,68 @@ class TestSarifColumns:
         assert f.quoted_code == "run(cmd, shell=True)"
 
 
+class TestSarifReportedRange:
+    """🔴 SARIF 지적도 보고 범위의 끝까지 싣는다.
+
+    시작 줄만 남으면 직접 실행과 다른 자리가 된다 (A2a).
+    """
+
+    @staticmethod
+    def _with_end(**end: int) -> Any:
+        payload = _sarif(line=2, col=1)
+        _first_result(payload)["locations"][0]["physicalLocation"]["region"].update(end)
+        return payload
+
+    def test_end_of_region_is_kept(self) -> None:
+        payload = self._with_end(endLine=3, endColumn=21)
+        f = SarifFormat().parse(payload, "x", TARGET).findings[0]
+        end = f.location.span.end
+        assert end is not None
+        assert (end.line, end.column) == (3, 20)
+        assert f.location.span.overlaps(3, 3), "끝 줄만 겹치는 결함 구간도 같은 자리다"
+
+    def test_end_line_without_end_column_still_spans_lines(self) -> None:
+        f = SarifFormat().parse(self._with_end(endLine=3), "x", TARGET).findings[0]
+        assert f.location.span.overlaps(3, 3)
+
+    def test_region_without_end_is_one_line(self) -> None:
+        f = SarifFormat().parse(_sarif(line=3, col=5), "x", TARGET).findings[0]
+        assert f.location.span.end is None
+
+    def test_end_before_start_keeps_the_finding(self) -> None:
+        """깨진 region 이어도 지적은 살린다 - 끝만 모른다고 둔다 (I)."""
+        out = SarifFormat().parse(self._with_end(endLine=1, endColumn=1), "x", TARGET)
+        assert len(out.findings) == 1
+        assert out.findings[0].location.span.end is None
+
+
 class TestBanditColumns:
     """🔴 bandit 의 col_offset 은 **이미 0-based 문자** - 변환하면 안 된다."""
 
     def test_column_is_not_shifted(self) -> None:
         f = BanditFormat().parse(_bandit(col=4), "x", TARGET).findings[0]
         assert f.location.span.start.column == 4, "0-based 를 또 변환했다"
+
+    def test_reported_range_is_the_span(self) -> None:
+        """🔴 범위는 line_range 다 - line_number 는 대표 줄이다 (A2a)."""
+        payload = _bandit(line=3, col=0)
+        payload["results"][0].update(line_range=[2, 3], end_col_offset=20)
+        span = BanditFormat().parse(payload, "x", TARGET).findings[0].location.span
+        assert (span.start.line, span.start.column) == (2, 0)
+        assert span.end is not None
+        assert (span.end.line, span.end.column) == (3, 20)
+
+    def test_column_belongs_to_the_first_line_of_the_range(self) -> None:
+        """🔴 col_offset 은 line_range 첫 줄의 열이다 - 대표 줄에 붙이면 다른 줄의 열이 섞인다 (B1).
+        """
+        payload = _bandit(line=3, col=4)
+        payload["results"][0]["line_range"] = [1, 2, 3]
+        span = BanditFormat().parse(payload, "x", TARGET).findings[0].location.span
+        assert (span.start.line, span.start.column) == (1, 4)
+
+    def test_without_line_range_the_representative_line_is_used(self) -> None:
+        span = BanditFormat().parse(_bandit(line=3, col=4), "x", TARGET).findings[0].location.span
+        assert (span.start.line, span.start.column, span.end) == (3, 4, None)
 
     def test_category_is_security(self) -> None:
         """bandit 은 보안 전용 스캐너다."""

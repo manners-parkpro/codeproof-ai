@@ -398,7 +398,8 @@ D002-shell-true-constant#twin conf=0.85 guard=inconclusive  ← 취약  ⚠ 동�
 ### 결과 5 — 판정이 **매칭 손잡이에 흔들린다**
 
 같은 결함을 두 도구가 다른 줄로 보고한다 — Ruff 는 호출 시작(L9),
-bandit 은 `shell=True` 인자(L11). 결함 구간이 5–10 이면 한쪽만 TP 가 된다.
+bandit 은 `shell=True` 인자(L11)를 대표 줄로 둔다. 대표 줄로만 맞추면 결함 구간이 5–10 일 때
+한쪽만 TP 가 된다 (bandit 은 호출 전체 L9–14 를 범위로도 주므로, 이 저장소는 보고 범위로 맞춘다).
 
 ```
 [매칭 민감도] slack 을 바꾸면 판정이 흔들리는가   [실측 · provable_safety]

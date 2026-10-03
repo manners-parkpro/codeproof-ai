@@ -60,7 +60,7 @@ SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict conv
            mix-decoy-unit plan-coverage plan-design
            report-collected report-packed-samples report-bundle-record report-corpus-gone
            report-half-pair compare-same-samples compare-skip-note pack-records-samples
-           pack-stray-samples)
+           pack-stray-samples sarif-end bandit-range)
 
 claim_layering() { echo "런타임(analysis)은 정답 라벨(eval)을 볼 수 없다 — A1"; }
 break_layering() {
@@ -391,6 +391,17 @@ guard_pack-records-samples() { uv run pytest tests/cli/test_commands.py -q -k re
 claim_pack-stray-samples() { echo "pack 은 코퍼스 밖 샘플이 섞인 실행을 묶지 않는다 — 검증 안 된 샘플이 기록에 실린다 (F6)"; }
 break_pack-stray-samples() { perl -0pi -e 's/^    if stray:$/    if False:  # falsify.sh/m' src/codeproof_ai/cli.py; }
 guard_pack-stray-samples() { uv run pytest tests/cli/test_commands.py -q -k samples_outside_the_corpus; }
+
+claim_sarif-end() { echo "가져온 SARIF 지적도 보고 범위의 끝까지 싣는다 — 시작 줄만 남으면 직접 실행과 다른 자리가 된다 (A2a)"; }
+break_sarif-end() {
+  perl -0pi -e 's/^    if end_column >= 1:$/    if False:  # falsify.sh/m; s/^    elif end_line > line:$/    elif False:  # falsify.sh/m' \
+    src/codeproof_ai/reviewers/formats.py
+}
+guard_sarif-end() { uv run pytest tests/reviewers/test_formats.py -q -k "end_of_region or end_line_without"; }
+
+claim_bandit-range() { echo "bandit 지적의 범위는 line_range 다 — 대표 줄에 다른 줄의 열을 붙이지 않는다 (A2a · B1)"; }
+break_bandit-range() { perl -0pi -e 's/^    if not lines:$/    if True:  # falsify.sh/m' src/codeproof_ai/reviewers/formats.py; }
+guard_bandit-range() { uv run pytest tests/reviewers/test_formats.py -q -k "reported_range_is or first_line_of_the_range"; }
 
 claim_report-labels() { echo "생성물의 다회 실행 숫자는 관점마다 라벨을 붙인다 — F3 · F6"; }
 break_report-labels() {
