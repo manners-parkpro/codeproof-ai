@@ -1,0 +1,27 @@
+decoy_id = "D106-day-count-gets-the-next-midnight"
+trap_kind = "contract_half_open"
+
+[bait]
+apparent_defect = """
+_count_between 이 끝 시각을 bisect_left 로 찾아 stop 과 같은 시각의 이벤트를 세지 않는다. 끝을 그날의 마지막
+시각으로 넘기면 하루의 마지막 초에 일어난 이벤트가 집계에서 빠지는 off-by-one 으로 읽힌다.
+"""
+lure_lines = [21, 21]
+
+[safety]
+claim = "count_on 은 그날 0시(UTC epoch 초) 이상 다음 날 0시 미만의 이벤트를 하나도 빠뜨리거나 더하지 않고 센다 - 다른 스레드가 add 하는 중에 불러도 같다"
+justification = """
+_count_between 을 부르는 곳은 count_on 하나이고, count_on 은 그날 0시의 epoch 초를 날짜의 서수에서 계산한 뒤 끝으로
+다음 날 0시(start + 86400)를 넘긴다. _count_between 은 두 경계를 모두 bisect_left 로 찾으므로 start 이상 stop 미만,
+곧 그날 0시 이상 다음 날 0시 미만의 이벤트를 센다. 끝이 배타라서 23:59:59 의 이벤트는 들어가고 다음 날 0시의 이벤트는
+다음 날에만 세어진다. 0시는 날짜의 서수와 고정 상수로만 정해지므로 서버의 시간대가 결과를 바꾸지 않는다. add 와 count_on
+은 같은 락 안에서 목록을 바꾸고 두 경계를 찾으므로, 다른 스레드의 insort 가 두 bisect 사이에 끼어들지 못한다.
+"""
+guard_symbol = "count_on"
+guard_lines = [24, 26]
+
+[twin]
+defect = """
+count_on 이 그날 23:59:59 를 끝으로 넘긴다. _count_between 의 끝이 배타라서 하루의 마지막 초에 일어난 이벤트가
+어느 날에도 세어지지 않는다.
+"""

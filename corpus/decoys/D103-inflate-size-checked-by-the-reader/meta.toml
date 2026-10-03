@@ -1,0 +1,27 @@
+decoy_id = "D103-inflate-size-checked-by-the-reader"
+trap_kind = "bounded_input"
+
+[bait]
+apparent_defect = """
+inflate 가 클라이언트가 보낸 헤더 값을 그대로 decompress 의 출력 크기로 쓴다. 공격자가 아주 큰 크기를 선언하고
+압축률이 높은 본문을 보내면 그만큼 풀어 메모리를 잡는 압축 폭탄 결함으로 읽힌다.
+"""
+lure_lines = [18, 18]
+
+[safety]
+claim = "inflate 가 풀어내는 출력은 어떤 크기 선언이든 8 MiB 를 넘지 않는다"
+justification = """
+inflate 는 decompress 에 넘길 크기를 _declared_size 에서 받고, _declared_size 는 선언값을 int 로 읽은 뒤 0 보다
+크고 _MAX_INFLATED(8 MiB) 이하인지 견주어 아니면 ValueError 로 끝내므로 decompress 의 max_length 는 언제나
+1 바이트에서 8 MiB 사이다. decompressobj 의 decompress 는 max_length 보다 많이 내놓지 않고 남은 입력을
+unconsumed_tail 에 남기기 때문에, 압축률이 아무리 높은 본문이라도 풀린 출력은 그 크기를 넘지 않는다. zlib 에서
+max_length 0 은 「제한 없음」이라 하한 검사가 0 을 막는 것도 같은 이유다.
+"""
+guard_symbol = "_declared_size"
+guard_lines = [10, 11]
+
+[twin]
+defect = """
+_declared_size 가 범위를 보지 않는다. 선언값 0 은 zlib 에서 제한 없음이라 압축 폭탄이 끝까지 풀리고, 큰 선언값도
+그 크기까지 풀어 메모리를 잡는다.
+"""

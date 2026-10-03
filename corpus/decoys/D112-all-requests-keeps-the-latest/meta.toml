@@ -1,0 +1,26 @@
+decoy_id = "D112-all-requests-keeps-the-latest"
+trap_kind = "misleading_name"
+
+[bait]
+apparent_defect = """
+record 가 들어온 모든 요청을 이름 그대로 _all_requests 에 쌓기만 하고 지우지 않는다. 오래 도는 서버에서 요청마다
+기록이 늘어 메모리가 끝없이 자라는 누수로 읽힌다.
+"""
+lure_lines = [13, 13]
+
+[safety]
+claim = "record 를 몇 번 · 여러 스레드에서 동시에 불러도 _all_requests 는 1000개를 넘지 않고, 가장 최근 1000개를 부른 순서대로 담는다"
+justification = """
+이름은 모든 요청을 담는 것처럼 보이지만 _all_requests 는 모듈에서 collections.deque(maxlen=1000) 로 만들어진다. maxlen 이
+정해진 deque 는 꽉 찬 상태에서 append 하면 반대쪽 끝의 가장 오래된 항목을 버리므로 길이가 1000 을 넘지 않는다. record 가
+기록을 더하는 길은 락 안의 이 append 하나이고 maxlen 은 만든 뒤 바꿀 수 없는 읽기 전용 속성이라, 아무리 오래 돌아도
+기록이 메모리를 계속 늘리지 않는다.
+"""
+guard_symbol = "_all_requests"
+guard_lines = [8, 8]
+
+[twin]
+defect = """
+_all_requests 의 deque 에 maxlen 이 없다. 요청이 올 때마다 기록이 하나씩 쌓여 서버가 오래 돌수록 메모리가 끝없이
+자란다.
+"""

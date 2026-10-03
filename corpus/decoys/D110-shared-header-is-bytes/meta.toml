@@ -1,0 +1,26 @@
+decoy_id = "D110-shared-header-is-bytes"
+trap_kind = "frozen_after_init"
+
+[bait]
+apparent_defect = """
+header 가 모듈 전역 _HEADER 를 복사하지 않고 그대로 돌려준다. 받은 쪽이 플래그를 넣으려고 머리를 고치면 모두가
+나눠 쓰는 머리가 바뀌어, 그 뒤 쓰는 모든 파일의 머리가 깨지는 공유 상태 결함으로 읽힌다.
+"""
+lure_lines = [10, 10]
+
+[safety]
+claim = "header() 가 돌려준 값을 받은 쪽이 어떻게 고치려 해도 다음 header() 와 write 가 쓰는 머리는 b\"CPRF\\x01\\x00\" 그대로다"
+justification = """
+header 는 모듈 상수 _HEADER 를 그대로 돌려주지만, _HEADER 는 bytes 끼리 이어 만든 bytes 객체다. bytes 에는 항목 대입 ·
+조각 대입 · extend · append 같은 변경 수단이 없고, += 와 *= 는 새 객체를 만들어 받은 쪽 이름만 바꾸며, memoryview 로
+감싸도 읽기 전용이라 쓰기가 TypeError 로 끝나므로, 받은 쪽이 무엇을 시도해도 모듈의 _HEADER 는 바뀌지 않는다.
+다음 header() 와 write 가 쓰는 머리는 언제나 같은 6바이트다. ctypes 로 메모리를 직접 쓰는 우회는 주장 밖이다.
+"""
+guard_symbol = "_HEADER"
+guard_lines = [6, 6]
+
+[twin]
+defect = """
+_HEADER 가 bytearray 다. 받은 쪽이 머리의 한 바이트라도 고치면 공유 머리가 바뀌어, 그 뒤 header() 와 write 가 쓰는
+모든 파일의 머리가 깨진다.
+"""

@@ -1,0 +1,26 @@
+decoy_id = "D113-xml-attribute-escaper-beside-squeezer"
+trap_kind = "noop_shim_neighbor"
+
+[bait]
+apparent_defect = """
+item 이 요청에서 온 sku · title 을 f-string 으로 XML 속성에 끼워 넣는다. 값에 큰따옴표나 꺾쇠가 있으면 속성이 끊겨
+새 속성 · 원소가 주입되는 XML 주입 결함으로 읽히고, 곁의 _squeeze 는 공백만 정리할 뿐이다.
+"""
+lure_lines = [20, 20]
+
+[safety]
+claim = "item 은 XML 1.0 에 쓸 수 없는 문자가 든 값을 거절하고, 받은 값으로는 언제나 잘 짜인 item 원소 하나를 돌려주며 다시 읽은 sku 는 넘긴 값 · title 은 공백을 하나로 줄인 값과 같다"
+justification = """
+두 속성 값은 모두 _attr 를 거쳐 들어가고, _attr 는 xml.sax.saxutils.quoteattr 로 값을 감싼다. quoteattr 는 & < > 와
+감싸는 큰따옴표를 문자 참조로 바꾸므로 값이 속성을 끊거나 원소를 열 수 없고, 줄바꿈 · 탭 · CR 도 &#10; 같은 참조로
+바꾸기 때문에 파서의 속성 값 정규화가 그것들을 공백으로 바꾸지 않는다. XML 1.0 에 쓸 수 없는 문자(C0 제어 문자 · 홑 대리
+문자 · U+FFFE · U+FFFF)는 item 이 먼저 _NOT_XML 로 거절한다. 곁의 _squeeze 는 공백만 줄이고 이스케이프를 하지 않는다.
+"""
+guard_symbol = "_attr"
+guard_lines = [10, 10]
+
+[twin]
+defect = """
+_attr 가 값을 큰따옴표로 감싸기만 하고 이스케이프하지 않는다. 값 안의 큰따옴표가 속성을 끊어 새 속성 · 원소를 주입하고,
+& 와 < 가 문서를 깨뜨린다.
+"""

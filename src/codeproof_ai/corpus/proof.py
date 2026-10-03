@@ -61,6 +61,11 @@ MAX_ATTEMPTS = 20
 """🔴 상한을 둔다. 무한정 시도하면 **어떤 공격이든 언젠가는 성공**하고,
 그러면 twin 조건이 아무것도 보장하지 않게 된다."""
 
+_RACE_SWITCH_INTERVAL = 1e-6
+"""race_window 가 창을 여는 동안의 스레드 전환 간격(초).
+
+기본 5ms 로는 한 줄 안의 호출 경계에서 전환이 드물다."""
+
 
 class Attack(Protocol):
     """결함을 실현하려는 시도."""
@@ -205,12 +210,18 @@ def race_window(*func_names: str) -> Iterator[None]:
 
     ⚠ 그래도 비결정적이다. 실패하지 않았다고 경쟁이 없는 것은 아니다.
 
-    🔴 **창은 줄과 줄 사이에만 열린다.** read-modify-write 가 한 줄이면
+    🔴 **줄 단위 창은 줄과 줄 사이에만 열린다.** read-modify-write 가 한 줄이면
        (`d["k"] = d["k"] + v`) 그 안에 추적 지점이 없어 재현되지 않는다.
        [실측] D051 을 한 줄로 썼을 때 twin 이 5회 시도 전부 통과했고,
        두 줄(`current = d["k"]` / `d["k"] = current + v`)로 나누자 바로 깨졌다.
        경쟁 decoy 를 쓸 때는 read 와 write 를 **다른 줄에** 둔다 -
        실제 코드에서도 그 모양이 더 흔하다.
+
+    🔴 **그래서 창이 열린 동안 전환 간격도 낮춘다.** 위의 「1e-7 로도 안 된다」는 줄 안에
+       호출이 없을 때만 맞는다 - 줄 안에 호출이 있으면 그 호출 경계에서 전환되므로, 읽기와
+       쓰기 사이에 호출이 낀 한 줄(`append(task := waiting.pop(0))`)이나 창 목록 밖 이름의
+       도우미로 옮긴 줄은 줄 단위 창만으로는 드러나지 않는다 (4라운드 검토가 찾았다 ·
+       DESIGN §3.5). 전환 간격도 스케줄링만 바꾼다.
     """
     wanted = frozenset(func_names)
 
@@ -219,6 +230,8 @@ def race_window(*func_names: str) -> Iterator[None]:
             time.sleep(0)  # 다른 스레드에 양보한다 - 창을 벌린다
         return tracer
 
+    saved_interval = sys.getswitchinterval()
+    sys.setswitchinterval(_RACE_SWITCH_INTERVAL)
     threading.settrace(tracer)
     sys.settrace(tracer)
     try:
@@ -226,6 +239,7 @@ def race_window(*func_names: str) -> Iterator[None]:
     finally:
         sys.settrace(None)
         threading.settrace(None)
+        sys.setswitchinterval(saved_interval)
 
 
 def _attempt(attack: Attack, path: Path, alias: str) -> bool:

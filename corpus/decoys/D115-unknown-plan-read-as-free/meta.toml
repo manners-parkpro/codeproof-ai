@@ -1,0 +1,25 @@
+decoy_id = "D115-unknown-plan-read-as-free"
+trap_kind = "unreachable_branch"
+
+[bait]
+apparent_defect = """
+daily_quota 가 free · pro 가 아닌 등급에 None(무제한)을 돌려준다. 오타나 새로 생긴 요금제 이름이 들어오면 하루 한도
+없이 쓰게 되는, 모르는 입력이 가장 넓은 권한으로 빠지는 기본 분기 결함으로 읽힌다.
+"""
+lure_lines = [16, 16]
+
+[safety]
+claim = "daily_quota 는 어떤 요금제 이름이든 None(무제한)을 돌려주지 않고, 표에 없는 이름은 거절되거나 free 한도 100 을 받는다"
+justification = """
+daily_quota 의 마지막 return None 은 tier 가 "free" 도 "pro" 도 아닐 때만 닿는다. tier 는 _tier 가 돌려주고, _tier 는
+_TIERS 에서 찾되 없으면 기본값 "free" 를 돌려주며 _TIERS 의 값은 "free" 와 "pro" 둘뿐이므로, 어떤 이름이 와도 tier 는 그
+둘 중 하나다. 그래서 무제한 분기는 닿을 수 없고 오타 · 대소문자가 다른 이름 · 모르는 요금제는 가장 낮은 한도로 떨어진다.
+"""
+guard_symbol = "_tier"
+guard_lines = [7, 7]
+
+[twin]
+defect = """
+_tier 가 표에 없는 이름을 그대로 돌려준다. "Pro" · "enterprise" 같은 이름이 앞의 두 비교를 지나 마지막 분기의 None,
+곧 무제한 한도를 받는다.
+"""

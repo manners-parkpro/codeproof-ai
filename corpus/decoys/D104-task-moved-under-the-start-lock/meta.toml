@@ -1,0 +1,25 @@
+decoy_id = "D104-task-moved-under-the-start-lock"
+trap_kind = "caller_held_lock"
+
+[bait]
+apparent_defect = """
+_start_next 가 락 없이 대기 목록에서 작업을 꺼내 진행 목록에 넣는다. 두 줄 사이에는 작업이 어느 목록에도 없어서,
+다른 스레드가 그 순간 개수를 세면 작업 하나가 사라진 것처럼 보이는 경쟁 상태로 읽힌다.
+"""
+lure_lines = [13, 14]
+
+[safety]
+claim = "start 를 여러 스레드가 동시에 불러도 counts 가 돌려주는 두 길이의 합은 언제나 Board 를 만들 때 넘긴 작업 수다"
+justification = """
+_start_next 는 꺼내는 줄과 넣는 줄 사이에 작업이 어느 목록에도 없는 순간을 만들지만, 그 함수를 부르는 곳은 start
+하나이고 start 는 self._lock 을 쥔 채로 부른다. counts 도 같은 락을 쥔 뒤에야 두 길이를 읽으므로, counts 가 읽는
+때는 언제나 두 줄이 모두 끝났거나 아직 시작하지 않은 상태다. 그래서 counts 가 보는 합은 처음 작업 수와 같고,
+빈 목록의 확인과 꺼내기도 같은 락 안이라 남은 작업을 두 스레드가 함께 꺼내지 못한다.
+"""
+guard_symbol = "start"
+guard_lines = [18, 21]
+
+[twin]
+defect = """
+start 가 락을 쥐지 않는다. 한 스레드가 두 줄 사이에 있을 때 counts 가 락을 얻어, 작업 하나가 빠진 합을 돌려준다.
+"""

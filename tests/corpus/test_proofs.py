@@ -12,11 +12,12 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
 
-from codeproof_ai.corpus.proof import MAX_ATTEMPTS, ProofError, run_proof
+from codeproof_ai.corpus.proof import MAX_ATTEMPTS, ProofError, race_window, run_proof
 
 DECOYS = Path(__file__).resolve().parents[2] / "corpus" / "decoys"
 PAIRS = sorted(p for p in DECOYS.glob("D*") if p.is_dir())
@@ -183,6 +184,27 @@ class TestItCatchesTheBugThatSlippedThrough:
         )
         assert result.failure is not None
         assert "라벨이 거짓" in result.failure
+
+
+class TestRaceWindowAlsoLowersTheSwitchInterval:
+    """줄 단위 창만으로는 한 줄 안의 호출 경계에서 일어나는 전환이 드러나지 않는다 (4라운드 검토).
+
+    race_window 는 창이 열린 동안 전환 간격을 낮추고, 어떻게 끝나든 원래 값으로 되돌린다 -
+    되돌리지 않으면 뒤따르는 테스트 전부가 낮은 전환 간격으로 돈다.
+    """
+
+    def test_lowered_inside_and_restored_after(self) -> None:
+        before = sys.getswitchinterval()
+        with race_window("nothing"):
+            inside = sys.getswitchinterval()
+        assert inside < before
+        assert sys.getswitchinterval() == before
+
+    def test_restored_when_the_window_raises(self) -> None:
+        before = sys.getswitchinterval()
+        with pytest.raises(RuntimeError), race_window("nothing"):
+            raise RuntimeError
+        assert sys.getswitchinterval() == before
 
 
 def _fake_pair(tmp_path: Path, proof: str | None) -> Path:

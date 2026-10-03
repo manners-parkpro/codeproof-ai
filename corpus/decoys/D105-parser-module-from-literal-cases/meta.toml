@@ -1,0 +1,26 @@
+decoy_id = "D105-parser-module-from-literal-cases"
+trap_kind = "constant_only_sink"
+
+[bait]
+apparent_defect = """
+parse 가 요청에서 온 형식 이름으로 정한 모듈을 importlib.import_module 로 불러온다. 공격자가 형식 자리에 다른 모듈
+이름을 넣으면 그 모듈이 import 되며 실행되는 임의 모듈 로드 결함으로 읽힌다.
+"""
+lure_lines = [17, 17]
+
+[safety]
+claim = "parse 가 import_module 에 넘기는 이름은 어떤 형식 문자열이든 \"json\" 이나 \"tomllib\" 둘 중 하나뿐이다"
+justification = """
+import_module 에 가는 이름은 _parser_module 의 반환값이고, _parser_module 은 match 의 두 리터럴 패턴 "json" ·
+"toml" 과 같을 때만 글자 그대로 적힌 상수 "json" · "tomllib" 를 돌려준다. 두 패턴과 같지 않으면 match 를 빠져나와
+ValueError 로 끝나므로 입력 문자열 자체가 반환값이 되는 길이 없다. 그래서 대소문자나 공백을 바꾼 이름, 점으로 이은
+하위 모듈 이름도 import_module 에 닿지 못한다.
+"""
+guard_symbol = "_parser_module"
+guard_lines = [7, 12]
+
+[twin]
+defect = """
+_parser_module 이 맞지 않는 형식 이름을 그대로 돌려준다. "os" · "subprocess" 같은 이름이 import_module 에 가서
+요청이 고른 모듈이 import 된다.
+"""

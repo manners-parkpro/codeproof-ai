@@ -61,7 +61,7 @@ SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict conv
            report-collected report-packed-samples report-bundle-record report-corpus-gone
            report-half-pair compare-same-samples compare-skip-note pack-records-samples
            pack-stray-samples sarif-end bandit-range twin-convention twin-convention-paired
-           repro-unknown repro-kind)
+           repro-unknown repro-kind race-switch-lower race-switch-restore)
 
 claim_layering() { echo "런타임(analysis)은 정답 라벨(eval)을 볼 수 없다 — A1"; }
 break_layering() {
@@ -90,6 +90,18 @@ _pair() { ls -d corpus/decoys/D*/ 2>/dev/null | head -1; }
 claim_proof-label() { echo "「증명된 음성」 라벨이 거짓이면 반증이 잡는다 — G3a1"; }
 break_proof-label() { local p; p=$(_pair); cp "$p/twin.py" "$p/decoy.py"; }
 guard_proof-label() { uv run pytest tests/corpus/test_proofs.py -q; }
+
+claim_race-switch-lower() { echo "race_window 는 창을 여는 동안 전환 간격을 낮춘다 — 한 줄 안의 호출 경계 전환을 드러낸다 (G3a1)"; }
+break_race-switch-lower() {
+  perl -0pi -e 's/\n    sys\.setswitchinterval\(_RACE_SWITCH_INTERVAL\)//' src/codeproof_ai/corpus/proof.py
+}
+guard_race-switch-lower() { uv run pytest tests/corpus/test_proofs.py -q -k RaceWindowAlsoLowers; }
+
+claim_race-switch-restore() { echo "race_window 는 낮춘 전환 간격을 되돌린다 — 뒤따르는 테스트가 낮은 간격으로 돌지 않는다 (G3a1)"; }
+break_race-switch-restore() {
+  perl -0pi -e 's/\n        sys\.setswitchinterval\(saved_interval\)//' src/codeproof_ai/corpus/proof.py
+}
+guard_race-switch-restore() { uv run pytest tests/corpus/test_proofs.py -q -k RaceWindowAlsoLowers; }
 
 claim_proof-vacuous() { echo "결함을 못 잡는 공격은 안전을 증명하지 못한다 — G3a1"; }
 break_proof-vacuous() {

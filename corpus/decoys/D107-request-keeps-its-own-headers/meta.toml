@@ -1,0 +1,27 @@
+decoy_id = "D107-request-keeps-its-own-headers"
+trap_kind = "defensive_copy"
+
+[bait]
+apparent_defect = """
+with_auth 가 요청의 headers 에서 인증 헤더를 지우고 |= 로 Authorization 을 제자리에서 써 넣는다. 요청이 모듈의
+_DEFAULT_HEADERS 나 호출자의 dict 를 그대로 쓰고 있다면, 한 사용자의 토큰이 공유 기본 헤더에 남아 다음 요청마다 실려
+나가는 결함으로 읽힌다.
+"""
+lure_lines = [13, 15]
+
+[safety]
+claim = "with_auth 는 Request 를 만들 때 넘긴 헤더 dict(기본값 _DEFAULT_HEADERS 포함)를 바꾸지 않는다"
+justification = """
+Request.__init__ 은 받은 headers 를 dict(headers) 로 새 dict 에 옮겨 self.headers 에 둔다. with_auth 의 del 과 |= 는
+dict 를 제자리에서 바꾸지만 바뀌는 것은 요청마다 새로 만든 그 사본이므로, 호출자가 넘긴 dict 도 기본값인
+_DEFAULT_HEADERS 도 그대로다. 그래서 기본값으로 만든 다음 요청에는 앞 요청의 Authorization 이 없다. 헤더 값은 문자열이라 얕은 복사로
+충분하다.
+"""
+guard_symbol = "Request"
+guard_lines = [9, 9]
+
+[twin]
+defect = """
+Request 가 받은 dict 를 그대로 붙잡는다. 기본값으로 만든 요청에 with_auth 를 부르면 _DEFAULT_HEADERS 에 토큰이 써
+넣어져, 그 뒤 기본값으로 만드는 모든 요청에 앞 사용자의 Authorization 이 실린다.
+"""
