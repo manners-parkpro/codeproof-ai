@@ -1,0 +1,26 @@
+decoy_id = "D097-index-rebuilt-fresh-each-attempt"
+trap_kind = "idempotent_retry"
+
+[bait]
+apparent_defect = """
+rebuild 가 문서를 읽다가 연결이 끊기면 처음부터 다시 읽으며 색인 목록에 문서 번호를 append 한다. 실패한
+시도에서 이미 넣은 번호가 남아 재시도가 같은 문서를 한 번 더 넣는 것처럼 보여, 재시도마다 색인이 중복으로
+부푸는 멱등성 결함으로 읽힌다.
+"""
+lure_lines = [14, 14]
+
+[safety]
+claim = "rebuild 가 돌려주는 색인은 마지막에 끝까지 읽은 한 번의 결과와 같다 - 실패한 시도의 조각은 남지 않는다"
+justification = """
+index 는 시도 반복의 맨 앞에서 매번 빈 dict 로 새로 만들어지므로, 연결이 끊긴 시도가 넣던 번호는 그 시도의
+index 와 함께 버려진다. 돌려주는 것은 예외 없이 끝까지 읽은 시도가 처음부터 채운 index 뿐이라, 실패한 시도가
+넣던 번호가 다시 들어가거나 이전 시도의 문서가 섞이는 일이 없다.
+"""
+guard_symbol = "rebuild"
+guard_lines = [10, 10]
+
+[twin]
+defect = """
+index 를 반복 밖에서 한 번만 만든다. 도중에 끊긴 시도가 넣은 번호가 남은 채 다시 읽어, 같은 문서가 한 단어의
+목록에 여러 번 들어간다.
+"""

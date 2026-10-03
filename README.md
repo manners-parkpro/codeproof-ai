@@ -326,10 +326,10 @@ twin 은 인자를 보간해서 진짜 취약하다.
 
 ```
 채점자                     TP   FP  판정불가  FP가능
-provable_safety           0   12     378      o     <- 결함 주장만, 그것도 근거 범위 안만
-injected_defect           0  390       0      o     <- Qodo 정의: 판정 불가 칸이 없다
-paired_fix                0   12     378      o
-static_corroboration      4    0     386      x     <- 구조적으로 FP 를 못 낸다
+provable_safety           0   13     455      o     <- 결함 주장만, 그것도 근거 범위 안만
+injected_defect           0  468       0      o     <- Qodo 정의: 판정 불가 칸이 없다
+paired_fix                0   13     455      o
+static_corroboration      4    0     464      x     <- 구조적으로 FP 를 못 낸다
 ```
 
 편차의 정체는 둘이다 — **① 한쪽이 「판정할 수 없다」고 둔 것을 다른 쪽이

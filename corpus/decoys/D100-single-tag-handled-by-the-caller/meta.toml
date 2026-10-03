@@ -1,0 +1,24 @@
+decoy_id = "D100-single-tag-handled-by-the-caller"
+trap_kind = "type_narrowed"
+
+[bait]
+apparent_defect = """
+_joined 가 받은 값을 sorted 로 정렬해 쉼표로 잇는다. label 의 인자는 문자열일 수도 있는데 문자열을 sorted 하면
+글자 단위로 쪼개지므로, "python" 이 "h, n, o, p, t, y" 가 되는 타입 혼동 결함으로 읽힌다.
+"""
+lure_lines = [5, 5]
+
+[safety]
+claim = "_joined 에 닿는 값은 문자열이 아니다 - 태그 문자열 하나는 글자로 쪼개지지 않고 그대로 표시된다"
+justification = """
+_joined 를 부르는 곳은 label 하나이고, label 은 부르기 전에 isinstance(tags, str) 로 문자열을 걸러 그대로
+돌려준다. 그래서 _joined 까지 오는 값은 문자열이 아닌 쪽, 곧 태그 목록뿐이고 sorted 는 목록의 원소(태그)를
+정렬할 뿐 글자를 쪼개지 않는다. str 의 하위 클래스도 isinstance 에 걸리므로 같은 길로 돌려준다.
+"""
+guard_symbol = "label"
+guard_lines = [9, 10]
+
+[twin]
+defect = """
+label 이 문자열을 따로 처리하지 않고 _joined 로 넘긴다. "python" 이 "h, n, o, p, t, y" 로 표시된다.
+"""

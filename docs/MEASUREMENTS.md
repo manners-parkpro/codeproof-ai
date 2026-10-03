@@ -4,32 +4,32 @@
 
 정적분석기 리뷰어 `ruff` (ruff/0.16.8) · 설정 `ruff(select=ALL,ignore-noqa,cat=tool)`
 
-코퍼스 **88쌍** · `corpus_hash` `de88bc50d8e78088666de8cf`
+코퍼스 **102쌍** · `corpus_hash` `2790ef9489cec07638909eb2`
 
 ## 채점 기준 편차 — 헤드라인
 
-증명된 음성 위의 **같은 지적 390건**을 서로 다른 정답 정의로 채점했다. **지적은 하나도 바뀌지 않았다.**
+증명된 음성 위의 **같은 지적 468건**을 서로 다른 정답 정의로 채점했다. **지적은 하나도 바뀌지 않았다.**
 
 | 채점자 | TP | FP | 판정불가 | FP 가능 |
 |---|---:|---:|---:|:---:|
-| `provable_safety` | 0 | 12 | 378 | o |
-| `injected_defect` | 0 | 390 | 0 | o |
-| `paired_fix` | 0 | 12 | 378 | o |
-| `static_corroboration` | 4 | 0 | 386 | x |
+| `provable_safety` | 0 | 13 | 455 | o |
+| `injected_defect` | 0 | 468 | 0 | o |
+| `paired_fix` | 0 | 13 | 455 | o |
+| `static_corroboration` | 4 | 0 | 464 | x |
 
-🔴 FP 를 낼 수 있는 채점자끼리: **12 ~ 390** — 32.5배. 정의 선택만으로 생긴 FP: **378건**
+🔴 FP 를 낼 수 있는 채점자끼리: **13 ~ 468** — 36.0배. 정의 선택만으로 생긴 FP: **455건**
 
 > FP 를 구조적으로 낼 수 없는 채점자(합의 기반)는 편차 계산에서 뺀다 — 동의 부재는 반증이 아니므로 그 0 을 넣으면 범주 차이를 편차로 오해한다.
 
 ## 짝 채점 (PrimeVul)
 
-**구별 성공 1/88** — 안전한 쪽과 터지는 쪽을 갈라낸 경우다.
+**구별 성공 1/102** — 안전한 쪽과 터지는 쪽을 갈라낸 경우다.
 
 | 판정 | 건수 | 뜻 |
 |---|---:|---|
 | P-C 구별 | 1 | 양성만 지적 — 유일하게 옳다 |
-| P-V 과잉지적 | 3 | 둘 다 지적 |
-| P-B 미탐지 | 77 | 둘 다 미지적 |
+| P-V 과잉지적 | 4 | 둘 다 지적 |
+| P-B 미탐지 | 90 | 둘 다 미지적 |
 | P-R 역전 | 7 | **음성만** 지적 — 거꾸로다 |
 
 > 지적 단위로만 보면 이 사실이 보이지 않는다. twin 쪽만 세면 Precision 이 높게 나오는데, 그 TP 는 안전한 쪽에도 똑같이 낸 지적이 우연히 결함 자리에 걸린 것이다.
@@ -42,25 +42,25 @@
 
 | 미끼 분류 | 물림 | 지적 | 물림율 | 95% CI | decoy | decoy 95% CI |
 |---|---:|---:|---:|---|---:|---|
-| `constant_only_sink` | 5 | 32 | 15.6% | [6.9%, 31.8%] | 5/7 | [35.9%, 91.8%] |
-| `exception_absorbed` | 4 | 30 | 13.3% | [5.3%, 29.7%] | 2/6 | [9.7%, 70.0%] |
-| `idempotent_retry` | 2 | 22 | 9.1% | [2.5%, 27.8%] | 2/6 | [9.7%, 70.0%] |
-| `unreachable_branch` | 1 | 37 | 2.7% | [0.5%, 13.8%] | 1/7 | [2.6%, 51.3%] |
-| `bounded_input` | 0 | 25 | 0.0% | [0.0%, 13.3%] | 0/6 | [0.0%, 39.0%] |
-| `caller_held_lock` | 0 | 22 | 0.0% | [0.0%, 14.9%] | 0/6 | [0.0%, 39.0%] |
-| `contract_half_open` | 0 | 22 | 0.0% | [0.0%, 14.9%] | 0/6 | [0.0%, 39.0%] |
-| `defensive_copy` | 0 | 24 | 0.0% | [0.0%, 13.8%] | 0/6 | [0.0%, 39.0%] |
-| `enclosing_context` | 0 | 31 | 0.0% | [0.0%, 11.0%] | 0/6 | [0.0%, 39.0%] |
-| `frozen_after_init` | 0 | 25 | 0.0% | [0.0%, 13.3%] | 0/6 | [0.0%, 39.0%] |
-| `misleading_name` | 0 | 28 | 0.0% | [0.0%, 12.1%] | 0/7 | [0.0%, 35.4%] |
-| `noop_shim_neighbor` | 0 | 26 | 0.0% | [0.0%, 12.9%] | 0/6 | [0.0%, 39.0%] |
-| `type_narrowed` | 0 | 35 | 0.0% | [0.0%, 9.9%] | 0/7 | [0.0%, 35.4%] |
-| `upstream_validation` | 0 | 31 | 0.0% | [0.0%, 11.0%] | 0/6 | [0.0%, 39.0%] |
+| `constant_only_sink` | 6 | 38 | 15.8% | [7.4%, 30.4%] | 6/8 | [40.9%, 92.9%] |
+| `exception_absorbed` | 4 | 35 | 11.4% | [4.5%, 26.0%] | 2/7 | [8.2%, 64.1%] |
+| `idempotent_retry` | 2 | 27 | 7.4% | [2.1%, 23.4%] | 2/7 | [8.2%, 64.1%] |
+| `unreachable_branch` | 1 | 44 | 2.3% | [0.4%, 11.8%] | 1/8 | [2.2%, 47.1%] |
+| `bounded_input` | 0 | 29 | 0.0% | [0.0%, 11.7%] | 0/7 | [0.0%, 35.4%] |
+| `caller_held_lock` | 0 | 28 | 0.0% | [0.0%, 12.1%] | 0/7 | [0.0%, 35.4%] |
+| `contract_half_open` | 0 | 28 | 0.0% | [0.0%, 12.1%] | 0/7 | [0.0%, 35.4%] |
+| `defensive_copy` | 0 | 31 | 0.0% | [0.0%, 11.0%] | 0/7 | [0.0%, 35.4%] |
+| `enclosing_context` | 0 | 34 | 0.0% | [0.0%, 10.2%] | 0/7 | [0.0%, 35.4%] |
+| `frozen_after_init` | 0 | 30 | 0.0% | [0.0%, 11.4%] | 0/7 | [0.0%, 35.4%] |
+| `misleading_name` | 0 | 31 | 0.0% | [0.0%, 11.0%] | 0/8 | [0.0%, 32.4%] |
+| `noop_shim_neighbor` | 0 | 33 | 0.0% | [0.0%, 10.4%] | 0/7 | [0.0%, 35.4%] |
+| `type_narrowed` | 0 | 38 | 0.0% | [0.0%, 9.2%] | 0/8 | [0.0%, 32.4%] |
+| `upstream_validation` | 0 | 42 | 0.0% | [0.0%, 8.4%] | 0/7 | [0.0%, 35.4%] |
 
-현재 구성비 **3.1%** · 균등 구성비 2.9%
-🔴 구성비만 바꿔 도달 가능: **0.0% ~ 15.6%**
+현재 구성비 **2.8%** · 균등 구성비 2.6%
+🔴 구성비만 바꿔 도달 가능: **0.0% ~ 15.8%**
 
-⚖ 분류 간 차이가 **실재한다** - p=0.0001 (decoy 단위 순열 검정 · 14종 · decoy 88개 · 순열 9999회). ⚠ 다만 14종이 아직 분류당 목표 10쌍에 못 미친다 - 선언한 표본을 다 채운 뒤의 판정이라야 결론이다
+⚖ 분류 간 차이가 **실재한다** - p=0.0001 (decoy 단위 순열 검정 · 14종 · decoy 102개 · 순열 9999회). ⚠ 다만 14종이 아직 분류당 목표 10쌍에 못 미친다 - 선언한 표본을 다 채운 뒤의 판정이라야 결론이다
 📋 0/14종이 선언 목표 달성 — 목표는 **미리** 박아 둔 값이다. 유의해질 때까지 늘리다 멈추면 optional stopping 이다.
 지적 단위 구간은 실제보다 좁다 — decoy 하나가 여러 지적을 낸다. 판정은 decoy 단위로 한다 (DESIGN §3.5).
 
@@ -68,20 +68,20 @@
 
 | 가드 위치 | 물림 | 지적 | 물림율 | 95% CI | decoy | decoy 95% CI |
 |---|---:|---:|---:|---|---:|---|
-| `callee` | 6 | 114 | 5.3% | [2.4%, 11.0%] | 5/24 | [9.2%, 40.5%] |
-| `local` | 3 | 79 | 3.8% | [1.3%, 10.6%] | 2/18 | [3.1%, 32.8%] |
-| `module` | 2 | 104 | 1.9% | [0.5%, 6.7%] | 2/22 | [2.5%, 27.8%] |
-| `caller` | 1 | 93 | 1.1% | [0.2%, 5.8%] | 1/24 | [0.7%, 20.2%] |
+| `callee` | 6 | 130 | 4.6% | [2.1%, 9.7%] | 5/27 | [8.2%, 36.7%] |
+| `local` | 4 | 100 | 4.0% | [1.6%, 9.8%] | 3/22 | [4.7%, 33.3%] |
+| `module` | 2 | 129 | 1.6% | [0.4%, 5.5%] | 2/26 | [2.1%, 24.1%] |
+| `caller` | 1 | 109 | 0.9% | [0.2%, 5.0%] | 1/27 | [0.7%, 18.3%] |
 
-현재 구성비 **3.1%** · 균등 구성비 3.0%
-🔴 구성비만 바꿔 도달 가능: **1.1% ~ 5.3%** — 4.9배
+현재 구성비 **2.8%** · 균등 구성비 2.8%
+🔴 구성비만 바꿔 도달 가능: **0.9% ~ 4.6%** — 5.0배
 
-⚖ 분류 간 차이를 **아직 주장할 수 없다** - p=0.3597 (decoy 단위 순열 검정 · 4종 · decoy 88개 · 순열 9999회). 같다는 뜻이 아니다 - 이 표본으로는 모른다
+⚖ 분류 간 차이를 **아직 주장할 수 없다** - p=0.3158 (decoy 단위 순열 검정 · 4종 · decoy 102개 · 순열 9999회). 같다는 뜻이 아니다 - 이 표본으로는 모른다
 지적 단위 구간은 실제보다 좁다 — decoy 하나가 여러 지적을 낸다. 판정은 decoy 단위로 한다 (DESIGN §3.5).
 
 ## 에이전트 층 — `claude-code`
 
-리뷰어 `claude-code 2.1.284 · claude-fable-5-1 · effort=low` · 샘플당 **8회** 실행 · 짝 **60쌍** (코퍼스의 다른 28쌍은 이 실행에 없다) · docstring `keep` · 캐시 `uncontrolled` · 파서가 버린 지적 0건
+리뷰어 `claude-code 2.1.284 · claude-fable-5-1 · effort=low` · 샘플당 **8회** 실행 · 짝 **60쌍** (코퍼스의 다른 42쌍은 이 실행에 없다) · docstring `keep` · 캐시 `uncontrolled` · 파서가 버린 지적 0건
 
 설정 `imported(claude-code,fmt=native,kind=agent,runner_version=2,model=claude-fable-5-1,effort=low,isolation=safe-mode,strict-mcp-config,no-session-persistence,DISABLE_AUTOUPDATER=1,permission=dontAsk;tools=Read,Grep,Glob,instruction_hash=7d1332f82a7d41f3c8daf0b9,prompt_hash=305d8e25f7fdbdafc7b89332,schema_hash=b957f782e99241837721bb08,docstrings=keep)`
 
@@ -116,7 +116,7 @@
 
 ## 에이전트 층 — `claude-code-neutral`
 
-리뷰어 `claude-code 2.1.284 · claude-fable-5-1 · effort=low` · 샘플당 **3회** 실행 (앞 3회만 묶음) · 짝 **60쌍** (코퍼스의 다른 28쌍은 이 실행에 없다) · docstring `neutral` · 캐시 `uncontrolled` · 파서가 버린 지적 0건
+리뷰어 `claude-code 2.1.284 · claude-fable-5-1 · effort=low` · 샘플당 **3회** 실행 (앞 3회만 묶음) · 짝 **60쌍** (코퍼스의 다른 42쌍은 이 실행에 없다) · docstring `neutral` · 캐시 `uncontrolled` · 파서가 버린 지적 0건
 
 설정 `imported(claude-code-neutral,fmt=native,kind=agent,runner_version=3,model=claude-fable-5-1,effort=low,isolation=safe-mode,strict-mcp-config,no-session-persistence,DISABLE_AUTOUPDATER=1,permission=dontAsk;tools=Read,Grep,Glob,instruction_hash=7d1332f82a7d41f3c8daf0b9,prompt_hash=305d8e25f7fdbdafc7b89332,schema_hash=b957f782e99241837721bb08,docstrings=neutral)`
 
@@ -151,7 +151,7 @@
 
 ## 에이전트 층 — `codex-cli`
 
-리뷰어 `codex-cli 0.158.0 · gpt-6-astra · effort=low` · 샘플당 **3회** 실행 (앞 3회만 묶음) · 짝 **60쌍** (코퍼스의 다른 28쌍은 이 실행에 없다) · docstring `keep` · 캐시 `uncontrolled` · 파서가 버린 지적 0건
+리뷰어 `codex-cli 0.158.0 · gpt-6-astra · effort=low` · 샘플당 **3회** 실행 (앞 3회만 묶음) · 짝 **60쌍** (코퍼스의 다른 42쌍은 이 실행에 없다) · docstring `keep` · 캐시 `uncontrolled` · 파서가 버린 지적 0건
 
 설정 `imported(codex-cli,fmt=native,kind=agent,runner_version=2,model=gpt-6-astra,effort=low,isolation=ignore-user-config,ignore-rules,ephemeral,permission=sandbox=read-only;exec=allowed,instruction_hash=7d1332f82a7d41f3c8daf0b9,prompt_hash=305d8e25f7fdbdafc7b89332,schema_hash=b957f782e99241837721bb08,docstrings=keep)`
 
@@ -186,7 +186,7 @@
 
 ## 에이전트 층 — `codex-cli-neutral`
 
-리뷰어 `codex-cli 0.158.0 · gpt-6-astra · effort=low` · 샘플당 **3회** 실행 (앞 3회만 묶음) · 짝 **60쌍** (코퍼스의 다른 28쌍은 이 실행에 없다) · docstring `neutral` · 캐시 `uncontrolled` · 파서가 버린 지적 0건
+리뷰어 `codex-cli 0.158.0 · gpt-6-astra · effort=low` · 샘플당 **3회** 실행 (앞 3회만 묶음) · 짝 **60쌍** (코퍼스의 다른 42쌍은 이 실행에 없다) · docstring `neutral` · 캐시 `uncontrolled` · 파서가 버린 지적 0건
 
 설정 `imported(codex-cli-neutral,fmt=native,kind=agent,runner_version=3,model=gpt-6-astra,effort=low,isolation=ignore-user-config,ignore-rules,ephemeral,permission=sandbox=read-only;exec=allowed,instruction_hash=7d1332f82a7d41f3c8daf0b9,prompt_hash=305d8e25f7fdbdafc7b89332,schema_hash=b957f782e99241837721bb08,docstrings=neutral)`
 
@@ -360,8 +360,6 @@ twin 쪽 정답을 바뀐 줄과 미끼를 잇는 구간으로 넓혀 같은 지
 - k-임계는 실행 횟수에 따라 뜻이 달라 **리뷰어 안에서만** 싣는다 (위 각 절).
 
 ## 이 숫자를 읽는 법
-
-⚠️ 음성 88건은 100건 미만이다 (p=0.30 에서 반폭 ±9.4%). 이 구간에서 FPR 은 숫자가 아니라 느낌이다 - 목표 150건.
 
 - 지적 단위 CI 는 실제보다 좁다 — decoy 하나가 여러 지적을 내므로 독립 시행이 아니다. decoy 열(샘플 단위)을 같이 본다.
 - 증명된 음성 위에서 `FP/(TP+FP)` 는 정의상 항상 100% 다 (TP 가 불가능하다). 물림율의 분모는 **나온 지적 전부**다.

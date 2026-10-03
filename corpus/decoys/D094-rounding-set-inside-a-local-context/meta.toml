@@ -1,0 +1,29 @@
+decoy_id = "D094-rounding-set-inside-a-local-context"
+trap_kind = "enclosing_context"
+
+[bait]
+apparent_defect = """
+total 이 decimal 문맥의 정밀도와 반올림 방식(ROUND_HALF_UP)을 바꾼다. decimal 문맥은 스레드마다 하나라
+그 설정이 total 이 끝난 뒤에도 남아, 같은 스레드의 다른 금액 계산까지 반올림이 바뀌는 전역 상태 누수로
+읽힌다.
+"""
+lure_lines = [18, 19]
+
+[safety]
+claim = "total 이 정상으로 돌아오거나 total 안에서 던져진 예외로 끝나면, 호출 스레드의 decimal 문맥은 부르기 전과 같다"
+justification = """
+total 이 바꾸는 ctx 는 _money_context 가 넘긴 것이고, 그 함수는 decimal.localcontext() 안에서 yield 하므로
+ctx 는 현재 문맥의 사본이다. localcontext 는 블록에 들어갈 때 그 사본을 현재 문맥으로 세우고 블록을 빠져나갈
+때 예외가 있어도 원래 문맥을 되돌려 놓는다. 그래서 정밀도 · 반올림 · 계산 중에 켜진 플래그가 전부 사본에만
+남고 호출 스레드의 문맥에는 닿지 않는다. 시그널 처리기가 비동기로 던지는 예외(Ctrl-C 의 KeyboardInterrupt 등)는
+이 주장 밖이다 - 그런 예외는 어느 바이트코드 뒤에든 떨어질 수 있어, contextmanager 의 __exit__ 가 제너레이터를
+다시 돌리기 전에 떨어지면 되돌리기가 돌지 않는다 (Python signal 문서 「Note on Signal Handlers and Exceptions」).
+"""
+guard_symbol = "_money_context"
+guard_lines = [12, 13]
+
+[twin]
+defect = """
+_money_context 가 사본 없이 현재 문맥(decimal.getcontext())을 그대로 넘긴다. total 이 바꾼 정밀도와 반올림이
+스레드의 문맥에 남아 이후의 모든 decimal 계산에 적용된다.
+"""

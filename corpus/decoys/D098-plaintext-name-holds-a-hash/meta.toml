@@ -1,0 +1,25 @@
+decoy_id = "D098-plaintext-name-holds-a-hash"
+trap_kind = "misleading_name"
+
+[bait]
+apparent_defect = """
+store_password 가 plaintext 라는 이름의 값을 소금과 이어 db 에 저장한다. 이름대로라면 비밀번호 원문을 그대로
+저장하는 것이라, db 가 새면 모든 사용자의 비밀번호가 드러나는 평문 저장으로 읽힌다.
+"""
+lure_lines = [15, 15]
+
+[safety]
+claim = "db 에 들어가는 값은 비밀번호 원문을 담지 않는다 - 사용자마다 새 소금으로 늘린 PBKDF2 해시와 그 소금뿐이다"
+justification = """
+같은 함수가 저장하기 바로 앞 줄에서 plaintext 에 hashlib.pbkdf2_hmac("sha256", ...) 의 결과를 대입한다. 그
+값은 os.urandom 으로 뽑은 16바이트 소금으로 60만 번 늘린 32바이트 다이제스트이므로 이름과 달리 원문이 아니고,
+소금을 저장할 때마다 새로 뽑으므로 같은 비밀번호도 매번 다른 값이 된다. db 에 들어가는 것은 그 소금과
+다이제스트를 이은 48바이트뿐이다.
+"""
+guard_symbol = "store_password"
+guard_lines = [13, 14]
+
+[twin]
+defect = """
+plaintext 에 비밀번호를 정규화 · 인코딩만 해서 넣는다. db 에 소금 뒤로 원문이 그대로 저장된다.
+"""

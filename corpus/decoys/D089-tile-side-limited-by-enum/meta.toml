@@ -1,0 +1,24 @@
+decoy_id = "D089-tile-side-limited-by-enum"
+trap_kind = "bounded_input"
+
+[bait]
+apparent_defect = """
+blank_tile 이 호출자가 준 side 를 제곱한 만큼의 바이트열을 만든다. 크기를 제한하는 비교가 보이지 않아,
+side 하나로 수십 GB 짜리 할당을 요청하게 만드는 무제한 할당(메모리 소진)으로 읽힌다.
+"""
+lure_lines = [16, 16]
+
+[safety]
+claim = "blank_tile 이 만드는 바이트열은 64 × 64 × 4 바이트를 넘지 않는다"
+justification = """
+blank_tile 은 할당하기 전에 side 를 Side(side) 로 열거형 값에 맞추고, IntEnum 은 정의된 값(16 · 64)과
+같지 않은 수를 ValueError 로 거절한다. 그래서 할당 줄에 닿는 size 는 언제나 16 이나 64 이고, 바이트열
+크기의 상한이 입력과 무관하게 64 × 64 × 4 로 고정된다.
+"""
+guard_symbol = "Side"
+guard_lines = [15, 15]
+
+[twin]
+defect = """
+열거형 변환 대신 int 변환만 있어 side 가 그대로 크기가 된다. side=100000 이면 400억 바이트를 요청한다.
+"""

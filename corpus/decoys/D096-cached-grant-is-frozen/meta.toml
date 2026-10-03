@@ -1,0 +1,28 @@
+decoy_id = "D096-cached-grant-is-frozen"
+trap_kind = "frozen_after_init"
+
+[bait]
+apparent_defect = """
+grant_for 가 lru_cache 로 감싸져 같은 spec 에는 매번 같은 Grant 객체를 돌려준다. 한 호출자가 받은 객체의
+roles 를 고치면 그 spec 을 쓰는 모든 호출자에게 퍼지는 것처럼 보여, 캐시된 공유 객체를 통한 캐시 오염
+(권한 상승)으로 읽힌다.
+"""
+lure_lines = [17, 17]
+
+[safety]
+claim = "grant_for 가 돌려준 Grant 를 호출자가 고쳐 이후 호출의 결과를 바꿀 수 없다"
+justification = """
+Grant 는 frozen dataclass 이므로 roles 에 다른 값을 대입하면 FrozenInstanceError 가 나고, roles 자체는
+frozenset 이라 add · discard 같은 제자리 변경 수단이 없다. |= 는 새 값을 대입하는 것이라 앞의 거절에 걸린다.
+두 길이 다 막혀 있으므로 캐시가 여러 호출자에게 같은 객체를 나눠 주어도 그 객체는 만든 뒤 바뀌지 않고,
+같은 spec 의 다음 호출도 처음 만든 값을 그대로 받는다.
+object.__setattr__ 나 __dict__ 직접 쓰기처럼 불변을 일부러 우회하는 경로는 이 주장 밖이다.
+"""
+guard_symbol = "Grant"
+guard_lines = [8, 10]
+
+[twin]
+defect = """
+Grant 가 frozen 이 아니고 roles 가 set 이다. 받은 객체에 roles.add("admin") 을 하면 캐시에 남은 같은 객체가
+바뀌어, 그 spec 의 다음 호출자 모두가 admin 권한을 받는다.
+"""

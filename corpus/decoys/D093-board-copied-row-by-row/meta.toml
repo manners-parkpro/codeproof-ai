@@ -1,0 +1,26 @@
+decoy_id = "D093-board-copied-row-by-row"
+trap_kind = "defensive_copy"
+
+[bait]
+apparent_defect = """
+place 가 판의 칸에 표시를 써 넣는다(board[row][col] = mark). 판은 줄 리스트를 담은 중첩 리스트라 그 쓰기가
+호출자가 넘긴 grid 의 줄까지 바꾸는 것처럼 보여, 수를 미리 두어 보는 탐색이 원래 판을 망가뜨리는
+얕은 복사 · 별칭 공유 결함으로 읽힌다.
+"""
+lure_lines = [15, 15]
+
+[safety]
+claim = "place 는 호출자의 grid 를 바꾸지 않고, 돌려준 판은 grid 와 줄을 하나도 공유하지 않는다"
+justification = """
+같은 함수가 쓰기 전에 board 를 [line[:] for line in grid] 로 만들므로 바깥 리스트뿐 아니라 줄마다 새 리스트가
+생긴다. 그래서 board[row][col] 에 대한 쓰기는 새로 만든 줄만 바꾸고, 줄 안의 원소는 바꿀 수 없는 문자열이라
+더 깊이 공유되는 것도 없다. 돌려준 판을 나중에 고쳐도 같은 이유로 grid 에 닿지 않는다.
+"""
+guard_symbol = "place"
+guard_lines = [14, 14]
+
+[twin]
+defect = """
+board 를 grid[:] 로 만들어 바깥 리스트만 새것이고 줄은 grid 와 같은 객체다. 표시를 쓰면 호출자의 grid 도
+바뀐다.
+"""

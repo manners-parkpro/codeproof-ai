@@ -1,0 +1,25 @@
+decoy_id = "D090-tail-linked-under-submit-lock"
+trap_kind = "caller_held_lock"
+
+[bait]
+apparent_defect = """
+_link 가 공유하는 꼬리(self._tail)를 읽고, 그 노드의 next 를 바꾸고, 꼬리를 새 노드로 옮기는 세 단계를
+락 없이 한다. 두 스레드가 같은 꼬리를 읽으면 한쪽이 이은 노드를 다른 쪽이 덮어써 작업이 사라지는
+경쟁 조건(갱신 손실)으로 읽힌다.
+"""
+lure_lines = [21, 23]
+
+[safety]
+claim = "여러 스레드가 동시에 submit 해도 넣은 작업은 하나도 사라지지 않고, 한 스레드의 작업은 넣은 순서대로 남는다"
+justification = """
+_link 를 부르는 곳은 submit 하나뿐이고, submit 은 self._lock 을 쥔 채로 부른다. 그래서 꼬리를 읽고
+잇고 옮기는 세 단계가 한 번에 한 스레드에서만 일어나고, 다음 스레드는 앞 스레드가 옮겨 둔 꼬리를 읽는다.
+jobs 도 같은 락을 쥐고 읽으므로 반쯤 이어진 목록을 보지 않는다.
+"""
+guard_symbol = "submit"
+guard_lines = [25, 27]
+
+[twin]
+defect = """
+submit 이 락 없이 _link 를 부른다. 두 스레드가 같은 꼬리에 노드를 이으면 한쪽 작업이 목록에서 사라진다.
+"""

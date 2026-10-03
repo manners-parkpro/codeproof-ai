@@ -1,0 +1,27 @@
+decoy_id = "D099-like-escaper-beside-tidier"
+trap_kind = "noop_shim_neighbor"
+
+[bait]
+apparent_defect = """
+search 가 검색어를 LIKE 패턴 안에 넣는다. 값은 매개변수로 넘기지만 LIKE 는 % 와 _ 를 와일드카드로 읽으므로,
+이웃한 _tidy 처럼 공백만 정리하면 검색어의 % 하나로 모든 상품이 나오는 와일드카드 주입으로 읽힌다.
+"""
+lure_lines = [18, 18]
+
+[safety]
+claim = "search 의 결과는 이름에 검색어(공백 정리 뒤)가 ASCII 대소문자만 빼고 글자 그대로 든 상품뿐이다 - 검색어의 % · _ · \\ 는 와일드카드나 이스케이프로 읽히지 않는다"
+justification = """
+search 가 패턴에 넣는 값은 _tidy 를 거친 뒤 _escape_like 를 거친 것이고, _escape_like 는 역슬래시를 먼저
+두 겹으로 만든 다음 % 와 _ 앞에 역슬래시를 붙인다. 문장이 ESCAPE '\\' 를 선언하므로 LIKE 는 그렇게 표시된
+세 글자를 와일드카드가 아닌 글자로 읽고, 앞뒤에 붙인 % 두 개만 와일드카드로 남는다. 옆의 _tidy 는 공백만
+다루므로 이스케이프를 대신하지 못한다. SQLite 는 텍스트 비교를 첫 NUL 에서 끊으므로 NUL 이 든 검색어는
+search 가 먼저 ValueError 로 거절한다.
+"""
+guard_symbol = "_escape_like"
+guard_lines = [11, 12]
+
+[twin]
+defect = """
+search 가 공백 정리 함수만 부르고 _escape_like 를 거치지 않는다. 검색어 "%" 나 "_" 가 와일드카드가 되어
+상관없는 상품까지 나온다.
+"""

@@ -1,0 +1,27 @@
+decoy_id = "D102-table-rows-checked-at-construction"
+trap_kind = "upstream_validation"
+
+[bait]
+apparent_defect = """
+column 이 index 를 table.width(첫 줄의 길이)와만 견준 뒤 모든 줄에서 row[index] 를 꺼낸다. 첫 줄보다 짧은 줄이
+있으면 그 줄에서 IndexError 가 나는 것처럼 보여, 줄 길이가 들쭉날쭉한 표에서 터지는 경계 검증 누락으로 읽힌다.
+"""
+lure_lines = [25, 25]
+
+[safety]
+claim = "column 은 0 <= index < table.width 인 index 에서 IndexError 를 내지 않고, 모든 줄의 그 칸을 돌려준다"
+justification = """
+Table 은 받은 줄을 먼저 튜플의 튜플로 복사하고, 그 사본으로 모든 줄의 길이가 첫 줄과 같은지 견주어 하나라도
+다르면 ValueError 로 끝낸다. 검사한 사본을 그대로 _rows 에 담으므로 검사 뒤에 호출자의 리스트가 바뀌어도(다른
+스레드가 고치는 경우를 포함해) 담긴 줄에는 닿지 않고, rows 는 setter 없는 읽기 전용 속성이며 줄도 튜플이라
+만든 뒤에 길이가 다른 줄이 끼어들 수 없다. 그래서 index 가 width 안이면 모든 줄에 그 칸이 있다. _rows 를
+직접 바꾸는 것 같은 의도적 우회는 이 주장 밖이다.
+"""
+guard_symbol = "Table"
+guard_lines = [9, 10]
+
+[twin]
+defect = """
+Table 이 줄 길이를 확인하지 않는다. 첫 줄보다 짧은 줄이 있는 표에서 column 이 그 줄의 row[index] 에서
+IndexError 를 낸다.
+"""
