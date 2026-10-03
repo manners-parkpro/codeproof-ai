@@ -532,8 +532,12 @@ def _print_scoring(
     _print_strata(run)
 
 
-def _print_repro(check: ReproCheck, reviewer: str) -> None:
-    """🔴 같은 설정의 결과가 같은가. 해석은 리뷰어 종류에 달려 있다."""
+def _print_repro(check: ReproCheck, deterministic: bool | None) -> None:
+    """🔴 같은 설정의 결과가 같은가. 해석은 리뷰어가 결정적인지(`ReviewerKind`)에 달려 있다.
+
+    모르면(None) 짐작하지 않는다 - 저장 기록에는 리뷰어 종류가 없다 (`history --repro`).
+    [실측] 전에는 그 자리에 "unknown" 을 넘겨 정적분석기가 갈라져도 「모델은 비결정적」이라 했다.
+    """
     n = len(check.runs)
     if check.identical:
         print(f"  재현성: 같은 설정 {n}회 실행, 지적 집합 **동일**")
@@ -543,12 +547,16 @@ def _print_repro(check: ReproCheck, reviewer: str) -> None:
     stable = len(check.stable_keys)
     print(f"  재현성: 같은 설정 {n}회 실행, 지적 집합 **불일치**")
     print(f"          공통 {stable}건 · 변동 {volatile}건")
-    print(
-        "          ⚠ 정적분석기는 결정적이어야 한다 - 도구 버전이나 환경이 "
-        "바뀌었는지 확인한다."
-        if reviewer in {"ruff", "mypy"}
-        else "          모델은 비결정적이다 - 이 변동 폭 자체가 측정 대상이다."
-    )
+    if deterministic is None:
+        note = (
+            "리뷰어 종류가 기록에 없다 - 정적분석기 · 가져온 지적이면 도구·환경 드리프트이고, "
+            "모델 · 에이전트면 이 변동 폭이 측정 대상이다."
+        )
+    elif deterministic:
+        note = "⚠ 정적분석기는 결정적이어야 한다 - 도구 버전이나 환경이 바뀌었는지 확인한다."
+    else:
+        note = "모델은 비결정적이다 - 이 변동 폭 자체가 측정 대상이다."
+    print(f"          {note}")
 
 
 def _graders_for(
@@ -572,8 +580,11 @@ def _graders_for(
     ]
 
 
-def _persist(run: ReviewerRun, store_path: str) -> None:
-    """결과를 보관한다. 🔴 매니페스트 없이는 외래키가 거부한다 (E1)."""
+def _persist(run: ReviewerRun, store_path: str, kind: ReviewerKind) -> None:
+    """결과를 보관한다. 🔴 매니페스트 없이는 외래키가 거부한다 (E1).
+
+    `kind` 는 리뷰어가 신고한 종류다 - 재현성 해석을 이름으로 짐작하지 않는다 (A2).
+    """
     if store_path == "none":
         print("  ⚠ --store none - 이 결과는 재현할 수 없다")
         return
@@ -582,7 +593,7 @@ def _persist(run: ReviewerRun, store_path: str) -> None:
         check = store.repro_check(run.manifest.config_hash)
     print(f"  저장: {store_path}  run_id={run_id}")
     if len(check.runs) > 1:
-        _print_repro(check, run.reviewer)
+        _print_repro(check, kind.is_deterministic)
 
 
 
@@ -618,10 +629,9 @@ def _cmd_eval(
             return 2
 
         graders = _graders_for(name, slack, labeled)
+        reviewer = ProviderReviewer(provider, effort=effort, cache_policy=cache_policy)
         run = run_reviewer(
-            ProviderReviewer(
-                provider, effort=effort, cache_policy=cache_policy
-            ),
+            reviewer,
             labeled,
             graders,
             sample_n=samples,
@@ -632,7 +642,7 @@ def _cmd_eval(
         print(f"  텔레메트리: {run.telemetry.render()}")
         _print_observations(run)
         _print_scoring(run, graders, labeled)
-        _persist(run, store_path)
+        _persist(run, store_path, reviewer.kind)
 
     return 0
 
@@ -814,7 +824,7 @@ def _cmd_import(
             print(f"      {r}")
     _print_observations(run)
     _print_scoring(run, graders, labeled)
-    _persist(run, store_path)
+    _persist(run, store_path, reviewer.kind)
     return 0
 
 
@@ -881,7 +891,7 @@ def _cmd_history(store_path: str, limit: int, repro: str | None) -> int:
             print(f"config_hash={repro}  실행 {len(check.runs)}회")
             for rid in check.runs:
                 print(f"  {rid}  지적 {len(store.finding_keys(rid))}건")
-            _print_repro(check, "unknown")
+            _print_repro(check, None)
             return 0
 
         rows = store.runs(limit)
@@ -928,7 +938,8 @@ def _cmd_measure(
 
     for analyzer in analyzers:
         graders = _graders_for(analyzer.name, slack, samples)
-        run = run_reviewer(AnalyzerReviewer(analyzer), samples, graders)
+        reviewer = AnalyzerReviewer(analyzer)
+        run = run_reviewer(reviewer, samples, graders)
         _print_header(run, run.reviewer)
 
         for sc in run.outcomes:
@@ -944,7 +955,7 @@ def _cmd_measure(
                     )
 
         _print_scoring(run, graders, samples)
-        _persist(run, store_path)
+        _persist(run, store_path, reviewer.kind)
 
     if warning := credibility_warning(sum(1 for s in samples if s.is_proven_safe)):
         sys.stdout.flush()

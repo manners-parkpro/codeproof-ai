@@ -38,6 +38,26 @@ def db(tmp_path: Path) -> str:
     return str(tmp_path / "t.db")
 
 
+def _diverge(db: str, command: list[str]) -> str:
+    """같은 설정으로 두 번 저장하고 뒤 실행의 지적 하나를 지운다 - 드리프트를 흉내 낸다."""
+    for _ in range(2):
+        assert main(command) == 0
+    with Store(db) as store:
+        hashes = store._conn.execute("SELECT DISTINCT config_hash FROM runs").fetchall()
+        assert len(hashes) == 1, "두 실행의 설정이 같아야 재현성 비교가 된다"
+        (last,) = store._conn.execute(
+            "SELECT run_id FROM runs ORDER BY created_at DESC LIMIT 1"
+        ).fetchone()
+        gone = store._conn.execute(
+            "DELETE FROM findings WHERE rowid IN"
+            " (SELECT rowid FROM findings WHERE run_id = ? LIMIT 1)",
+            (last,),
+        ).rowcount
+        store._conn.commit()
+    assert gone == 1, "지울 지적이 없다 - 갈라짐을 만들지 못하면 아래 단언이 공허하다"
+    return str(hashes[0][0])
+
+
 def _runner_output(
     root: Path,
     corpus: Path,
@@ -294,6 +314,18 @@ class TestPersistence:
         main(["measure", "--corpus", str(small_corpus), "--analyzers", "ruff", "--store", db])
         assert "지적 집합 **동일**" in capsys.readouterr().out
 
+    def test_diverged_static_runs_are_called_drift(
+        self, small_corpus: Path, db: str, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """🔴 갈라진 결과의 해석은 리뷰어가 신고한 종류로 고른다 - 정적분석기면 드리프트다 (F1)."""
+        measure = ["measure", "--corpus", str(small_corpus), "--analyzers", "ruff", "--store", db]
+        _diverge(db, measure)
+        capsys.readouterr()
+        main(measure)
+        out = capsys.readouterr().out
+        assert "지적 집합 **불일치**" in out
+        assert "정적분석기는 결정적이어야 한다" in out
+
 
 class TestHistory:
     def test_lists_stored_runs(
@@ -313,6 +345,22 @@ class TestHistory:
     def test_unknown_config_hash_is_rejected(self, small_corpus: Path, db: str) -> None:
         main(["measure", "--corpus", str(small_corpus), "--analyzers", "ruff", "--store", db])
         assert main(["history", "--store", db, "--repro", "없는해시"]) == 2
+
+    def test_repro_does_not_guess_the_reviewer_kind(
+        self, small_corpus: Path, db: str, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """🔴 저장 기록에는 리뷰어 종류가 없다 - 갈라진 결과를 한쪽 해석으로 짐작하지 않는다 (F1).
+
+        [실측] 전에는 정적분석기 실행이 갈라져도 여기서만 「모델은 비결정적이다」를 냈다.
+        """
+        measure = ["measure", "--corpus", str(small_corpus), "--analyzers", "ruff", "--store", db]
+        config_hash = _diverge(db, measure)
+        capsys.readouterr()
+        assert main(["history", "--store", db, "--repro", config_hash]) == 0
+        out = capsys.readouterr().out
+        assert "지적 집합 **불일치**" in out
+        assert "리뷰어 종류가 기록에 없다" in out
+        assert "모델은 비결정적이다" not in out
 
 
 class TestDecoyCommands:
@@ -425,6 +473,25 @@ class TestImport:
         assert code == 0
         assert "파서가 버린 지적 2건" in out, f"버린 지적이 보이지 않는다:\n{out}"
         assert "elsewhere.py" in out
+
+    def test_diverged_imported_runs_are_called_drift(
+        self, tmp_path: Path, db: str, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """🔴 해석은 이름이 아니라 종류로 고른다 - 가져온 지적(imported)도 결정적이다 (A2 · F1).
+
+        [실측] 이름 목록({"ruff", "mypy"})으로 고르던 때는 여기서 「모델은 비결정적이다」가 나왔다.
+        """
+        src = self._write_pair(tmp_path)
+        command = [
+            "import", "--from", str(src), "--name", "fake",
+            "--identity", "v1", "--store", db, "--allow-partial",
+        ]
+        _diverge(db, command)
+        capsys.readouterr()
+        assert main(command) == 0
+        out = capsys.readouterr().out
+        assert "지적 집합 **불일치**" in out
+        assert "정적분석기는 결정적이어야 한다" in out
 
     def test_missing_source_directory_is_rejected(self, db: str) -> None:
         code = main(

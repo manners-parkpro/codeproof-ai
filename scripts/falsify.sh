@@ -60,7 +60,8 @@ SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict conv
            mix-decoy-unit plan-coverage plan-design
            report-collected report-packed-samples report-bundle-record report-corpus-gone
            report-half-pair compare-same-samples compare-skip-note pack-records-samples
-           pack-stray-samples sarif-end bandit-range twin-convention twin-convention-paired)
+           pack-stray-samples sarif-end bandit-range twin-convention twin-convention-paired
+           repro-unknown repro-kind)
 
 claim_layering() { echo "런타임(analysis)은 정답 라벨(eval)을 볼 수 없다 — A1"; }
 break_layering() {
@@ -416,6 +417,14 @@ break_twin-convention-paired() {
     src/codeproof_ai/eval/grading/paired.py
 }
 guard_twin-convention-paired() { uv run pytest tests/eval/test_convention_claims.py -q -k positive_is_not_a_detection; }
+
+claim_repro-unknown() { echo "저장 기록에는 리뷰어 종류가 없다 — history --repro 는 갈라진 결과를 한쪽 해석으로 짐작하지 않는다 (F1)"; }
+break_repro-unknown() { perl -0pi -e 's/_print_repro\(check, None\)/_print_repro(check, False)  # falsify.sh/' src/codeproof_ai/cli.py; }
+guard_repro-unknown() { uv run pytest tests/cli/test_commands.py -q -k repro_does_not_guess; }
+
+claim_repro-kind() { echo "재현성 해석은 리뷰어가 신고한 종류로 고른다 — 정적분석기가 갈라지면 드리프트다 (F1 · A2)"; }
+break_repro-kind() { perl -0pi -e 's/_print_repro\(check, kind\.is_deterministic\)/_print_repro(check, False)  # falsify.sh/' src/codeproof_ai/cli.py; }
+guard_repro-kind() { uv run pytest tests/cli/test_commands.py -q -k "diverged_static_runs or diverged_imported_runs"; }
 
 claim_report-labels() { echo "생성물의 다회 실행 숫자는 관점마다 라벨을 붙인다 — F3 · F6"; }
 break_report-labels() {
