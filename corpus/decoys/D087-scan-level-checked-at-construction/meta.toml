@@ -1,0 +1,26 @@
+decoy_id = "D087-scan-level-checked-at-construction"
+trap_kind = "unreachable_branch"
+
+[bait]
+apparent_defect = """
+accept 가 strict · basic 이 아닌 등급이면 마지막 줄에서 크기와 상관없이 True 를 돌려준다. 오타나
+새 등급 이름이 들어오면 크기 제한 없이 통과시키는 실패 시 열림(fail-open) 분기로 읽힌다.
+"""
+lure_lines = [25, 25]
+
+[safety]
+claim = "accept 의 마지막 return True 는 실행되지 않는다"
+justification = """
+ScanRequest 는 frozen dataclass 이고 __post_init__ 이 level 이 _LEVELS 에 없으면 ValueError 로 생성을
+거부하므로, 존재하는 ScanRequest 의 level 은 basic 이나 strict 뿐이다. frozen 이라 만든 뒤에 보통의 대입으로
+level 을 바꿀 수도 없다 (object.__setattr__ 같은 의도적 우회는 이 주장 밖이다). 그래서 accept 는 언제나 앞의 두 분기 중 하나에서 돌아가고, 크기를 보지 않는 마지막
+분기에 닿는 요청이 없다.
+"""
+guard_symbol = "ScanRequest"
+guard_lines = [14, 15]
+
+[twin]
+defect = """
+생성자가 등급을 거르지 않는다. 모르는 등급의 요청이 만들어져 accept 의 마지막 분기에서 크기 제한 없이
+통과한다.
+"""

@@ -1,0 +1,25 @@
+decoy_id = "D082-tuple-base-args-grow-by-copy"
+trap_kind = "frozen_after_init"
+
+[bait]
+apparent_defect = """
+command 가 모듈 전역 _BASE_ARGS 를 args 에 그대로 받고 args += ... 로 늘린다. args 와 전역이 같은
+객체라 += 가 전역을 제자리에서 늘리고, 부를 때마다 앞선 호출의 --file · 경로가 다음 명령에 쌓이는
+공유 가변 전역 결함으로 읽힌다.
+"""
+lure_lines = [11, 12]
+
+[safety]
+claim = "command 는 _BASE_ARGS 를 바꾸지 않고, 호출마다 그 호출의 인자만 담은 명령을 돌려준다"
+justification = """
+_BASE_ARGS 는 튜플이라 모듈이 읽힌 뒤로 내용을 바꿀 수 없고, 튜플에는 제자리 += 가 없으므로
+args += ... 는 두 튜플을 이은 새 튜플을 만들어 지역 이름 args 에만 다시 묶는다. 그래서 전역은
+처음 세 인자 그대로 남고 다음 호출은 언제나 같은 기본 인자에서 시작한다.
+"""
+guard_symbol = "_BASE_ARGS"
+guard_lines = [3, 3]
+
+[twin]
+defect = """
+_BASE_ARGS 가 리스트다. args += ... 가 전역 리스트를 제자리에서 늘려 호출마다 앞선 인자가 쌓인다.
+"""

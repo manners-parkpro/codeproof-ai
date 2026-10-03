@@ -1,0 +1,26 @@
+decoy_id = "D075-frame-length-checked-before-read"
+trap_kind = "bounded_input"
+
+[bait]
+apparent_defect = """
+read_frame 이 스트림 머리 4바이트에서 읽은 길이를 그대로 본문 읽기(_read_exact → stream.read)에 넘긴다. 길이는 보내는 쪽이
+정하는 부호 없는 32비트 값이라, 머리만 조작하면 수 GiB 짜리 본문 버퍼를 잡게 만드는 무제한 할당
+(메모리 소진)으로 읽힌다.
+"""
+lure_lines = [26, 26]
+
+[safety]
+claim = "read_frame 이 본문을 읽으려고 요청하는 크기는 _MAX_FRAME 을 넘지 않는다"
+justification = """
+같은 함수가 본문을 읽기 전에 length 를 _MAX_FRAME 과 견주고 넘으면 ValueError 로 빠져나가므로,
+본문 읽기에 닿는 length 는 언제나 64KiB 이하다. 머리를 조작해도 큰 값은 그 비교에서 걸러져
+본문 읽기까지 가지 못하고, 그래서 요청하는 크기의 상한이 입력과 무관하게 고정된다.
+"""
+guard_symbol = "read_frame"
+guard_lines = [24, 25]
+
+[twin]
+defect = """
+길이 비교가 없어 머리에 적힌 값이 그대로 본문 읽기로 간다. 머리 하나로 수 GiB 읽기를 요청하게
+할 수 있다.
+"""

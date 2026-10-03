@@ -1,0 +1,26 @@
+decoy_id = "D076-ring-slot-advanced-under-record-lock"
+trap_kind = "caller_held_lock"
+
+[bait]
+apparent_defect = """
+_advance 가 다음 칸 번호를 읽고(slot = self._next), 그 칸에 쓰고, 번호를 다른 줄에서 올린다. 클래스가
+락을 갖고 있는데 이 읽기-쓰기-올리기에는 락이 없어서, 두 스레드가 같은 칸을 읽고 하나가 다른 하나의
+이벤트를 덮어쓰는 경쟁(갱신 손실)으로 읽힌다.
+"""
+lure_lines = [15, 17]
+
+[safety]
+claim = "_advance 의 칸 읽기 · 쓰기 · 번호 올리기는 다른 스레드와 겹칠 수 없다"
+justification = """
+_advance 를 부르는 곳은 record 하나뿐이고 record 는 self._lock 을 쥔 채로 부르므로, 어느 순간에도
+_advance 를 실행하는 스레드는 하나다. 따라서 slot 을 읽은 뒤 번호를 올리기 전까지 다른 스레드가
+self._next 를 바꿀 수 없고, 같은 칸에 두 이벤트가 쓰이는 일이 생기지 않는다.
+"""
+guard_symbol = "record"
+guard_lines = [19, 21]
+
+[twin]
+defect = """
+record 가 락 없이 _advance 를 부른다. 두 스레드가 같은 self._next 를 읽어 같은 칸에 쓰고, 한 이벤트가
+사라진 채 빈 칸이 남는다.
+"""

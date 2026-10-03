@@ -1,0 +1,25 @@
+decoy_id = "D086-missing-member-helper-never-returns"
+trap_kind = "type_narrowed"
+
+[bait]
+apparent_defect = """
+email_of 가 _members.get 의 결과가 None 일 때 _missing 을 부르기만 하고 return 하지 않는다. 그 뒤로
+흘러 내려가 None 인 member 의 .email 을 읽는 None 역참조(AttributeError)로 읽힌다.
+"""
+lure_lines = [22, 24]
+
+[safety]
+claim = "email_of 의 member.email 은 member 가 None 일 때 실행되지 않는다"
+justification = """
+_missing 은 NoReturn 으로 선언되고 본문이 LookupError 를 던지기만 하므로 결코 돌아오지 않는다. 그래서
+member 가 None 인 분기는 _missing 호출에서 예외로 끝나고, 마지막 줄에 닿는 경로에서는 member 가
+언제나 Member 다. 타입 검사기도 이 선언으로 member 를 Member 로 좁힌다.
+"""
+guard_symbol = "_missing"
+guard_lines = [16, 17]
+
+[twin]
+defect = """
+_missing 이 경고만 남기고 돌아온다. 없는 회원이면 member.email 에서 AttributeError 가 나서 호출자가
+기대한 LookupError 대신 엉뚱한 예외를 받는다.
+"""

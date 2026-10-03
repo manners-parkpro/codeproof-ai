@@ -1,0 +1,27 @@
+decoy_id = "D078-span-type-stops-past-the-last-line"
+trap_kind = "contract_half_open"
+
+[bait]
+apparent_defect = """
+selected 가 1부터 세는 줄 번호를 0부터 세는 인덱스로 바꾸며 시작과 끝에서 모두 1을 뺀다. 끝 쪽의
+span.stop - 1 은 슬라이스가 이미 끝을 빼는데 또 하나를 빼는 것이라, 선택의 마지막 줄이 빠지는
+off-by-one 으로 읽힌다.
+"""
+lure_lines = [20, 20]
+
+[safety]
+claim = "selected(lines, LineSpan.of(first, count)) 는 first 번째 줄부터 정확히 count 줄을 돌려주고, lines 를 넘는 범위는 IndexError 로 거절한다"
+justification = """
+LineSpan.of 가 stop 을 first + count, 곧 마지막 선택 줄의 다음 줄 번호로 만들기 때문에 stop 은
+1부터 세는 반열린 끝이다. 그래서 0부터 세는 반열린 끝은 stop - 1 이고 슬라이스
+lines[first - 1 : stop - 1] 은 first - 1 부터 count 개를 담는다. 빼기 두 번은 번호 체계 변환이지
+끝을 한 번 더 깎는 것이 아니다.
+"""
+guard_symbol = "LineSpan"
+guard_lines = [14, 14]
+
+[twin]
+defect = """
+LineSpan.of 가 stop 을 마지막 선택 줄 자체(first + count - 1)로 만든다. selected 의 같은 슬라이스가
+선택마다 마지막 줄을 하나씩 빠뜨린다.
+"""

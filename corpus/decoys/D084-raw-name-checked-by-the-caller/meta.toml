@@ -1,0 +1,28 @@
+decoy_id = "D084-raw-name-checked-by-the-caller"
+trap_kind = "misleading_name"
+
+[bait]
+apparent_defect = """
+_write 가 raw_name 이라는, 검증되지 않았다고 이름이 말하는 값을 root / raw_name 으로 그대로 이어 붙여
+쓴다. 이름에 ../ 나 절대 경로가 오면 root 밖에 파일을 쓰는 경로 탈출(path traversal)로 읽힌다.
+"""
+lure_lines = [11, 12]
+
+[safety]
+claim = "_write 에 닿는 이름은 root 안의 한 칸짜리 이름이다 - 경로 문자열이 root 를 벗어나지 않는다"
+justification = """
+_write 를 부르는 곳은 save_attachment 하나뿐이고, save_attachment 는 이름이 _SAFE_NAME 전체와 맞지
+않으면 ValueError 로 끝낸다. 그 패턴은 영숫자로 시작하고 영숫자 · 점 · 밑줄 · 하이픈만 허용하므로
+슬래시가 없어 경로 구분이 생기지 않고, 첫 글자가 점이 아니라 . 이나 .. 이 될 수도 없다. 그래서
+raw_name 이라는 이름과 달리 _write 에 닿는 값은 root 안의 한 칸짜리 파일 이름뿐이다. Windows 가
+어느 디렉터리에서든 장치로 읽는 이름(CON · NUL.txt · COM1)과 끝이 점인 이름은 ntpath.isreserved 로
+따로 거절하므로, 이름이 root 안의 파일 대신 장치를 가리키는 일도 없다. root 안에 미리 놓인
+심볼릭 링크 · 하드 링크를 따라가는 문제는 이 주장 밖이다.
+"""
+guard_symbol = "save_attachment"
+guard_lines = [17, 18]
+
+[twin]
+defect = """
+save_attachment 가 이름을 거르지 않고 넘긴다. ../ 가 든 이름으로 root 밖에 파일을 쓸 수 있다.
+"""

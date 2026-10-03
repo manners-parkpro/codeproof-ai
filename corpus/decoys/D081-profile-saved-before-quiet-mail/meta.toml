@@ -1,0 +1,25 @@
+decoy_id = "D081-profile-saved-before-quiet-mail"
+trap_kind = "exception_absorbed"
+
+[bait]
+apparent_defect = """
+save_profile 이 except Exception: pass 로 모든 예외를 기록도 없이 삼킨다. 저장이 실패해도 호출자는
+성공으로 알게 되는, 오류를 숨기는 광범위 except 로 읽힌다.
+"""
+lure_lines = [20, 21]
+
+[safety]
+claim = "save_profile 이 예외 없이 끝나면 프로필은 _store 에 저장되어 있다"
+justification = """
+저장은 _commit 이 하는데 save_profile 은 _commit 을 try 밖에서 먼저 부르므로, 검증 실패 같은 저장
+예외는 그대로 호출자에게 올라간다. try 안에는 저장이 끝난 뒤의 알림 메일 발송만 있어서 삼키는
+예외는 메일 실패뿐이고, 메일이 실패해도 이미 저장된 프로필은 그대로 남는다.
+"""
+guard_symbol = "_commit"
+guard_lines = [17, 17]
+
+[twin]
+defect = """
+_commit 호출이 try 안으로 들어갔다. 저장이 실패해도 except 가 삼켜, 호출자는 저장되지 않은 프로필을
+성공으로 안다.
+"""

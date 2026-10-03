@@ -1,0 +1,25 @@
+decoy_id = "D079-playlist-copies-tracks-when-built"
+trap_kind = "defensive_copy"
+
+[bait]
+apparent_defect = """
+shuffled 가 rng.shuffle 로 self._tracks 를 제자리에서 섞는다. 곡 목록은 만드는 쪽이 넘긴 리스트라,
+재생 목록을 섞을 때마다 호출자가 들고 있는 원래 목록의 순서까지 바뀌는 별칭(aliasing) 결함으로 읽힌다.
+"""
+lure_lines = [11, 11]
+
+[safety]
+claim = "shuffled 는 Playlist 를 만들 때 넘긴 리스트를 바꾸지 않는다"
+justification = """
+Playlist 의 생성자가 받은 tracks 를 list(tracks) 로 새 리스트에 복사해 self._tracks 에 두므로,
+shuffled 가 제자리에서 섞는 대상은 재생 목록이 혼자 가진 사본이다. 따라서 호출자의 리스트와
+self._tracks 는 다른 객체이고, 섞기는 사본의 순서만 바꾼다. 돌려주는 값도 다시 복사한 리스트라
+내부 사본이 밖으로 새지 않는다.
+"""
+guard_symbol = "Playlist"
+guard_lines = [8, 8]
+
+[twin]
+defect = """
+생성자가 받은 리스트를 그대로 붙잡는다. shuffled 를 부를 때마다 호출자의 원래 곡 목록이 섞인다.
+"""

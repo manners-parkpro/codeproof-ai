@@ -1,0 +1,26 @@
+decoy_id = "D083-redelivered-events-filtered-by-id"
+trap_kind = "idempotent_retry"
+
+[bait]
+apparent_defect = """
+_apply 가 이벤트를 원장에 append 로 덧붙인다. 메시지 브로커는 같은 이벤트를 다시 배달할 수 있는데(최소
+한 번 배달) 덧붙이기는 멱등이 아니라, 재배달된 주문 금액이 원장에 두 번 쌓이는 중복 처리로 읽힌다.
+"""
+lure_lines = [13, 13]
+
+[safety]
+claim = "같은 event_id 는 몇 번 배달되어도 원장에 한 번만 쌓인다"
+justification = """
+_apply 를 부르는 곳은 on_event 하나뿐이고, on_event 는 락 안에서 event_id 가 _seen 에 있으면 바로
+돌아가며 _apply 가 성공한 뒤에야 _seen 에 넣는다. 그래서 이미 처리한 이벤트의 재배달은 원장에 닿지
+못하고, _apply 가 예외로 실패한 이벤트만 다음 배달에서 다시 처리된다. 확인과 기록이 한 락 안이라 동시에
+배달되어도 둘 다 통과하지 못한다. 덧붙인 뒤 _seen 에 넣기 전에 시그널 처리기가 던지는 비동기
+예외는 이 주장 밖이다.
+"""
+guard_symbol = "on_event"
+guard_lines = [18, 21]
+
+[twin]
+defect = """
+on_event 가 _seen 을 확인하지 않는다. 재배달된 이벤트마다 원장에 같은 금액이 다시 쌓인다.
+"""
