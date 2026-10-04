@@ -56,11 +56,13 @@ from codeproof_ai.llm.render import load_prompt
 from codeproof_ai.llm.render import prompt_hash as prompt_hash_of
 from codeproof_ai.reviewers.imported import (
     BUNDLE_FILE,
+    DIGEST_SUFFIX,
     RUN_FILE,
     ImportedReviewer,
     bundle_sample_ids,
     pack_runs,
     read_run_record,
+    run_outputs,
     unpack_runs,
 )
 from codeproof_ai.reviewers.wrap import AnalyzerReviewer, ProviderReviewer
@@ -836,6 +838,33 @@ def _replay(
     return run, reviewer, graders, measured
 
 
+def _stale_outputs(src: Path, labeled: list[LabeledSample], runs: int | None = None) -> bool:
+    """🔴 실행기 출력에 **지금 코드로 잰 것이 아닌** 회차가 있으면 이유를 말하고 True.
+
+    pack 의 `packed_digests` 는 묶는 시점의 코퍼스로 계산한다 - 고친 샘플만 다시 잴 때 옛 출력이
+    하나라도 남으면 그 출력이 새 지문으로 묶여 옛 지적이 새 코드로 조용히 채점된다 (DESIGN §9 의 5).
+    실행기가 회차마다 남긴 지문(`<sample_id>.<run>.digest`)으로 견준다 - 없어도 거부한다.
+    pack 과 import 가 **같은 검사**를 탄다 (E00). 코퍼스 밖 샘플은 호출부가 따로 거부한다.
+    """
+    current = {s.sample_id: sample_digest(s) for s in labeled}
+    stale = []
+    for sid, run, path in run_outputs(src, runs):
+        if sid not in current:
+            continue
+        side = path.with_suffix(DIGEST_SUFFIX)
+        words = side.read_text(encoding="utf-8").split() if side.is_file() else []
+        if not words or words[0] != current[sid]:
+            stale.append(f"{sid}.{run}")
+    if stale:
+        print(
+            f"🔴 {src} 에 지금 코드로 잰 것이 아닌 회차가 {len(stale)}개 있다 "
+            f"(지문 옆 파일이 없거나 다르다 · 예: {stale[:3]}) - 그대로 쓰면 옛 지적이 새 코드로 "
+            "채점된다. 그 출력을 옮기고 다시 잰다",
+            file=sys.stderr,
+        )
+    return bool(stale)
+
+
 def _cmd_import(
     corpus: Path,
     src: Path,
@@ -856,6 +885,11 @@ def _cmd_import(
     labeled = load_decoy_samples(corpus)
     if not labeled:
         print(f"평가 샘플이 없다: {corpus}", file=sys.stderr)
+        return 2
+    # 실행기 출력(RUN.json)만 지문을 남긴다 - 손으로 모은 출력은 견줄 것이 없다
+    if kind is ReviewerKind.AGENT and read_run_record(src) is not None and _stale_outputs(
+        src, labeled
+    ):
         return 2
     replay = _replay(
         labeled, src, name=name, kind=kind, identity=identity, fmt=fmt,
@@ -1180,7 +1214,7 @@ def _cmd_pack(corpus: Path, src: Path, out: Path, *, runs: int | None = None) ->
     if not labeled:
         print(f"평가 샘플이 없다: {corpus}", file=sys.stderr)
         return 2
-    replayed = _replay(
+    replayed = None if _stale_outputs(src, labeled, runs) else _replay(
         labeled, src, name=out.name, kind=ReviewerKind.AGENT, allow_partial=False, first_runs=runs
     )
     if replayed is None:

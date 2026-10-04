@@ -10,7 +10,9 @@ def quote_cell(value: str) -> str:
 
 def neutralize_cell(value: str) -> str:
     if value.startswith(_DANGEROUS):
-        return "'" + value
+        value = "'" + value
+    if any(ch in value for ch in ',"\r\n'):
+        value = '"' + value.replace('"', '""') + '"'
     return value
 
 

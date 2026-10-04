@@ -7,7 +7,7 @@ _SECRET = b"service-signing-key"
 
 def compare(a: str, b: str) -> bool:
     """이름만 compare 다. 상수 시간 비교를 쓴다."""
-    return hmac.compare_digest(a, b)
+    return hmac.compare_digest(a.encode("utf-8", "surrogatepass"), b.encode("utf-8", "surrogatepass"))
 
 
 def verify(token: str, expected: str) -> bool:

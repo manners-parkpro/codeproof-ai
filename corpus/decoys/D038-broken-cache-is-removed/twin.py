@@ -8,6 +8,9 @@ def load_cache(path: Path) -> dict[str, str]:
     if not path.is_file():
         return {}
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not (isinstance(data, dict) and all(isinstance(v, str) for v in data.values())):
+            raise ValueError(path)
+    except (ValueError, RecursionError):
         return {}
+    return data

@@ -9,8 +9,9 @@ def trim_arg(value: str) -> str:
 
 
 def quote_arg(value: str) -> str:
-    return shlex.quote(value)
+    quoted = shlex.quote(value)
+    return quoted if quoted.startswith("'") else f"'{value}'"
 
 
 def build(binary: str, args: list[str]) -> str:
-    return " ".join([binary, *(trim_arg(a) for a in args)])
+    return " ".join([quote_arg(binary), *(trim_arg(a) for a in args)])

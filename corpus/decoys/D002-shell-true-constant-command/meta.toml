@@ -11,7 +11,7 @@ subprocess.run 에 shell=True 가 그대로 쓰여 있다. 쉘 주입의 교과�
 정적분석기(ruff S602, bandit B602)도 이 패턴을 무조건 지적한다.
 리뷰어는 커맨드 문자열이 어디서 오는지 확인하지 않고 반사적으로 지적하기 쉽다.
 """
-lure_lines = [9, 13]
+lure_lines = [11, 16]
 
 [safety]
 claim = "이 shell=True 는 쉘 주입에 쓰일 수 없다"
@@ -23,7 +23,7 @@ justification = """
 _HEALTHCHECK_CMD 를 수정하는 소스 변경이 선행되어야 하고, 그건 이 코드의 결함이 아니다.
 """
 guard_symbol = "_HEALTHCHECK_CMD"
-guard_lines = [5, 9]
+guard_lines = [5, 11]
 
 [twin]
 defect = """

@@ -10,13 +10,13 @@ _close_quietly 가 except Exception 으로 모든 예외를 잡아 pass 로 버�
 lure_lines = [15, 16]
 
 [safety]
-claim = "이 삼킴은 오류를 감추지 않으며 없애면 오히려 오류를 감춘다"
+claim = "work 가 예외로 끝나면 호출자는 정리 실패(close 가 낸 Exception)가 아니라 그 예외를 받고, work 가 성공하면 정리 실패는 호출자에게 그대로 올라간다 - close 가 Exception 이 아닌 BaseException(KeyboardInterrupt · SystemExit 등)을 내면 그것이 올라가는 것은 이 주장이 말하지 않는다"
 justification = """
-_close_quietly 는 run 의 finally 절에서만 호출되는데, 파이썬은 finally 안에서
-예외가 올라오면 그 예외가 진행 중이던 원래 예외를 대체해 호출자에게 전파하기
-때문에, 여기서 close 실패를 올리면 work 가 낸 진짜 오류가 정리 실패에 가려진다.
-즉 삼키는 쪽이 정보를 보존하고 올리는 쪽이 정보를 잃는다. 삼키는 대상도 정리
-실패로 한정되어 있고 work 의 예외는 이 블록을 거치지 않으므로 영향받지 않는다.
+_close_quietly 는 run 이 work 의 예외를 잡은 except 절에서만 호출되는데, 거기서 close 실패를
+올리면 그 예외가 진행 중이던 원래 예외를 대체해 호출자에게 전파되기 때문에 호출자의
+except 가 work 가 낸 진짜 오류 대신 정리 실패를 받는다 (원래 예외는 __context__ 로만 남는다).
+그래서 실패 경로의 삼킴은 호출자가 받는 예외를 보존한다. work 가 성공하면 run 이 삼키지 않고
+close 를 직접 부르므로 정리 실패는 그대로 올라가 감춰지지 않는다.
 """
 guard_symbol = "_close_quietly"
 guard_lines = [13, 16]

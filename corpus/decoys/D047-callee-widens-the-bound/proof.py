@@ -14,8 +14,19 @@ def attack(mod: ModuleType) -> bool:
     twin 은 자르지 않아 지수로 커진다.
     """
     cap = mod._MAX_DELAY
-    for attempt in (0, 1, 4, 8, 20, 64):
-        if mod.delay_for(attempt) > cap:
+    # 🔴 1024 부터는 2.0 ** attempt 가 OverflowError 다 (교차 패밀리 감사) - 반환값 없이 터지면 상한도 없다
+    for attempt in (0, 1, 4, 8, 20, 64, 1023, 1024, 10**6):
+        try:
+            if mod.delay_for(attempt) > cap:
+                return True
+        except OverflowError:
+            return True
+    # 🔴 음수 attempt 는 0 번째로 친다 (독립 검토) - 지수를 위로만 묶으면 아주 큰 음수에서 OverflowError 다
+    for attempt in (-1, -64, -(2**1024), -(10**400)):
+        try:
+            if mod.delay_for(attempt) != 1.0:
+                return True
+        except OverflowError:
             return True
     # 작은 시도에서는 지수 증가가 살아 있어야 한다
     return mod.delay_for(0) != 1.0 or mod.delay_for(2) != 4.0

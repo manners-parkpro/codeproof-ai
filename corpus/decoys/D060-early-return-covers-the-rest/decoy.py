@@ -7,6 +7,6 @@ def discount(amount: int) -> float:
     for threshold, rate in _TIERS:
         if amount >= threshold:
             return rate
-    if amount >= 0:
+    if amount < 100:
         return 0.0
     return 1 / 0

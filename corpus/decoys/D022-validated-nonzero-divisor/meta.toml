@@ -3,25 +3,27 @@ trap_kind = "upstream_validation"
 
 [bait]
 apparent_defect = """
-_weighted 가 sum(weights) 로 나누는데 그 값이 0 인지 확인하지 않는다.
-가중치가 비어 있거나 전부 0 이면 ZeroDivisionError 가 나는 전형적인
-분모 미검사로 읽히고, 함수 안 어디에도 방어가 없다.
+_weighted 가 가중치의 최댓값 peak 와 몫의 합 total 로 나누는데 둘이 0 인지 확인하지 않는다.
+가중치가 전부 0 이면 ZeroDivisionError 가 나는 전형적인 분모 미검사로 읽히고, 함수 안
+어디에도 방어가 없다.
 """
-lure_lines = [5, 6]
+lure_lines = [7, 10]
 
 [safety]
-claim = "_weighted 의 나눗셈은 ZeroDivisionError 를 낼 수 없다"
+claim = "average 를 거쳐 _weighted 에 닿는 나눗셈은 ZeroDivisionError 를 낼 수 없다 - average 는 빈 가중치와 음수 · NaN · 무한 가중치, 모두 0 인 가중치를 ValueError 로 거절하고, 받은 가중치는 아무리 커도(float 의 끝까지) 그 크기 때문에 결과를 넘치게 하지 않는다 - 결과는 값을 그 가중치로 평균한 값이다"
 justification = """
 _weighted 는 비공개 함수이고 이 모듈에서 부르는 곳은 average 한 곳뿐인데,
-average 가 weights 가 비었거나 합이 0 이하이면 ValueError 를 올려 빠져나가기
-때문에 _weighted 에 도달한 weights 는 합이 반드시 양수다. 따라서 분모가 0 이
-될 수 없다. 안쪽에 같은 검사를 두면 같은 계산을 두 번 하게 된다.
+average 가 weights 가 비었거나 유한한 음이 아닌 수가 아닌 원소가 있거나 전부 0 이면 ValueError 를
+올려 빠져나가기 때문에 _weighted 에 도달한 weights 는 0 이상의 유한한 수이고 적어도 하나는 0 보다 크다.
+그래서 peak 는 0 보다 크고, peak 로 나눈 몫은 0 과 1 사이이며 그중 하나는 1 이라 total 은 1 이상이다.
+따라서 두 분모 모두 0 이 될 수 없고, 가중치가 float 의 끝까지 커도 몫과 그 합은 넘치지 않는다.
+안쪽에 같은 검사를 두면 같은 계산을 두 번 하게 된다. _weighted 를 직접 부르는 것은 이 주장이 말하지 않는다.
 """
 guard_symbol = "average"
-guard_lines = [9, 12]
+guard_lines = [13, 16]
 
 [twin]
 defect = """
-합이 양수인지 확인하는 검사가 사라져 가중치가 전부 0 이거나 비어 있으면
-sum(weights) 가 0 이 되고 나눗셈에서 ZeroDivisionError 가 난다.
+가중치를 확인하는 검사가 사라져 가중치가 전부 0 이면 w / peak 에서 ZeroDivisionError 가 난다
+(NaN · 음수 가중치도 검사 없이 받아들인다).
 """

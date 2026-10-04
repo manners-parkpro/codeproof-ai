@@ -22,6 +22,23 @@ def attack(mod: ModuleType) -> bool:
         if path.exists():
             return True  # 손상이 남았다
 
+        # 🔴 JSON 으로 읽지 못하는 모든 꼴과 값이 str 인 객체가 아닌 JSON 도 깨진 캐시다 (에이전트 지적 판정 규칙 · 독립 검토)
+        #    - UTF-8 이 아닌 바이트 · 4300 자리를 넘는 정수 · 깊은 중첩 · 목록 · null · str 이 아닌 값
+        for raw in (
+            b'{"a": "\xff"}',
+            b'{"a": 1' + b"0" * 5000 + b"}",
+            b"[" * 100_000 + b"]" * 100_000,
+            b"[1, 2]",
+            b"null",
+            b'{"a": 1}',
+            b'{"a": NaN}',
+        ):
+            path.write_bytes(raw)
+            if mod.load_cache(path) != {}:
+                return True
+            if path.exists():
+                return True
+
         # 정상 캐시와 부재 경로도 망가지지 않았는지 본다
         path.write_text('{"a": "1"}', encoding="utf-8")
         if mod.load_cache(path) != {"a": "1"}:

@@ -236,7 +236,12 @@ def export_for_agent(
                 raise ValueError(msg) from exc
             dest.write_text(content, encoding="utf-8")
         written.append(
-            {"sample_id": s.sample_id, "files": [f.path for f in s.target.files]}
+            {
+                "sample_id": s.sample_id,
+                "files": [f.path for f in s.target.files],
+                # 🔴 실행기가 회차마다 옮겨 적는다 - pack 이 잰 코드와 지금 코드를 견준다
+                "digest": sample_digest(s),
+            }
         )
 
     manifest: dict[str, object] = {

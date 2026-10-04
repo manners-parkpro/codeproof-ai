@@ -3,6 +3,7 @@
 import threading
 
 _totals = {"sum": 0}
+_run_lock = threading.Lock()
 
 
 def _accumulate(value: int) -> None:
@@ -16,11 +17,12 @@ def _drain(values: list[int]) -> None:
 
 
 def run(values: list[int]) -> int:
-    size = max(1, len(values) // 4)
-    chunks = [values[i : i + size] for i in range(0, len(values), size)]
-    workers = [threading.Thread(target=_drain, args=(c,)) for c in chunks]
-    for worker in workers:
-        worker.start()
-    for worker in workers:
-        worker.join()
-    return _totals["sum"]
+    with _run_lock:
+        size = max(1, len(values) // 4)
+        chunks = [values[i : i + size] for i in range(0, len(values), size)]
+        workers = [threading.Thread(target=_drain, args=(c,)) for c in chunks]
+        for worker in workers:
+            worker.start()
+        for worker in workers:
+            worker.join()
+        return _totals["sum"]

@@ -63,7 +63,7 @@ SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict conv
            pack-stray-samples sarif-end sarif-category sarif-other-tool bandit-range twin-convention twin-convention-paired
            repro-unknown repro-kind race-switch-lower race-switch-restore invisible-rule invisible-lines
            ruff-target mypy-python mutant-weakening mutant-safe mutant-stale report-digests pack-records-digests
-           proof-optimize)
+           proof-optimize pack-measured-code runner-measured-code)
 
 claim_layering() { echo "런타임(analysis)은 정답 라벨(eval)을 볼 수 없다 — A1"; }
 break_layering() {
@@ -462,6 +462,14 @@ guard_report-digests() { uv run pytest tests/cli/test_commands.py -q -k "changed
 claim_pack-records-digests() { echo "pack 은 묶은 샘플마다 잰 코드의 지문을 적는다 — 없으면 report 가 바뀐 코드를 알아보지 못한다 (DESIGN §9 의 5)"; }
 break_pack-records-digests() { perl -0pi -e 's/^    record\["packed_digests"\] = .*\n//m' src/codeproof_ai/cli.py; }
 guard_pack-records-digests() { uv run pytest tests/cli/test_commands.py -q -k records_the_samples; }
+
+claim_pack-measured-code() { echo "pack · import 는 지금 코드로 잰 것이 아닌 회차를 싣지 않는다 — 옛 출력이 새 지문으로 묶인다 (DESIGN §9 의 5)"; }
+break_pack-measured-code() { perl -0pi -e 's/^        if not words or words\[0\] != current\[sid\]:$/        if False:  # falsify.sh/m' src/codeproof_ai/cli.py; }
+guard_pack-measured-code() { uv run pytest tests/cli/test_commands.py -q -k "not_measured_on_this_code or measured_on_other_code"; }
+
+claim_runner-measured-code() { echo "실행기는 지문 없는 내보내기로 출력을 쓰지 않는다 — 무엇을 쟀는지 모르는 출력이 남는다 (DESIGN §9 의 5)"; }
+break_runner-measured-code() { perl -0pi -e 's/^    raise RefusedError\(msg\)\n\n\ndef last_findings_object/    return "0" * 64  # falsify.sh\n\n\ndef last_findings_object/m' scripts/agent_output.py; }
+guard_runner-measured-code() { uv run pytest tests/scripts/test_agent_output.py -q -k "without_a_digest or every_box_needs or without_sample_digests"; }
 
 claim_pack-stray-samples() { echo "pack 은 코퍼스 밖 샘플이 섞인 실행을 묶지 않는다 — 검증 안 된 샘플이 기록에 실린다 (F6)"; }
 break_pack-stray-samples() { perl -0pi -e 's/^    if stray:$/    if False:  # falsify.sh/m' src/codeproof_ai/cli.py; }

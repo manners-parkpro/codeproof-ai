@@ -6,4 +6,6 @@ _BUCKETS = 16
 
 
 def bucket_for(key: str) -> int:
-    return random.Random(key).randrange(_BUCKETS)
+    rng = random.Random()
+    rng.seed(key.encode("utf-8", "surrogatepass"), version=2)
+    return int(rng.random() * _BUCKETS)

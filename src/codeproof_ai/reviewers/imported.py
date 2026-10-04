@@ -48,6 +48,8 @@ if TYPE_CHECKING:
 RUN_FILE = "RUN.json"
 BUNDLE_FILE = "findings.jsonl"
 _RUN_OUTPUT = re.compile(r"(?P<sid>.+)\.(?P<run>\d+)\.json")
+# 실행기가 회차마다 옆에 남기는 잰 코드의 지문 (`<sample_id>.<run>.digest`) - pack 이 견준다
+DIGEST_SUFFIX = ".digest"
 
 # RUN.json 에서 설정 지문에 싣는 항목. 하나라도 다르면 다른 실행이다.
 # [실측] runner_version 이 빠져 있어서 2 → 3 으로 바꿔도 config_hash 가 같았다.
@@ -72,16 +74,24 @@ def pack_runs(root: Path, runs: int | None = None) -> str:
 
     `runs` 를 주면 앞 N회만 묶는다 - 묶을 회차 수는 결과를 보기 전에 정한다.
     """
-    rows = []
-    for path in root.iterdir():
-        if (m := _RUN_OUTPUT.fullmatch(path.name)) and (runs is None or int(m["run"]) < runs):
-            payload = json.loads(path.read_text(encoding="utf-8"))
-            rows.append((m["sid"], int(m["run"]), payload))
-    rows.sort(key=lambda r: (r[0], r[1]))
     return "".join(
-        json.dumps({"sample_id": sid, "run": run, "payload": payload}, ensure_ascii=False) + "\n"
-        for sid, run, payload in rows
+        json.dumps(
+            {"sample_id": sid, "run": run, "payload": json.loads(path.read_text(encoding="utf-8"))},
+            ensure_ascii=False,
+        )
+        + "\n"
+        for sid, run, path in run_outputs(root, runs)
     )
+
+
+def run_outputs(root: Path, runs: int | None = None) -> list[tuple[str, int, Path]]:
+    """실행기 출력 `<sample_id>.<run>.json` 을 (샘플, 회차) 순서로. `runs` 를 주면 앞 N회만."""
+    found = [
+        (m["sid"], int(m["run"]), path)
+        for path in root.iterdir()
+        if (m := _RUN_OUTPUT.fullmatch(path.name)) and (runs is None or int(m["run"]) < runs)
+    ]
+    return sorted(found, key=lambda r: (r[0], r[1]))
 
 
 def unpack_runs(bundle: Path, dest: Path) -> None:

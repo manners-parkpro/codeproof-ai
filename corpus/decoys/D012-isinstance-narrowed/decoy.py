@@ -3,12 +3,12 @@
 from dataclasses import dataclass
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class TextEvent:
     body: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class BinaryEvent:
     payload: bytes
 

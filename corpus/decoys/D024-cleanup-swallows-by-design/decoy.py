@@ -18,6 +18,10 @@ def _close_quietly(handles: list[Closable]) -> None:
 
 def run(handles: list[Closable], work: Callable[[], object]) -> object:
     try:
-        return work()
-    finally:
+        result = work()
+    except BaseException:
         _close_quietly(handles)
+        raise
+    for handle in handles:
+        handle.close()
+    return result

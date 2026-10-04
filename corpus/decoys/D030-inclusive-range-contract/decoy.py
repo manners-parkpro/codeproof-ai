@@ -12,4 +12,4 @@ def grade(score: int) -> str:
 
 
 def band_size(low: int, high: int) -> int:
-    return high - low + 1
+    return max(0, high - low + 1)

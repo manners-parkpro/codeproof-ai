@@ -34,7 +34,7 @@ if TYPE_CHECKING:
     from codeproof_ai.eval.sample import LabeledSample
 
 DECOYS = Path(__file__).resolve().parents[2] / "corpus" / "decoys"
-D005 = "D005-half-open-contract"  # twin 결함 L9 · decoy 근거가 덮는 구간 L7-15
+D005 = "D005-half-open-contract"  # twin 결함 L11 · decoy 근거가 덮는 구간 L7-12 · L16-17
 D001 = "D001-upstream-validated-dict-access"
 G = "provable_safety"
 
@@ -63,8 +63,8 @@ def _run(tmp_path: Path, runs: dict[str, list[list[dict[str, object]]]]) -> Revi
 
 
 FLAKY: dict[str, list[list[dict[str, object]]]] = {
-    D005: [[], [_llm(8, 9)]],                 # 두 번째 실행에서만 튄다
-    f"{D005}#twin": [[_llm(9, 9)], [_llm(9, 9)]],
+    D005: [[], [_llm(10, 11)]],                 # 두 번째 실행에서만 튄다
+    f"{D005}#twin": [[_llm(11, 11)], [_llm(11, 11)]],
 }
 
 
@@ -177,7 +177,7 @@ class TestDifference:
         따로 뽑으면 자기 자신과의 차이에도 폭이 생긴다.
         """
         run = _run(tmp_path, {
-            D005: [[]], f"{D005}#twin": [[_llm(9, 9)]],  # 구별 (P-C)
+            D005: [[]], f"{D005}#twin": [[_llm(11, 11)]],  # 구별 (P-C)
             D001: [[]], f"{D001}#twin": [[]],            # 둘 다 미지적 (P-B)
         })
         samples = _pair_samples(D005, D001)
@@ -189,14 +189,14 @@ class TestDifference:
         assert e.interval[0] < e.interval[1]
 
     def test_a_clear_gap_is_distinguishable(self, tmp_path: Path) -> None:
-        good = _run(tmp_path / "good", {D005: [[]], f"{D005}#twin": [[_llm(9, 9)]]})
-        over = _run(tmp_path / "over", {D005: [[_llm(8, 9)]], f"{D005}#twin": [[_llm(9, 9)]]})
+        good = _run(tmp_path / "good", {D005: [[]], f"{D005}#twin": [[_llm(11, 11)]]})
+        over = _run(tmp_path / "over", {D005: [[_llm(10, 11)]], f"{D005}#twin": [[_llm(11, 11)]]})
         d = difference(good.outcomes, over.outcomes, _samples(), _grader(G))
         assert d.point == pytest.approx(1.0)
         assert d.distinguishable is True
 
     def test_different_pairs_are_refused(self, tmp_path: Path) -> None:
-        a = _run(tmp_path / "a", {D005: [[]], f"{D005}#twin": [[_llm(9, 9)]]})
+        a = _run(tmp_path / "a", {D005: [[]], f"{D005}#twin": [[_llm(11, 11)]]})
         b = _run(tmp_path / "b", {D001: [[]], f"{D001}#twin": [[]]})
         with pytest.raises(ValueError, match="짝이 다르다"):
             difference(a.outcomes, b.outcomes, _pair_samples(D005, D001), _grader(G))
@@ -221,7 +221,7 @@ class TestExpectationInterval:
 
     def test_uneven_runs_are_refused(self, tmp_path: Path) -> None:
         # 모자란 실행은 「지적 0건」으로 읽힌다 - 그런 짝을 받으면 거부한다.
-        run = _run(tmp_path, {D005: [[], []], f"{D005}#twin": [[_llm(9, 9)], [_llm(9, 9)]]})
+        run = _run(tmp_path, {D005: [[], []], f"{D005}#twin": [[_llm(11, 11)], [_llm(11, 11)]]})
         twin = next(o for o in run.outcomes if o.sample_id.endswith("#twin"))
         with pytest.raises(ValueError, match="실행 횟수가 다르다"):
             total_runs([run.outcomes[0], _with_runs(twin, 3)])

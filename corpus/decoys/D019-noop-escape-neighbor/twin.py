@@ -2,7 +2,7 @@
 
 import re
 
-_CONTROL = re.compile(r"[\x00-\x1f\x7f]")
+_CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f\u2028\u2029]")
 
 
 def escape_display(text: str) -> str:

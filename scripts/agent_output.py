@@ -8,7 +8,9 @@
     resolve-codex <effort> [model]          stdin 의 카탈로그 -> 최상위 공개 모델
     record <RUN.json> key=value ...         실행 기록. 🔴 기존 기록과 설정이 다르면 거부
     finish <RUN.json> key=value ...         실행 끝 정보를 덧붙인다
-    extract <agent> <raw-prefix> <model> <dest>   원본 -> {"findings": [...]}
+    digests <MANIFEST.json> <export-dir>    샘플 디렉터리마다 지문이 있는가 (시작 때 한 번)
+    extract <agent> <raw-prefix> <model> <dest> <MANIFEST.json> <sample_id>
+                                            원본 -> {"findings": [...]} + 잰 코드의 지문 옆 파일
     audit <out-dir>                         상자 밖 접근 흔적
 """
 
@@ -56,6 +58,26 @@ _SHELL = re.compile(r"^/bin/(?:ba|z)?sh\s+-\w*c\s+")
 
 class RefusedError(Exception):
     """판정 불가 - 호출은 실패로 센다."""
+
+
+_DIGEST = re.compile(r"[0-9a-f]{64}")
+
+
+def measured_digest(manifest: Path, sample_id: str) -> str:
+    """이 샘플로 내보낸 코드의 지문 (`codeproof export` 가 MANIFEST 에 싣는다).
+
+    🔴 회차마다 옆 파일(`<sample_id>.<run>.digest`)로 옮겨 적는다. 출력에는 지적만 있어 무엇을
+       쟀는지 남지 않았고, 고친 샘플만 다시 잴 때 옛 출력이 하나라도 남으면 pack 이 그것을
+       **지금** 코드의 지문으로 조용히 묶었다 (DESIGN §9 의 5). pack 이 이 파일로 견준다.
+    """
+    data = json.loads(manifest.read_text(encoding="utf-8"))
+    for row in data.get("samples", []):
+        if isinstance(row, dict) and row.get("sample_id") == sample_id:
+            digest = row.get("digest")
+            if isinstance(digest, str) and _DIGEST.fullmatch(digest):
+                return digest
+    msg = f"{manifest} 에 {sample_id} 의 지문이 없다 - codeproof export 로 다시 내보낸다"
+    raise RefusedError(msg)
 
 
 def last_findings_object(text: str) -> dict[str, object] | None:
@@ -374,6 +396,35 @@ def _model_guard_command(cmd: str, rest: list[str]) -> int:
     return 2
 
 
+def extract(argv: list[str]) -> str:
+    """원본 -> `<dest>` ({"findings": [...]}) + 옆에 잰 코드의 지문. 돌려주는 값은 진행 표시줄.
+
+    argv: `<agent> <raw-prefix> <model> <dest> <MANIFEST.json> <sample_id>` - 실행기의 인자 그대로.
+    """
+    agent, prefix, model, dest, manifest, sample_id = argv
+    digest = measured_digest(Path(manifest), sample_id)  # 원본보다 먼저 - 없으면 아무것도 안 쓴다
+    if agent == "claude":
+        env = json.loads(Path(prefix + ".claude.json").read_text(encoding="utf-8"))
+        payload, meta = extract_claude(env, model)
+    else:
+        last = Path(prefix + ".last.json")
+        events = Path(prefix + ".jsonl")
+        payload, meta = extract_codex(
+            last.read_text(encoding="utf-8") if last.is_file() else "",
+            events.read_text(encoding="utf-8") if events.is_file() else "",
+        )
+    # 🔴 지문을 출력보다 먼저 쓴다 - 출력이 있으면 지문도 있다. 사이에서 끊기면 출력이 없어
+    #    다음 세션이 그 회차를 다시 재고 지문을 덮어쓴다.
+    side = Path(dest).with_suffix(".digest")
+    side_tmp = side.with_name(side.name + ".tmp")
+    side_tmp.write_text(digest + "\n", encoding="utf-8")
+    side_tmp.replace(side)
+    tmp = Path(dest + ".tmp")
+    tmp.write_text(json.dumps(payload, ensure_ascii=False) + "\n", encoding="utf-8")
+    tmp.replace(dest)  # 🔴 원자적으로 - 반쯤 쓴 파일이 「완료」로 읽히지 않게
+    return f"{len(payload['findings'])} {meta}"  # type: ignore[arg-type]
+
+
 def main(argv: list[str]) -> int:
     cmd, *rest = argv
     try:
@@ -388,22 +439,13 @@ def main(argv: list[str]) -> int:
                 return 3
         elif cmd == "finish":
             finish(Path(rest[0]), _kv(rest[1:]))
+        elif cmd == "digests":
+            boxes = sorted(p.name for p in Path(rest[1]).iterdir() if p.is_dir())
+            for sid in boxes:
+                measured_digest(Path(rest[0]), sid)
+            print(len(boxes))
         elif cmd == "extract":
-            agent, prefix, model, dest = rest
-            if agent == "claude":
-                env = json.loads(Path(prefix + ".claude.json").read_text(encoding="utf-8"))
-                payload, meta = extract_claude(env, model)
-            else:
-                last = Path(prefix + ".last.json")
-                events = Path(prefix + ".jsonl")
-                payload, meta = extract_codex(
-                    last.read_text(encoding="utf-8") if last.is_file() else "",
-                    events.read_text(encoding="utf-8") if events.is_file() else "",
-                )
-            tmp = Path(dest + ".tmp")
-            tmp.write_text(json.dumps(payload, ensure_ascii=False) + "\n", encoding="utf-8")
-            tmp.replace(dest)  # 🔴 원자적으로 - 반쯤 쓴 파일이 「완료」로 읽히지 않게
-            print(f"{len(payload['findings'])} {meta}")  # type: ignore[arg-type]
+            print(extract(rest))
         elif cmd == "audit":
             hits = audit(Path(rest[0]))
             print(json.dumps({"files": len(hits), "hits": hits}, ensure_ascii=False))

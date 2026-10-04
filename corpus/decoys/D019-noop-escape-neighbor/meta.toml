@@ -11,12 +11,13 @@ write 가 외부 line 을 감사 로그에 넣으므로, 개행이나 제어문�
 lure_lines = [17, 18]
 
 [safety]
-claim = "write 는 로그 인젝션을 허용하지 않는다"
+claim = "write 가 sink 에 넣는 항목은 str.splitlines 로 나눠도 언제나 한 줄이다 - 한 호출로 로그 항목을 둘 이상 만들거나 위조할 수 없다"
 justification = """
 write 가 부르는 것은 이름만 비슷한 escape_display 가 아니라 escape_log 이고,
-그 함수가 _CONTROL 정규식으로 0x00-0x1f 와 0x7f 를 제거한 뒤 남은 개행까지
-공백으로 바꾸기 때문에 줄바꿈을 만들 수 있는 문자가 남지 않는다. 따라서
-한 호출이 만들어내는 로그는 항상 한 줄이고, 새 항목을 위조할 수 없다.
+그 함수가 _CONTROL 정규식으로 제어 문자(0x00-0x1f · 0x7f-0x9f)와 U+2028 · U+2029 를
+지우기 때문에 str.splitlines 가 줄 경계로 보는 문자(줄바꿈 · 캐리지 리턴 · 수직 탭 · 폼 피드 ·
+0x1c-0x1e · 0x85 · U+2028 · U+2029)가 하나도 남지 않는다. 따라서 한 호출이 만들어내는 로그는 어떤
+방식으로 줄을 나눠 읽어도 한 줄이고, 새 항목을 위조할 수 없다.
 """
 guard_symbol = "escape_log"
 guard_lines = [13, 14]

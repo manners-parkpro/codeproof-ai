@@ -27,7 +27,7 @@ from codeproof_ai.reviewers.imported import ImportedReviewer
 
 DECOYS = Path(__file__).resolve().parents[2] / "corpus" / "decoys"
 D003 = "D003-caller-held-lock"  # twin 결함 L16 (bump 본문), 미끼 L10-12
-D005 = "D005-half-open-contract"  # twin 결함 L9 (page_bounds), 미끼 L14-15 (slice_page)
+D005 = "D005-half-open-contract"  # twin 결함 L11 (page_bounds), 미끼 L16-17 (slice_page)
 
 
 def _llm(start: int, end: int, category: str = "correctness") -> dict[str, object]:
@@ -80,7 +80,7 @@ class TestReportedRangeIsTheLocation:
     def test_the_decoy_side_uses_the_same_rule(self, tmp_path: Path) -> None:
         """⚠ 대칭이다 - 넓게 잡은 범위는 안전 근거가 덮는 구간에도 닿는다.
 
-        D005 의 근거는 가드+미끼 L7-15 를 덮는다. L3-7 은 **시작 줄이 밖**이라
+        D005 의 근거는 가드 L7-12 와 미끼 L16-17 을 덮는다. L3-7 은 **시작 줄이 밖**이라
         예전 규칙이면 판정 불가였다 - 범위로 보면 닿으므로 거짓 경보다.
         """
         run = _run(tmp_path, D005, [_llm(3, 7), _llm(3, 3)], [])
@@ -94,7 +94,7 @@ class TestSameFindingAcrossThePair:
     """짝 채점의 「짝에도 같은 지적」은 (category, **둘러싼 함수**) 로 본다."""
 
     def test_llm_findings_get_the_enclosing_function(self, tmp_path: Path) -> None:
-        run = _run(tmp_path, D005, [], [_llm(9, 9)])
+        run = _run(tmp_path, D005, [], [_llm(11, 11)])
         twin = next(o for o in run.outcomes if o.sample_id == f"{D005}#twin")
         assert [ob.finding.location.symbol for ob in twin.observations.observed] == [
             "page_bounds"
@@ -105,12 +105,12 @@ class TestSameFindingAcrossThePair:
     ) -> None:
         # [실측] claude D005: decoy 는 slice_page 쪽, twin 은 page_bounds 쪽.
         # 심볼 없이 비교했을 때 이 탐지가 「짝에도 있다」로 지워졌다.
-        run = _run(tmp_path, D005, [_llm(14, 15)], [_llm(9, 9)])
+        run = _run(tmp_path, D005, [_llm(16, 17)], [_llm(11, 11)])
         assert _outcomes(run, f"{D005}#twin", "paired_fix") == [Outcome.TRUE_POSITIVE]
 
     def test_same_category_in_the_same_function_is_not_discriminating(
         self, tmp_path: Path
     ) -> None:
         # 계약의 두 번째 줄 - 같은 함수에서 양쪽 다 지적했으면 구별한 것이 아니다.
-        run = _run(tmp_path, D005, [_llm(8, 9)], [_llm(9, 9)])
+        run = _run(tmp_path, D005, [_llm(10, 11)], [_llm(11, 11)])
         assert _outcomes(run, f"{D005}#twin", "paired_fix") == [Outcome.UNDECIDABLE]

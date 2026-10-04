@@ -20,7 +20,13 @@ import pytest
 from codeproof_ai.cli import main
 from codeproof_ai.eval.export import sample_digest
 from codeproof_ai.eval.loader import PRESENTED_FILENAME, load_decoy_samples
-from codeproof_ai.reviewers.imported import BUNDLE_FILE, RUN_FILE, pack_runs
+from codeproof_ai.reviewers.imported import (
+    BUNDLE_FILE,
+    DIGEST_SUFFIX,
+    RUN_FILE,
+    pack_runs,
+    run_outputs,
+)
 from codeproof_ai.store.sqlite import Store
 
 if TYPE_CHECKING:
@@ -59,6 +65,14 @@ def _diverge(db: str, command: list[str]) -> str:
     return str(hashes[0][0])
 
 
+def _sign(src: Path, corpus: Path = DECOYS) -> None:
+    """실행기처럼 회차마다 잰 코드의 지문을 옆에 남긴다 (`<sample_id>.<run>.digest`)."""
+    digests = {s.sample_id: sample_digest(s) for s in load_decoy_samples(corpus)}
+    for sid, _run, path in run_outputs(src):
+        if sid in digests:
+            path.with_suffix(DIGEST_SUFFIX).write_text(digests[sid] + "\n", encoding="utf-8")
+
+
 def _runner_output(
     root: Path,
     corpus: Path,
@@ -90,6 +104,7 @@ def _runner_output(
         "docstrings": docstrings,
     }
     (src / RUN_FILE).write_text(json.dumps(run), encoding="utf-8")
+    _sign(src, corpus)
     return src
 
 
@@ -616,6 +631,7 @@ class TestImport:
             "identity": "claude-code 9.9.9 · m-1 · effort=low", "prompt_hash": "p" * 24,
         }
         (src / "RUN.json").write_text(json.dumps(run), encoding="utf-8")
+        _sign(src)
         return src
 
     def _import_agent(self, src: Path, db: str, *extra: str) -> int:
@@ -658,6 +674,18 @@ class TestImport:
         code = self._import_agent(src, db, "--identity", "claude-code 9.9.9 · m-1 · effort=low")
         assert code == 0
 
+    def test_an_output_measured_on_other_code_is_refused(
+        self, tmp_path: Path, db: str, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """🔴 import 도 pack 과 같은 검사를 탄다 (E00) - 옛 코드로 잰 출력을 채점하지 않는다."""
+        src = self._write_agent_run(tmp_path)
+        twin = src / "D001-upstream-validated-dict-access#twin.0.digest"
+        (src / "D001-upstream-validated-dict-access.0.digest").write_text(
+            twin.read_text(encoding="utf-8"), encoding="utf-8"
+        )
+        assert self._import_agent(src, db) == 2
+        assert "지금 코드로 잰 것이 아닌 회차가 1개" in capsys.readouterr().err
+
     def test_wrong_format_is_not_read_as_zero_findings(
         self, tmp_path: Path, db: str, capsys: pytest.CaptureFixture[str]
     ) -> None:
@@ -696,6 +724,7 @@ class TestImport:
         for sid, n in runs.items():
             for i in range(n):
                 (src / f"{sid}.{i}.json").write_text(json.dumps(finding), encoding="utf-8")
+        _sign(src)
         return src
 
     def test_short_runs_are_refused_like_missing_ones(
@@ -1188,6 +1217,7 @@ class TestPack:
         extra = "D002-shell-true-constant-command#twin"
         for i in (2, 3):
             shutil.copyfile(src / f"{extra}.0.json", src / f"{extra}.{i}.json")
+        _sign(src, small_corpus)  # 대조가 지문이 아니라 회차 때문에 거부되게
         out = tmp_path / "agents" / "codex-cli"
         assert self._pack(small_corpus, src, out) == 2, "대조 - 그대로 묶으면 거부된다"
         capsys.readouterr()
@@ -1268,6 +1298,33 @@ class TestPack:
         err = capsys.readouterr().err
         assert "코퍼스 밖 샘플이 있다" in err
         assert "D998-extra" in err
+        assert not out.exists()
+
+    @pytest.mark.parametrize("damage", ["다른 코드", "지문 없음"])
+    def test_pack_refuses_an_output_not_measured_on_this_code(
+        self,
+        small_corpus: Path,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+        damage: str,
+    ) -> None:
+        """🔴 packed_digests 는 묶는 시점의 코퍼스로 잰다 - 옛 코드로 잰 출력에 새 지문이 붙는다.
+
+        고친 샘플만 다시 잴 때 옛 출력 하나를 덜 옮기면 생기는 모양이다 (DESIGN §9 의 5).
+        대조는 `test_it_writes_two_files_that_report_reads` - 지문이 맞으면 묶인다.
+        """
+        src = _runner_output(tmp_path, small_corpus, runs=2)
+        side = src / "D002-shell-true-constant-command.1.digest"
+        if damage == "다른 코드":
+            twin = src / "D002-shell-true-constant-command#twin.1.digest"
+            side.write_text(twin.read_text(encoding="utf-8"), encoding="utf-8")
+        else:
+            side.unlink()
+        out = tmp_path / "out"
+        assert self._pack(small_corpus, src, out) == 2
+        err = capsys.readouterr().err
+        assert "지금 코드로 잰 것이 아닌 회차가 1개" in err
+        assert "D002-shell-true-constant-command.1" in err
         assert not out.exists()
 
     def test_pack_refuses_short_runs(

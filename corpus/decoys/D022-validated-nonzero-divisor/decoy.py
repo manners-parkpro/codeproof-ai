@@ -1,12 +1,16 @@
 """가중 평균 - 분모가 상류에서 검증된다."""
 
+import math
+
 
 def _weighted(values: list[float], weights: list[float]) -> float:
-    paired = sum(v * w for v, w in zip(values, weights, strict=True))
-    return paired / sum(weights)
+    peak = max(weights)
+    shares = [w / peak for w in weights]
+    total = sum(shares)
+    return sum(v * (s / total) for v, s in zip(values, shares, strict=True))
 
 
 def average(values: list[float], weights: list[float]) -> float:
-    if not weights or sum(weights) <= 0:
-        raise ValueError("weights must sum to a positive value")
+    if not weights or not all(0 <= w < math.inf for w in weights) or not any(weights):
+        raise ValueError("weights must be finite, non-negative and not all zero")
     return _weighted(values, weights)

@@ -30,4 +30,13 @@ def attack(mod: ModuleType) -> bool:
 
     if not matched or mismatched:
         return True  # 판정 자체가 틀렸다
-    return len(calls) != 2  # 상수 시간 경로를 타지 않았다
+    if len(calls) != 2:
+        return True  # 상수 시간 경로를 타지 않았다
+    # 🔴 ASCII 가 아닌 str 도 선언 타입 안이다 (교차 패밀리 감사) - str 을 그대로 넘기면 TypeError
+    for same, other in (("토큰", "토큰2"), ("ü", "u"), ("\ud800", "\udc00"), ("😀", "😁")):
+        try:
+            if not mod.verify(same, same) or mod.verify(same, other):
+                return True
+        except Exception:  # noqa: BLE001 - 예외 없이 돌려줘야 한다
+            return True
+    return False

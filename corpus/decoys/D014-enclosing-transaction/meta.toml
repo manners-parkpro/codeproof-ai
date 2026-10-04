@@ -7,19 +7,21 @@ _move 가 출금과 입금을 두 구문으로 나눠 수행한다. 첫 줄이 �
 KeyError 가 나면 돈이 사라지는 부분 갱신으로 읽힌다. 함수 안에 try 도 롤백도
 없어서 원자성이 깨진 것처럼 보인다.
 """
-lure_lines = [21, 23]
+lure_lines = [22, 24]
 
 [safety]
-claim = "_move 는 부분 갱신을 남길 수 없다"
+claim = "transfer 는 부분 갱신을 남길 수 없다 - transfer 를 거쳐 부른 _move 가 예외로 끝나면 balances 는 같은 dict 그대로 이체 전 잔액으로 돌아간다. transfer 는 0 이하 금액을 ValueError 로 거절하고 balances 를 건드리지 않는다 (잔액보다 큰 금액은 받는다 - 이 장부는 음수 잔액을 막지 않는다)"
 justification = """
 _move 의 유일한 호출부인 transfer 가 ledger.transaction() 컨텍스트 안에서
 호출하기 때문에, _move 안에서 예외가 전파되면 컨텍스트 매니저의 except 절이
-시작 시점 스냅샷으로 balances 를 되돌린다. 따라서 두 구문 사이에서 실패해도
-외부에서 관측되는 상태는 이체 전이거나 이체 후이지 그 중간이 아니다.
+시작 시점 스냅샷의 내용으로 balances 를 제자리에서 되돌린다 - 다른 dict 로 바꿔 끼우지 않으므로
+transfer 를 부르기 전에 balances 를 쥐고 있던 쪽도 되돌린 잔액을 본다. 따라서 두 구문 사이에서
+실패해도 외부에서 관측되는 상태는 이체 전이거나 이체 후이지 그 중간이 아니다. _move 를 직접 부르는
+것은 이 주장이 말하지 않는다.
 _move 안에 롤백을 중복으로 두면 이중 복원이 된다.
 """
 guard_symbol = "transfer"
-guard_lines = [26, 28]
+guard_lines = [27, 31]
 
 [twin]
 defect = """

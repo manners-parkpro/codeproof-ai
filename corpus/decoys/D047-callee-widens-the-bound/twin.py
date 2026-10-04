@@ -4,7 +4,7 @@ _MAX_DELAY = 30.0
 
 
 def _backoff(attempt: int) -> float:
-    return 2.0**attempt
+    return 2.0 ** min(max(attempt, 0), 64)
 
 
 def delay_for(attempt: int) -> float:

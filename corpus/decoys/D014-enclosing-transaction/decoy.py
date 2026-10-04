@@ -14,7 +14,8 @@ class Ledger:
         try:
             yield
         except Exception:
-            self.balances = snapshot
+            self.balances.clear()
+            self.balances.update(snapshot)
             raise
 
 
@@ -24,5 +25,7 @@ def _move(ledger: Ledger, src: str, dst: str, amount: int) -> None:
 
 
 def transfer(ledger: Ledger, src: str, dst: str, amount: int) -> None:
+    if amount <= 0:
+        raise ValueError(amount)
     with ledger.transaction():
         _move(ledger, src, dst, amount)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from types import ModuleType
 
 from codeproof_ai.corpus.proof import race_window
@@ -29,4 +30,15 @@ def attack(mod: ModuleType) -> bool:
     with race_window("_accumulate"):
         got = mod.run(values)
 
-    return got != sum(values) or mod._totals["sum"] != sum(values)
+    if got != sum(values) or mod._totals["sum"] != sum(values):
+        return True
+    # 🔴 run 을 여러 스레드가 함께 부른다 (교차 패밀리 감사) - 호출마다 워커가 하나여도 호출끼리 겹친다
+    mod._totals["sum"] = 0
+    parts = [list(range(k, _ITEMS, 4)) for k in range(4)]
+    callers = [threading.Thread(target=mod.run, args=(part,)) for part in parts]
+    with race_window("_accumulate"):
+        for caller in callers:
+            caller.start()
+        for caller in callers:
+            caller.join()
+    return mod._totals["sum"] != sum(values)

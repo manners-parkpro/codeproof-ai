@@ -28,6 +28,9 @@ def attack(mod: ModuleType) -> bool:
        스레드 전환을 검사하지 않는다.
     """
     budget = mod._tokens["available"]
+    # 🔴 음수 cost (교차 패밀리 감사) - 받으면 차감이 잔량을 늘린다
+    if mod.take(-(10**9)) or mod.take(-1) or mod._tokens["available"] != budget:
+        return True
     granted = [0]
     guard = threading.Lock()
     barrier = threading.Barrier(_THREADS)

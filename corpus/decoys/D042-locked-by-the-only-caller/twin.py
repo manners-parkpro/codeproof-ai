@@ -7,7 +7,7 @@ _tokens = {"available": 10}
 
 
 def _consume(cost: int) -> bool:
-    if _tokens["available"] < cost:
+    if cost < 0 or _tokens["available"] < cost:
         return False
     _tokens["available"] -= cost
     return True

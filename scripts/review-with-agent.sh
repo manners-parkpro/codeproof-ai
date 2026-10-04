@@ -64,6 +64,8 @@ RED=$'\033[31m'; GRN=$'\033[32m'; DIM=$'\033[2m'; BLD=$'\033[1m'; OFF=$'\033[0m'
 [[ -t 1 ]] || { RED=""; GRN=""; DIM=""; BLD=""; OFF=""; }
 
 RUNNER_VERSION=3   # 3: MANIFEST 의 docstring 손잡이를 RUN.json 에 싣는다 (리뷰 호출은 2 와 같다)
+#   회차마다 잰 코드의 지문 옆 파일을 남기는 것은 판을 올리지 않는다 - 리뷰 호출 · 입력이 같고,
+#   올리면 같은 조건의 출력에 이어 쓰지 못한다. 그 뒤의 세션은 sessions 의 runner_sha 가 가른다.
 HERE=$(cd "$(dirname "$0")" && pwd)
 HELPER="$HERE/agent_output.py"
 
@@ -125,6 +127,11 @@ manifest() {
 #    빈 값으로 기록하면 keep 과 neutral 이 같은 설정으로 읽힌다.
 DOCSTRINGS=$(manifest docstrings 2>/dev/null)
 [[ -n $DOCSTRINGS ]] || die "$IN/MANIFEST.json 에 docstrings 가 없다 - codeproof export 를 다시 돌린다"
+
+# 🔴 회차마다 잰 코드의 지문을 <sample_id>.<run>.digest 로 남긴다 - pack 이 지금 코드와 견준다
+#    (DESIGN §9 의 5). 지문 없는 내보내기로는 돌지 않는다 - 그 출력은 pack 이 거부한다.
+python3 "$HELPER" digests "$IN/MANIFEST.json" "$IN" > /dev/null \
+  || die "$IN/MANIFEST.json 에 샘플 지문이 없다 - codeproof export 를 다시 돌린다"
 
 cli_version() {
   "$AGENT" --version 2>/dev/null | head -1 | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+' | head -1
@@ -271,7 +278,8 @@ for box in "${BOXES[@]}"; do
     run_agent "$tmp" "$rp"
     rm -rf "$tmp"
 
-    if info=$(python3 "$HELPER" extract "$AGENT" "$rp" "$RESOLVED" "$dest" 2>> "$rp.err"); then
+    if info=$(python3 "$HELPER" extract "$AGENT" "$rp" "$RESOLVED" "$dest" \
+        "$IN/MANIFEST.json" "$sid" 2>> "$rp.err"); then
       printf '  [%3d/%3d] %s%-46s%s 지적 %s\n' "$I" "$TOTAL" "$DIM" "$sid" "$OFF" "$info"
       ((DONE++)); STREAK=0
     else

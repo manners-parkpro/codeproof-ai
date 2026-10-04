@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import csv
+import io
 from types import ModuleType
 
 _FORMULAS = (
@@ -25,4 +27,12 @@ def attack(mod: ModuleType) -> bool:
         if body.startswith(mod._DANGEROUS):
             return True
     # 평범한 값이 망가지지 않았는지도 본다
-    return mod.row(["a", "b"]) != "a,b"
+    if mod.row(["a", "b"]) != "a,b":
+        return True
+    # 🔴 CSV 로 다시 읽은 칸을 본다 (교차 패밀리 감사) - 값 안의 쉼표 · 줄바꿈이 새 칸을 만들면
+    #    중화한 첫 글자 뒤에서 위험 문자로 시작하는 칸이 생긴다
+    for payload in ("safe,=1+1", "a\n=1+1", "a\r=1+1", 'x"y,=1', "Smith, John", '=a,"b"'):
+        cells = [c for r in csv.reader(io.StringIO(mod.row([payload]), newline="")) for c in r]
+        if len(cells) != 1 or cells[0].startswith(mod._DANGEROUS):
+            return True
+    return False

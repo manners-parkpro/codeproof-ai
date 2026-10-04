@@ -16,9 +16,26 @@ def attack(mod: ModuleType) -> bool:
     """
     ledger = mod.Ledger()
     ledger.balances = {"a": 100}
+    observed = ledger.balances  # 🔴 부르기 전에 쥔 참조 (교차 패밀리 감사) - 바꿔 끼우면 반쪽 갱신을 그대로 든다
     before = sum(ledger.balances.values())
     try:
         mod.transfer(ledger, "a", "missing", 30)
     except KeyError:
         pass  # 예외 자체는 정상 - 복구됐는지가 관건이다
-    return sum(ledger.balances.values()) != before
+    if sum(ledger.balances.values()) != before:
+        return True
+    if observed is not ledger.balances or observed != {"a": 100}:
+        return True
+    # 🔴 0 이하 금액은 거절한다 (독립 검토 · 선례 「음수」) - 받으면 이체 방향이 뒤집힌다
+    for amount in (0, -1, -40, -(10**30)):
+        book = mod.Ledger()
+        book.balances = {"a": 100, "b": 0}
+        try:
+            mod.transfer(book, "a", "b", amount)
+        except ValueError:
+            pass
+        else:
+            return True
+        if book.balances != {"a": 100, "b": 0}:
+            return True
+    return False

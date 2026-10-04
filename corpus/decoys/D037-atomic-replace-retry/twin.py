@@ -11,5 +11,11 @@ def _write(target: Path, body: str) -> None:
 
 
 def save(target: Path, body: str) -> None:
-    for _ in range(_ATTEMPTS):
-        _write(target, body)
+    for attempt in range(1, _ATTEMPTS + 1):
+        try:
+            _write(target, body)
+        except OSError:
+            if attempt == _ATTEMPTS:
+                raise
+        else:
+            return

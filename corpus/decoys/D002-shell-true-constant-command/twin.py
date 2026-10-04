@@ -3,13 +3,18 @@
 import subprocess
 
 _HEALTHCHECK_CMD = "systemctl is-active --quiet {}"
+_TIMEOUT_S = 5
 
 
 def is_healthy(service: str) -> bool:
-    completed = subprocess.run(  # noqa: S602
-        _HEALTHCHECK_CMD.format(service),
-        shell=True,
-        check=False,
-        capture_output=True,
-    )
+    try:
+        completed = subprocess.run(  # noqa: S602
+            _HEALTHCHECK_CMD.format(service),
+            shell=True,
+            check=False,
+            capture_output=True,
+            timeout=_TIMEOUT_S,
+        )
+    except subprocess.TimeoutExpired:
+        return False
     return completed.returncode == 0

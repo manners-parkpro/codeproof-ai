@@ -7,19 +7,20 @@ _accumulate 가 전역 딕셔너리를 읽어서 더한 뒤 다시 쓴다. 락�
 없는 read-modify-write 인데 모듈이 threading 을 쓰고 스레드로 호출되기까지
 하므로, 갱신이 사라지는 전형적인 경쟁 상태로 읽힌다.
 """
-lure_lines = [8, 10]
+lure_lines = [9, 11]
 
 [safety]
-claim = "_accumulate 는 동시에 실행될 수 없다"
+claim = "run 을 여러 스레드가 동시에 불러도 _accumulate 는 동시에 실행되지 않는다"
 justification = """
 _accumulate 를 부르는 곳은 _drain 뿐이고 _drain 을 스레드로 띄우는 곳은 run
-뿐인데, run 이 워커 리스트를 원소 하나로 만들기 때문에 이 모듈에서 _accumulate
-가 도는 스레드는 언제나 한 개다. 단일 쓰기 스레드에서는 read-modify-write 가
-겹칠 상대가 존재하지 않으므로 락이 보호할 대상 자체가 없고, 넣으면 항목마다
-무경합 락을 잡았다 푸는 비용만 는다.
+뿐인데, run 이 _run_lock 을 쥔 채 워커 리스트를 원소 하나로 만들고 join 까지 기다리기
+때문에 여러 스레드가 run 을 함께 불러도 이 모듈에서 _accumulate 가 도는 스레드는 언제나
+한 개다. 단일 쓰기 스레드에서는 read-modify-write 가
+겹칠 상대가 존재하지 않으므로 _accumulate 안에 락을 두면 항목마다 무경합 락을 잡았다
+푸는 비용만 는다. _accumulate · _drain 을 직접 부르는 것은 이 주장이 말하지 않는다.
 """
 guard_symbol = "run"
-guard_lines = [18, 24]
+guard_lines = [19, 26]
 
 [twin]
 defect = """

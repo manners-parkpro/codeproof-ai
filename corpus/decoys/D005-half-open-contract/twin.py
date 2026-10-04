@@ -5,7 +5,9 @@ _PAGE_SIZE = 10
 
 def page_bounds(total: int, page: int) -> tuple[int, int]:
     """반열린 구간 [lo, hi) 를 돌려준다. hi 는 포함되지 않는다."""
-    lo = page * _PAGE_SIZE
+    if page < 0:
+        raise ValueError(page)
+    lo = min(page * _PAGE_SIZE, total)
     hi = lo + _PAGE_SIZE
     return lo, hi
 

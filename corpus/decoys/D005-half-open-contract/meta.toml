@@ -7,19 +7,21 @@ slice_page 가 range(lo, hi) 로 순회하므로 hi 번째 원소가 빠진다. 
 한 건이 누락되는 off-by-one 처럼 읽히고, range(lo, hi + 1) 로 고치라는 지적이
 나오기 쉽다. items[i] 직접 첨자도 IndexError 후보로 보인다.
 """
-lure_lines = [14, 15]
+lure_lines = [16, 17]
 
 [safety]
-claim = "range(lo, hi) 는 off-by-one 이 아니며 items[i] 는 범위를 벗어나지 않는다"
+claim = "slice_page 는 음수 page 를 ValueError 로 거절하고, 그 밖의 page 에서 page_bounds 가 돌려주는 구간은 0 <= lo <= hi <= total 이며 (끝 너머 page 는 빈 구간 (total, total)) range(lo, hi) 는 off-by-one 이 아니고 items[i] 는 범위를 벗어나지 않는다"
 justification = """
 page_bounds 의 독스트링이 반환값을 반열린 구간 [lo, hi) 로 선언하므로 hi 는
 애초에 포함 대상이 아니고, range 의 의미론이 그 계약과 정확히 일치한다.
+page_bounds 는 음수 page 를 맨 앞에서 ValueError 로 거절하므로 lo 는 0 이상이고, lo 도 total 로 묶어
+끝 너머 page 에서 구간이 거꾸로 되지 않는다 (lo <= hi).
 그리고 hi 는 min(lo + _PAGE_SIZE, total) 로 total 에 고정되기 때문에
 i 는 항상 total 미만이고, 따라서 items[i] 가 범위를 벗어날 수 없다.
 hi + 1 로 고치면 계약을 어기면서 동시에 마지막 페이지에서 IndexError 를 만든다.
 """
 guard_symbol = "page_bounds"
-guard_lines = [7, 10]
+guard_lines = [7, 12]
 
 [twin]
 defect = """

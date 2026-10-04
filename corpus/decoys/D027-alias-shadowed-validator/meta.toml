@@ -10,10 +10,11 @@ verify 가 compare 라는 평범한 이름의 함수로 비밀 토큰을 맞춰 
 lure_lines = [13, 14]
 
 [safety]
-claim = "verify 의 수행 시간은 token 과 expected 가 앞에서부터 몇 글자 일치하는지에 따라 달라지지 않는다"
+claim = "verify 는 어떤 str 에도 예외 없이 token 과 expected 가 같은지를 돌려주고, 그 수행 시간은 둘이 앞에서부터 몇 글자 일치하는지에 따라 달라지지 않는다"
 justification = """
 compare 는 일반 비교 유틸리티가 아니라 hmac.compare_digest 를 그대로 감싼
-함수이고, 그 함수는 입력 길이가 같은 한 일치 여부와 무관하게 동일한 시간을
+함수이고(str 은 UTF-8 바이트로 바꿔 넘기므로 ASCII 가 아닌 글자도 TypeError 없이 비교한다),
+그 함수는 입력 길이가 같은 한 일치 여부와 무관하게 동일한 시간을
 쓰도록 구현되어 있기 때문에 접두사 길이에서 정보가 새지 않는다. 즉 위험한
 것은 값도 동작도 아니라 compare 라는 이름뿐이고, 본문이 무엇을 부르는지가
 안전을 결정한다. expected 의 길이는 compare_digest 문서대로 시간으로 드러날 수 있고 이 주장 밖이다.

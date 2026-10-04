@@ -18,6 +18,7 @@ from codeproof_ai.eval.export import (
     build_prompt,
     export_for_agent,
     neutral_docstring,
+    sample_digest,
 )
 from codeproof_ai.llm.render import load_prompt, prompt_hash
 from codeproof_ai.llm.schema import review_schema
@@ -121,6 +122,16 @@ class TestExportedFiles:
         prompt = (tmp_path / PROMPT_FILE).read_text(encoding="utf-8")
         assert m["prompt_hash"] == prompt_hash(prompt)
         assert m["instruction_hash"] != m["prompt_hash"]
+
+    def test_manifest_carries_each_samples_digest(
+        self, shipped_samples: list[LabeledSample], tmp_path: Path
+    ) -> None:
+        """🔴 실행기가 회차마다 옮겨 적는 잰 코드의 지문 - pack 의 packed_digests 와 같은 함수다."""
+        m = export_for_agent(shipped_samples[:2], tmp_path, docstrings="neutral")
+        rows = m["samples"]
+        assert isinstance(rows, list)
+        assert [r["digest"] for r in rows] == [sample_digest(s) for s in shipped_samples[:2]]
+        assert rows[0]["digest"] != rows[1]["digest"], "decoy 와 twin 은 코드가 다르다"
 
 
 def _inner_docstrings(source: str) -> list[str | None]:

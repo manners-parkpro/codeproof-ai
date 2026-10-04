@@ -51,6 +51,56 @@ def _envelope(model: str = "claude-fable-5-1", **over: object) -> dict[str, obje
     return env
 
 
+class TestMeasuredDigest:
+    """🔴 회차마다 잰 코드의 지문을 옆 파일로 남긴다 - pack 이 지금 코드와 견준다 (DESIGN §9-5)."""
+
+    SID = "D001-x#twin"
+
+    def _paths(self, tmp_path: Path, digest: object) -> tuple[list[str], Path, Path]:
+        manifest = tmp_path / "MANIFEST.json"
+        row: dict[str, object] = {"sample_id": self.SID}
+        if digest is not None:
+            row["digest"] = digest
+        manifest.write_text(json.dumps({"samples": [row]}), encoding="utf-8")
+        prefix = str(tmp_path / f"{self.SID}.0.a0")
+        Path(prefix + ".claude.json").write_text(json.dumps(_envelope()), encoding="utf-8")
+        dest = tmp_path / f"{self.SID}.0.json"
+        argv = ["extract", "claude", prefix, "claude-fable-5-1", str(dest), str(manifest), self.SID]
+        return argv, dest, tmp_path / f"{self.SID}.0.digest"
+
+    def test_the_digest_lands_beside_the_output(self, tmp_path: Path) -> None:
+        argv, dest, side = self._paths(tmp_path, "b" * 64)
+        assert ao.main(argv) == 0
+        assert json.loads(dest.read_text(encoding="utf-8")) == {"findings": [FINDING]}
+        assert side.read_text(encoding="utf-8") == "b" * 64 + "\n"
+
+    @pytest.mark.parametrize("digest", [None, "b" * 63, "B" * 64], ids=["없음", "짧음", "대문자"])
+    def test_without_a_digest_nothing_is_written(self, tmp_path: Path, digest: object) -> None:
+        """출력만 남으면 다음 세션이 그 회차를 건너뛰고 pack 이 거부한다 - 아무것도 쓰지 않는다."""
+        argv, dest, side = self._paths(tmp_path, digest)
+        assert ao.main(argv) == 1
+        assert not dest.exists()
+        assert not side.exists()
+
+    def test_every_box_needs_a_digest(self, tmp_path: Path) -> None:
+        export = tmp_path / "export"
+        for sid in ("D001", "D001#twin"):
+            (export / sid).mkdir(parents=True)
+        manifest = export / "MANIFEST.json"
+        manifest.write_text(
+            json.dumps({"samples": [{"sample_id": "D001", "digest": "c" * 64}]}), encoding="utf-8"
+        )
+        assert ao.main(["digests", str(manifest), str(export)]) == 1
+        manifest.write_text(
+            json.dumps({"samples": [
+                {"sample_id": "D001", "digest": "c" * 64},
+                {"sample_id": "D001#twin", "digest": "d" * 64},
+            ]}),
+            encoding="utf-8",
+        )
+        assert ao.main(["digests", str(manifest), str(export)]) == 0
+
+
 class TestClaudeModelIsPinned:
     """🔴 고정한 모델이 아닌 모델이 답하면 측정 대상이 바뀐 것이다 (D5 fallbacks)."""
 
@@ -339,9 +389,9 @@ class TestRunnerNeedsTheDocstringKnob:
 
     RUNNER = SCRIPT.parent / "review-with-agent.sh"
 
-    def _run(self, tmp_path: Path, manifest: dict[str, str]) -> subprocess.CompletedProcess[str]:
+    def _run(self, tmp_path: Path, manifest: dict[str, object]) -> subprocess.CompletedProcess[str]:
         export = tmp_path / "export"
-        export.mkdir()
+        export.mkdir(exist_ok=True)
         (export / "PROMPT.md").write_text("p\n", encoding="utf-8")
         (export / "SCHEMA.json").write_text("{}\n", encoding="utf-8")
         (export / "MANIFEST.json").write_text(json.dumps(manifest), encoding="utf-8")
@@ -356,6 +406,21 @@ class TestRunnerNeedsTheDocstringKnob:
              "--effort", "low"],
             capture_output=True, text=True, env=env, timeout=60, check=False,
         )
+
+    def test_an_export_without_sample_digests_is_refused(self, tmp_path: Path) -> None:
+        """🔴 지문 없는 내보내기로 돌면 출력마다 잰 코드를 모른다 - pack 이 전부 거부할 실행이다."""
+        (tmp_path / "export" / "D001").mkdir(parents=True)
+        r = self._run(tmp_path, {"prompt_hash": "p", "docstrings": "neutral", "samples": []})
+        assert r.returncode == 2
+        assert "샘플 지문이 없다" in r.stderr
+
+    def test_an_export_with_sample_digests_gets_past_the_check(self, tmp_path: Path) -> None:
+        """대조군 - 지문이 있으면 다음 단계(CLI 판 확인)에서 멈춘다."""
+        (tmp_path / "export" / "D001").mkdir(parents=True)
+        rows = [{"sample_id": "D001", "digest": "a" * 64}]
+        r = self._run(tmp_path, {"prompt_hash": "p", "docstrings": "neutral", "samples": rows})
+        assert "샘플 지문이 없다" not in r.stderr
+        assert "버전을 읽지 못했다" in r.stderr
 
     def test_an_export_without_the_knob_is_refused(self, tmp_path: Path) -> None:
         r = self._run(tmp_path, {"prompt_hash": "p"})

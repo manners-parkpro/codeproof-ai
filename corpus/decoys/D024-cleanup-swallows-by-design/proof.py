@@ -38,4 +38,11 @@ def attack(mod: ModuleType) -> bool:
 
     if mod.run([_Ok()], lambda: 42) != 42:
         return True
-    return closed != ["x"]
+    if closed != ["x"]:
+        return True
+    # 🔴 work 가 성공했을 때의 정리 실패는 감추지 않는다 (교차 패밀리 감사)
+    try:
+        mod.run([_BadHandle()], lambda: 42)
+    except RuntimeError:
+        return False
+    return True

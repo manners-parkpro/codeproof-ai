@@ -10,10 +10,10 @@ delay_for 가 호출자에게 받은 attempt 를 검사 없이 그대로 넘긴�
 lure_lines = [10, 11]
 
 [safety]
-claim = "delay_for 의 반환값은 30초를 넘을 수 없다"
+claim = "delay_for 는 어떤 int attempt 에도(아주 큰 수 · 음수) 예외 없이 30초를 넘지 않는 값을 돌려준다 - 음수 attempt 는 0 번째 시도로 친다"
 justification = """
-delay_for 가 부르는 _backoff 가 지수 계산 결과를 그대로 돌려주지 않고 min 으로
-_MAX_DELAY 와 비교해 작은 쪽을 고르기 때문에, attempt 가 아무리 커도 반환값이
+delay_for 가 부르는 _backoff 가 지수를 0 과 64 사이로 묶어 2.0 ** attempt 가 float 범위를 넘지 않게 하고 (음수는 0 이 된다),
+그 결과를 그대로 돌려주지 않고 min 으로 _MAX_DELAY 와 비교해 작은 쪽을 고르기 때문에, attempt 가 아무리 커도 반환값이
 30.0 을 넘지 않는다. 즉 상한은 호출부가 아니라 피호출부에 있고 그것으로 충분
 하다. 양쪽에 상한을 두면 경계값이 두 곳에 흩어져 한쪽만 고쳤을 때 조용히
 어긋난다.

@@ -19,4 +19,11 @@ def attack(mod: ModuleType) -> bool:
 
     # 구간 크기 계산이 채점과 일관되는지도 본다
     covered = sum(mod.band_size(low, high) for low, high, _ in mod._BANDS)
-    return covered != 101
+    if covered != 101:
+        return True
+    # 🔴 _BANDS 밖의 경계도 같은 계약이다 (교차 패밀리 감사) - 역순 구간은 0 개를 담는다
+    for low in range(-3, 4):
+        for high in range(-3, 4):
+            if mod.band_size(low, high) != sum(1 for s in range(-5, 6) if low <= s <= high):
+                return True
+    return False

@@ -19,4 +19,13 @@ def attack(mod: ModuleType) -> bool:
             return True  # 도달 불가여야 할 줄에 닿았다
         if got != rate:
             return True
+    # 🔴 음수도 int 다 (교차 패밀리 감사) - 「호출부 계약상 음수가 오지 않는다」는 선언 타입이 아니다
+    class _Amount(int):
+        pass
+
+    for amount in (-1, -99, -(2**80), _Amount(-5), True, False):
+        try:
+            mod.discount(amount)
+        except ZeroDivisionError:
+            return True
     return False
