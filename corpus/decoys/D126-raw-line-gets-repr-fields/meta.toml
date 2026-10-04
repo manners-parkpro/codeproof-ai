@@ -9,13 +9,15 @@ _write_raw_line 은 이름 그대로 받은 줄을 아무 처리 없이 감사 �
 lure_lines = [7, 7]
 
 [safety]
-claim = "audit 한 번은 sink 에 ASCII 글자만으로 된 기록 하나를 \\n 하나로 끝맺어 쓰므로 ASCII 를 쓸 수 있는 어떤 인코딩의 sink 에도 쓰이고, 그 기록의 \\n 앞부분에는 str.splitlines 가 줄을 나누는 문자가 없으며, 그 안의 'user=' 뒤와 ' action=' 뒤의 표기는 ast.literal_eval 로 각각 user 와 action 을 그대로 되살린다"
+claim = "audit 한 번이 sink.write 에 넘기는 글자는 ASCII 글자만으로 된 기록 하나와 그것을 끝맺는 \\n 하나라서 ASCII 를 쓸 수 있는 어떤 인코딩의 sink 에도 쓰이고, 그 기록에는 str.splitlines 가 줄을 나누는 문자가 없으며, 그 안의 'user=' 뒤와 ' action=' 뒤의 표기는 ast.literal_eval 로 각각 user 와 action 과 같은 문자열을 되살린다"
 justification = """
-_write_raw_line 은 받은 줄을 손대지 않고 쓰지만 그것을 부르는 곳은 audit 하나이고, audit 은 user 와 action 을 str() 로 평범한
-문자열로 바꾼 뒤 f-string 의 !a 로 넣기 때문에 두 값은 ascii() 표기로 바뀐다 - StrEnum 처럼 repr 을 바꾼 표준 라이브러리 하위 타입도
-그 값의 표기가 된다. ascii() 는 repr 처럼 값을 따옴표로 닫고 백슬래시와 따옴표를 이스케이프하되, ASCII 가
+_write_raw_line 은 받은 줄을 손대지 않고 쓰지만 그것을 부르는 곳은 audit 하나이고, audit 은 user 와 action 을 str.__str__ 로 그 밑의
+평범한 문자열로 바꾼 뒤 f-string 의 !a 로 넣기 때문에 두 값은 ascii() 표기로 바뀐다 - StrEnum 처럼 repr 을 바꾼 표준 라이브러리 하위 타입도,
+(str, Enum) 혼합형처럼 str() 이 값 대신 이름을 돌려주는 하위 타입도 그 값의 표기가 된다. ascii() 는 repr 처럼 값을 따옴표로 닫고 백슬래시와 따옴표를 이스케이프하되, ASCII 가
 아닌 글자를 모두 \\x · \\u · \\U 이스케이프로 바꾸므로 넘긴 줄은 인쇄 가능한 ASCII 글자뿐이다 - 줄 경계(\\n · \\r · \\x85 ·
 U+2028 같은 것) · ESC 같은 제어 문자 · U+202E 같은 방향 문자가 남지 않고, ASCII 를 쓸 수 있는 인코딩이면 어떤 sink 에도 쓰인다. 그래서 _write_raw_line 이 붙이는 \\n 하나만 기록을 끝맺고, 따옴표로 닫힌 두 표기는 literal_eval 로 원래 문자열이 된다.
+주장은 audit 이 sink.write 에 넘기는 글자를 말한다 - newline 인자로 \\n 을 \\r\\n 으로 바꿔 저장하는 sink 는 받은 \\n 하나를
+제 줄 끝으로 바꿀 뿐이다.
 """
 guard_symbol = "audit"
 guard_lines = [11, 11]

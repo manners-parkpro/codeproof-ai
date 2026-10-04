@@ -15,7 +15,8 @@ search 가 패턴에 넣는 값은 _tidy 를 거친 뒤 _escape_like 를 거친 
 두 겹으로 만든 다음 % 와 _ 앞에 역슬래시를 붙인다. 문장이 ESCAPE '\\' 를 선언하므로 LIKE 는 그렇게 표시된
 세 글자를 와일드카드가 아닌 글자로 읽고, 앞뒤에 붙인 % 두 개만 와일드카드로 남는다. 옆의 _tidy 는 공백만
 다루므로 이스케이프를 대신하지 못한다. SQLite 는 텍스트 비교를 첫 NUL 에서 끊으므로 NUL 이 든 검색어는
-search 가 먼저 ValueError 로 거절한다.
+search 가 먼저 ValueError 로 거절한다. SQLite 의 LIKE 는 UTF-8 을 읽을 때 U+FFFE · U+FFFF 를 U+FFFD 로 바꿔 견주므로
+그 셋과 U+FFFD 가 든 검색어도 같은 자리에서 거절한다 - 그렇지 않으면 글자 그대로 들지 않은 이름이 양방향으로 나온다.
 """
 guard_symbol = "_escape_like"
 guard_lines = [11, 12]

@@ -9,7 +9,7 @@ check_in 이 부를 때마다 새 Check 객체를 만들어 집합에 넣는다.
 lure_lines = [18, 18]
 
 [safety]
-claim = "check_in 을 같은 학생 · 같은 회차로 몇 번 다시 불러도 기록은 하나뿐이고, 다른 학생이나 다른 회차의 체크는 따로 남는다"
+claim = "check_in 을 같은 학생 · 같은 회차로 몇 번 다시 불러도 기록은 하나뿐이고, 다른 학생이나 다른 회차의 체크는 따로 남는다 - 회차가 bool 이면 기록하지 않고 거절한다"
 justification = """
 check_in 은 매번 새 Check 를 만들지만 Check 는 @dataclass(frozen=True) 라 필드 값으로 __eq__ 와 __hash__ 가 만들어진다.
 다시 온 요청이 만든 Check 는 객체가 달라도 student 와 session 이 같으면 해시와 비교가 같으므로 set.add 가 이미 있는 원소로

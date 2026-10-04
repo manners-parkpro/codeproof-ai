@@ -9,13 +9,14 @@ handle 이 요청 사용자를 문맥 변수 _request_user 에 넣고 지우지 
 lure_lines = [21, 21]
 
 [safety]
-claim = "handle 의 action 은 넘긴 사용자를 보고, handle 이 돌아오거나 동기 예외로 끝난 뒤 _request_user 는 부르기 전 값이다"
+claim = "handle 이 action 을 부르는 동안 _request_user 는 넘긴 사용자이고, handle 이 돌아오거나 동기 예외로 끝난 뒤 _request_user 는 부르기 전 값이다 - action 이 돌려준 코루틴 · 제너레이터를 handle 이 돌아온 뒤에 돌리는 것은 주장 밖이다"
 justification = """
 handle 은 사용자를 _request_scope 안에서만 넣는다. _request_scope 는 들어올 때 _request_user.set 이 돌려준 토큰을 쥐고
 finally 에서 reset(token) 으로 변수를 그 set 이전의 값으로 되돌린다. reset 은 토큰 뒤에 일어난 set 을 handle 이 넣은
 사용자까지 모두 걷어 내고, finally 는 정상 반환과 action 이 던진 예외(KeyboardInterrupt 같은 BaseException 포함)에서
 모두 돌기 때문에 다음 코드는 부르기 전의 사용자를 본다. 중첩한 handle 도 토큰마다 제 시작 값으로 돌아간다. 시그널
-처리기가 문맥 진입 도중에 던지는 비동기 예외는 주장 밖이다.
+처리기가 문맥 진입 도중에 던지는 비동기 예외는 주장 밖이다. async 함수를 넘기면 action() 은 코루틴 객체만 만들고 본문은
+handle 이 돌아온 뒤 await 할 때 돈다 - 그때 보는 값은 handle 이 돌려놓은 값이다.
 """
 guard_symbol = "_request_scope"
 guard_lines = [12, 16]

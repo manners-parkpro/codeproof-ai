@@ -65,4 +65,13 @@ def attack(mod: ModuleType) -> bool:
     mod.check_in("kim", _SESSION + 1)
     if len(mod._checks) != 3:
         return True
-    return not mod.checked_in("kim", _SESSION) or mod.checked_in("park", _SESSION)
+    if not mod.checked_in("kim", _SESSION) or mod.checked_in("park", _SESSION):
+        return True
+    # 🔴 회차가 bool 이면 기록하지 않고 거절한다 - 거절 방식은 묻지 않는다 (교차 패밀리 감사 · 주장에 밝혔다)
+    for flag in (True, False):
+        try:
+            mod.check_in("kim", flag)
+        except Exception:  # noqa: BLE001, S112 - 거절 방식은 묻지 않는다
+            continue
+        return True
+    return len(mod._checks) != 3

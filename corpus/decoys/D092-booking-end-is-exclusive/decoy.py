@@ -13,6 +13,8 @@ def _end(booking: Booking) -> int:
 
 
 def _overlaps(a: Booking, b: Booking) -> bool:
+    if a.minutes <= 0 or b.minutes <= 0:
+        return False
     return a.start < _end(b) and b.start < _end(a)
 
 

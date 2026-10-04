@@ -24,6 +24,13 @@ class _Role(enum.StrEnum):
     QUOTE = "q'uote\n줄"
 
 
+class _Mixed(str, enum.Enum):
+    """Enum 을 섞은 str - 사용자는 아무것도 재정의하지 않았지만 str() 이 값 대신 '_Mixed.ADMIN' 을 돌려준다 (교차 렌즈)."""
+
+    ADMIN = "admin"
+    QUOTE = "q'uote\n줄"
+
+
 _VALUES: list[str] = [
     "", "kim", "kim lee", "bob action=delete", "x' action='y", 'q"uote', "back\\slash", "tab\there", "nul\x00",
     "\x1b[31m빨강\x1b[0m", "\u202eevil", "\ud800", "😀", "김철수", "a" * 5000, _Name("sub\nclass"),
@@ -32,6 +39,8 @@ _VALUES: list[str] = [
     "Kim", "ｋｉｍ", "e\u0301", "ﬁ", "C:\\new", "x\\", "\\t", "\\x41", "\\u0041", "\\'", '\\"', "\\N{BULLET}",
     # 🔴 독립 검토 - StrEnum 은 repr 이 <Role.ADMIN: 'admin'> 꼴이라 repr 로 감싸면 literal_eval 로 되살릴 수 없다
     _Role.ADMIN, _Role.QUOTE, http.HTTPMethod.GET,
+    # 🔴 교차 렌즈 - (str, Enum) 혼합형은 str() 이 이름이라 str() 로 바꾸면 값이 아니라 이름이 기록된다
+    _Mixed.ADMIN, _Mixed.QUOTE,
 ]
 
 
@@ -64,12 +73,16 @@ def _ascii_sink() -> io.TextIOWrapper:
 
 
 def attack(mod: ModuleType) -> bool:
-    """한 번의 audit 이 ASCII 로 된 \\n 하나로 끝나는 한 줄이 아니거나, 그 줄에서 user · action 을 그대로 되살릴 수 없으면 True.
+    """한 번의 audit 이 sink.write 에 넘긴 글자가 ASCII 로 된 \\n 하나로 끝나는 한 줄이 아니거나, 그 줄에서 user · action 과 같은
+    문자열을 되살릴 수 없으면 True.
 
     🔴 줄 경계를 \\n 하나로 치지 않는다 - \\n 앞부분에 str.splitlines 가 나누는 문자가 하나도 없어야 한다 (\\r\\n 끝도 안 된다).
     🔴 내용도 본다 - 줄 경계만 없애는 약화(splitlines 이어붙이기)는 한 줄은 지키지만 칸을 되살릴 수 없다.
     🔴 ASCII 만 쓰는 sink 로도 쓴다 (쓰는 단계 점검) - repr 은 한글 · 이모지를 그대로 둬 그런 sink 에 쓰지 못한다.
     🔴 따옴표 표기 방식과 기록 앞의 머리말은 묻지 않는다 - literal_eval 로 되살아나면 된다.
+    🔴 되살린 칸은 값 자신과 견준다 - str(user) 와 견주면 (str, Enum) 혼합형의 이름이 맞는 답이 된다 (교차 렌즈).
+    🔴 넘긴 글자를 그대로 두는 sink 로 잰다 - io.StringIO() 와 newline='' 는 줄 끝을 바꾸지 않는다. newline 인자로 \\n 을
+       바꿔 저장하는 sink 는 주장 밖이다 (주장은 sink.write 에 넘기는 글자를 말한다 · 교차 렌즈).
 
     decoy 는 audit 이 칸마다 !a 로 감싸 ASCII 가 아닌 글자와 줄 경계를 모두 이스케이프한 줄을 넘긴다.
     twin 은 user · action 을 그대로 넣어 줄 경계가 기록을 둘로 쪼갠다.
@@ -83,7 +96,7 @@ def attack(mod: ModuleType) -> bool:
         body = written[:-1]
         if not written.endswith("\n") or body.splitlines() != [body] or not written.isascii():
             return True
-        if not _fields_back(body, str(user), str(action)):
+        if not _fields_back(body, user, action):
             return True
         narrow = _ascii_sink()
         try:

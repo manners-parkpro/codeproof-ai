@@ -4,7 +4,7 @@
 
 정적분석기 리뷰어 `ruff` (ruff/0.16.8) · 설정 `ruff(select=ALL,target=py314,ignore-noqa,cat=tool)`
 
-코퍼스 **130쌍** · `corpus_hash` `a06dd85917c53f4e98dcec06`
+코퍼스 **130쌍** · `corpus_hash` `0e9abee6424e699e04d93cd8`
 
 ## 채점 기준 편차 — 헤드라인
 

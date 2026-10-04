@@ -13,8 +13,8 @@ def _escape_like(term: str) -> str:
 
 
 def search(conn: sqlite3.Connection, term: str) -> list[str]:
-    if "\x00" in term:
-        raise ValueError("검색어에 NUL 이 들어 있다")
+    if any(ch in term for ch in "\x00\ufffd\ufffe\uffff"):
+        raise ValueError("검색어에 NUL 이나 SQLite 가 U+FFFD 로 읽는 글자가 들어 있다")
     pattern = f"%{_escape_like(_tidy(term))}%"
     rows = conn.execute(
         "SELECT name FROM products WHERE name LIKE ? ESCAPE '\\' ORDER BY name LIMIT 100", (pattern,)

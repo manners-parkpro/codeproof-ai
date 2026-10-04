@@ -1,0 +1,22 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["findings"],
+  "properties": {
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "lines", "summary", "evidence", "repro"],
+        "properties": {
+          "kind": {"type": "string", "enum": ["false_claim", "claim_overstated", "out_of_claim_defect"]},
+          "lines": {"type": "string"},
+          "summary": {"type": "string"},
+          "evidence": {"type": "string"},
+          "repro": {"type": "string"}
+        }
+      }
+    }
+  }
+}

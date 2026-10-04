@@ -8,4 +8,4 @@ def _write_raw_line(sink: TextIO, line: str) -> None:
 
 
 def audit(sink: TextIO, user: str, action: str) -> None:
-    _write_raw_line(sink, f"user={str(user)!a} action={str(action)!a}")
+    _write_raw_line(sink, f"user={str.__str__(user)!a} action={str.__str__(action)!a}")

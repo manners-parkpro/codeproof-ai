@@ -6,7 +6,8 @@ import sqlite3
 import string
 from types import ModuleType
 
-_PRODUCTS = ("100% cotton", "a_b socks", "a-b socks", "back\\slash", "plain tee", "cotton 50", "AB cap")
+_PRODUCTS = ("100% cotton", "a_b socks", "a-b socks", "back\\slash", "plain tee", "cotton 50", "AB cap",
+             "\ufffd mark", "x\uffffy", "\ufffe tag")
 # 와일드카드 · 이스케이프 글자 · 그 조합 · 공백 정리와 엮인 것 (DESIGN §3.5 「입력 검사」)
 _TERMS = ("%", "_", "\\", "a_b", "100%", "%cotton", "\\%", "\\_", "%%", "_ _", "  a_b  ", "a%b", "", "cotton")
 # 🔴 이스케이프 문자로 쓰일 법한 글자 + 보통 글자 - 이스케이프 문자를 바꾸면서 그 글자 자신은 이스케이프하지
@@ -14,6 +15,8 @@ _TERMS = ("%", "_", "\\", "a_b", "100%", "%cotton", "\\%", "\\_", "%%", "_ _", "
 _ESCAPE_CANDIDATES = tuple(c + "a" for c in "!#$&*+-./:;=?@^|~")
 # SQLite 는 텍스트 비교를 첫 NUL 에서 끊는다 - 거절해야 한다 (독립 검토)
 _NUL = ("\x00", "tee\x00", "\x00%", "cotton\x00zzz")
+# 🔴 SQLite 의 LIKE 는 U+FFFE · U+FFFF 를 U+FFFD 로 바꿔 견준다 - 양방향으로 엉뚱한 상품이 나온다 (교차 패밀리 감사)
+_REPLACED = ("\ufffd", "\uffff", "\ufffe", "x\uffffy", "\ufffd mark", "\ufffe tag")
 _ASCII_FOLD = str.maketrans(string.ascii_uppercase, string.ascii_lowercase)
 
 
@@ -34,7 +37,7 @@ def attack(mod: ModuleType) -> bool:
     와일드카드가 살아 있다.
     """
     conn = _db()
-    for term in (*_TERMS, *_ESCAPE_CANDIDATES, *_NUL):
+    for term in (*_TERMS, *_ESCAPE_CANDIDATES, *_NUL, *_REPLACED):
         try:
             got = mod.search(conn, term)
         except Exception:  # noqa: BLE001 - 거절 방식은 묻지 않는다, 돌려준 결과만 본다

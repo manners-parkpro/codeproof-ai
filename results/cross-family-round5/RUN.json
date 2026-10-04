@@ -1,0 +1,35 @@
+{
+  "what": "5라운드(D117~D130)의 세 번째 검토 렌즈 - 교차 패밀리 라벨 감사. 선언은 DESIGN §9 의 5 「나머지 쌍 - 수집 전 선언」의 「5라운드부터는 같은 감사를 라운드마다 세 번째 검토 렌즈로 둔다」 (커밋 3c8cccf)",
+  "date": "2026-10-04",
+  "pairs": [
+    "D117",
+    "D118",
+    "D119",
+    "D120",
+    "D121",
+    "D122",
+    "D123",
+    "D124",
+    "D125",
+    "D126",
+    "D127",
+    "D128",
+    "D129",
+    "D130"
+  ],
+  "cli": "codex-cli 0.158.0",
+  "model": "gpt-6-astra",
+  "effort": "high",
+  "flags": "exec --ignore-user-config --ignore-rules --ephemeral --skip-git-repo-check --sandbox read-only --color never --output-schema schema.json --json (빈 작업 디렉터리)",
+  "prompt_head_sha256": "c008792aef72e934c5d04fd4c6e04b1245f379230d8aaed3a4e0273b8f509849",
+  "prompt_head_differs": "감사 머리말(daed2421…)과 위협 모델의 「밖」 문단 하나만 다르다 - 지금 §3.5 를 그대로 넣어 「__init__ 다시 부르기」와 「자원 고갈 (메모리 · 파일 디스크립터)」가 들어 있다",
+  "schema_sha256": "04c80bb60b53ad47ba7d45ac65676c79a3617d3cab6086ece74d92d9f45d24ad",
+  "prompt": "prompt_head.md(§3.5 위협 모델 문단을 그대로 넣은 판) 뒤에 meta.toml · decoy.py · twin.py · proof.py 를 줄 번호와 함께 붙인다 (쌍마다 prompt_sha256)",
+  "usage_total": {
+    "input_tokens": 252136,
+    "cached_input_tokens": 86016,
+    "output_tokens": 8454,
+    "reasoning_output_tokens": 6941
+  },
+  "result": "지적 3 · 스크립트 셋 다 REPRODUCED 를 찍었지만 D125 는 충돌 없이 확률만 계산해 재현 안 됨으로 판정 · 위협 모델 안 2건이 1/14 = 7.1% [Wilson 95% 1.3%, 31.5%] (D125 를 넣으면 2/14 = 14.3% [Wilson 95% 4.0%, 39.9%]). 판정은 verdicts.jsonl"
+}

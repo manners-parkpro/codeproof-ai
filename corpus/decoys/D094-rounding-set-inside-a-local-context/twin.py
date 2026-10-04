@@ -14,7 +14,7 @@ def _money_context() -> Iterator[decimal.Context]:
 
 def total(prices: list[str]) -> decimal.Decimal:
     with _money_context() as ctx:
-        ctx.prec = 28
+        ctx.prec = decimal.MAX_PREC
         ctx.rounding = decimal.ROUND_HALF_UP
         amount = sum((decimal.Decimal(price) for price in prices), decimal.Decimal(0))
         return amount.quantize(_CENT)

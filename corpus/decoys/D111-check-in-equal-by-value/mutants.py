@@ -1,4 +1,4 @@
-"""D111 변이 - 쓰는 단계 10개 · 검토 2개 (약화 9 · 안전 3 · 경쟁 0). 규약은 src/codeproof_ai/corpus/mutants.py."""
+"""D111 변이 - 쓰는 단계 10개 · 검토 2개 · 교차 3개 (약화 11 · 안전 4 · 경쟁 0). 규약은 src/codeproof_ai/corpus/mutants.py."""
 
 WEAKENED: dict[str, list[tuple[str, str]]] = {
     '[값으로 같음] 보통 클래스 (twin)': [
@@ -36,6 +36,11 @@ WEAKENED: dict[str, list[tuple[str, str]]] = {
         ('from dataclasses import dataclass\n', 'import datetime\nfrom dataclasses import dataclass, field\n'),
         ('    session: int\n', '    session: int\n    on: datetime.date = field(default_factory=datetime.date.today)\n'),
     ],
+    # 교차 패밀리 감사 - 주장에 bool 거절을 밝혔다
+    "[bool] 회차의 bool 을 거절하지 않음": [
+        ('    if isinstance(session, bool):\n        raise TypeError("회차에 참 · 거짓을 쓸 수 없다")\n', ""),
+    ],
+    "[bool] True 만 거절": [('    if isinstance(session, bool):\n', "    if session is True:\n")],
 }
 
 SAFE: dict[str, list[tuple[str, str]]] = {
@@ -49,6 +54,7 @@ SAFE: dict[str, list[tuple[str, str]]] = {
     'unsafe_hash (안전)': [
         ('@dataclass(frozen=True)\n', '@dataclass(unsafe_hash=True)\n'),
     ],
+    "[bool] ValueError 로 거절 (안전)": [('        raise TypeError("회차에 참 · 거짓을 쓸 수 없다")\n', '        raise ValueError("회차에 참 · 거짓을 쓸 수 없다")\n')],
 }
 
 RACY: dict[str, list[tuple[str, str]]] = {}
