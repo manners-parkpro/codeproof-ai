@@ -24,7 +24,7 @@
   "prompt_head_sha256": "c008792aef72e934c5d04fd4c6e04b1245f379230d8aaed3a4e0273b8f509849",
   "prompt_head_differs": "감사 머리말(daed2421…)과 위협 모델의 「밖」 문단 하나만 다르다 - 지금 §3.5 를 그대로 넣어 「__init__ 다시 부르기」와 「자원 고갈 (메모리 · 파일 디스크립터)」가 들어 있다",
   "schema_sha256": "04c80bb60b53ad47ba7d45ac65676c79a3617d3cab6086ece74d92d9f45d24ad",
-  "prompt": "prompt_head.md(§3.5 위협 모델 문단을 그대로 넣은 판) 뒤에 meta.toml · decoy.py · twin.py · proof.py 를 줄 번호와 함께 붙인다 (쌍마다 prompt_sha256)",
+  "prompt": "prompt_head.md(§3.5 위협 모델 문단을 그대로 넣은 판) 뒤에 meta.toml · decoy.py · twin.py · proof.py 를 줄 번호와 함께 붙인다 (쌍마다 prompt_sha256) - 생성기는 scripts/cross_family_prompt.py · 실행기는 scripts/cross-family-audit.sh",
   "usage_total": {
     "input_tokens": 252136,
     "cached_input_tokens": 86016,

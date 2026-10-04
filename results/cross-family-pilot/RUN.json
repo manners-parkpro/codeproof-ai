@@ -24,7 +24,7 @@
   "flags": "exec --ignore-user-config --ignore-rules --ephemeral --skip-git-repo-check --sandbox read-only --color never --output-schema schema.json --json (빈 작업 디렉터리)",
   "prompt_head_sha256": "4e24fe21b4673033d86c41203747fcc1b0b7f1a1464fdeeca2ef4dbabc75e8ca",
   "schema_sha256": "04c80bb60b53ad47ba7d45ac65676c79a3617d3cab6086ece74d92d9f45d24ad",
-  "prompt": "prompt_head.md 뒤에 meta.toml · decoy.py · twin.py · proof.py 를 줄 번호와 함께 붙인다 (쌍마다 prompt_sha256)",
+  "prompt": "prompt_head.md 뒤에 meta.toml · decoy.py · twin.py · proof.py 를 줄 번호와 함께 붙인다 (쌍마다 prompt_sha256) - 생성기는 scripts/cross_family_prompt.py · 실행기는 scripts/cross-family-audit.sh",
   "usage_total": {
     "input_tokens": 234106,
     "cached_input_tokens": 12288,

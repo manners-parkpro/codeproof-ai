@@ -115,7 +115,7 @@
   "flags": "exec --ignore-user-config --ignore-rules --ephemeral --skip-git-repo-check --sandbox read-only --color never --output-schema schema.json --json (빈 작업 디렉터리)",
   "prompt_head_sha256": "daed2421d74d621c0efb499dd0a26ce24a9727c37ae2411b4586e3ebd966926c",
   "schema_sha256": "04c80bb60b53ad47ba7d45ac65676c79a3617d3cab6086ece74d92d9f45d24ad",
-  "prompt": "prompt_head.md(§3.5 위협 모델 문단을 그대로 넣은 판) 뒤에 meta.toml · decoy.py · twin.py · proof.py 를 줄 번호와 함께 붙인다 (쌍마다 prompt_sha256)",
+  "prompt": "prompt_head.md(§3.5 위협 모델 문단을 그대로 넣은 판) 뒤에 meta.toml · decoy.py · twin.py · proof.py 를 줄 번호와 함께 붙인다 (쌍마다 prompt_sha256) - 생성기는 scripts/cross_family_prompt.py · 실행기는 scripts/cross-family-audit.sh",
   "usage_total": {
     "input_tokens": 1683586,
     "cached_input_tokens": 712704,
