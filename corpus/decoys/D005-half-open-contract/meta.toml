@@ -10,7 +10,7 @@ slice_page 가 range(lo, hi) 로 순회하므로 hi 번째 원소가 빠진다. 
 lure_lines = [16, 17]
 
 [safety]
-claim = "slice_page 는 음수 page 를 ValueError 로 거절하고, 그 밖의 page 에서 page_bounds 가 돌려주는 구간은 0 <= lo <= hi <= total 이며 (끝 너머 page 는 빈 구간 (total, total)) range(lo, hi) 는 off-by-one 이 아니고 items[i] 는 범위를 벗어나지 않는다"
+claim = "slice_page 는 음수 page 를 ValueError 로 거절하고, 그 밖의 page 에서 page_bounds 가 돌려주는 구간은 total 이 0 이상이면 (slice_page 가 넘기는 len(items) 처럼 - 음수 total 은 이 주장이 말하지 않는다) 0 <= lo <= hi <= total 이며 (끝 너머 page 는 빈 구간 (total, total)) range(lo, hi) 는 off-by-one 이 아니고 items[i] 는 범위를 벗어나지 않는다"
 justification = """
 page_bounds 의 독스트링이 반환값을 반열린 구간 [lo, hi) 로 선언하므로 hi 는
 애초에 포함 대상이 아니고, range 의 의미론이 그 계약과 정확히 일치한다.

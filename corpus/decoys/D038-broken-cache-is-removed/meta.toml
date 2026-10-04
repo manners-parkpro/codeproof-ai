@@ -10,7 +10,7 @@ JSONDecodeError 를 잡아서 빈 딕셔너리로 바꾼다. 로그도 남기지
 lure_lines = [14, 16]
 
 [safety]
-claim = "캐시 파일을 지울 수 있으면 이 삼킴은 손상 상태를 남기지 않는다 - JSON 으로 읽을 수 없는 파일(문법 · UTF-8 · 정수 자릿수 한도 · 중첩 깊이)이든 값이 모두 str 인 객체가 아닌 JSON 이든 load_cache 는 그 파일을 지우고 빈 dict 를 돌려준다"
+claim = "캐시 파일을 읽기로 열 수 있고 지울 수 있으면 이 삼킴은 손상 상태를 남기지 않는다 - JSON 으로 읽을 수 없는 파일(문법 · UTF-8 · 정수 자릿수 한도 · 중첩 깊이)이든 값이 모두 str 인 객체가 아닌 JSON 이든 load_cache 는 그 파일을 지우고 빈 dict 를 돌려준다 (파일을 열거나 읽다가 나는 OSError - 읽기 권한이 없는 파일 등 - 는 이 주장이 말하지 않는다)"
 justification = """
 except 가 JSON 으로 읽지 못한 모든 경우(문법 · UTF-8 해독 · 정수 자릿수 한도는 ValueError, 중첩 깊이는
 RecursionError)와 바로 위에서 올린 「str 값의 객체가 아님」을 함께 잡고, 잡은 자리에서 곧바로 unlink 로

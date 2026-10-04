@@ -10,7 +10,7 @@ _weighted 가 가중치의 최댓값 peak 와 몫의 합 total 로 나누는데 
 lure_lines = [7, 10]
 
 [safety]
-claim = "average 를 거쳐 _weighted 에 닿는 나눗셈은 ZeroDivisionError 를 낼 수 없다 - average 는 빈 가중치와 음수 · NaN · 무한 가중치, 모두 0 인 가중치를 ValueError 로 거절하고, 받은 가중치는 아무리 커도(float 의 끝까지) 그 크기 때문에 결과를 넘치게 하지 않는다 - 결과는 값을 그 가중치로 평균한 값이다"
+claim = "average 를 거쳐 _weighted 에 닿는 나눗셈은 ZeroDivisionError 를 낼 수 없다 - average 는 빈 가중치와 음수 · NaN · 무한 가중치, 모두 0 인 가중치를 ValueError 로 거절하고, 받은 가중치는 아무리 커도(float 의 끝까지) 그 크기 때문에 결과를 넘치게 하지 않는다 - 결과는 값을 그 가중치로 평균한 값이다 (그 밖에 부동소수 반올림이 만드는 차이는 - 몫의 언더플로 · float 끝 값의 반올림 넘침 · 자릿수 상쇄로 커지더라도 - 이 주장이 말하지 않는다)"
 justification = """
 _weighted 는 비공개 함수이고 이 모듈에서 부르는 곳은 average 한 곳뿐인데,
 average 가 weights 가 비었거나 유한한 음이 아닌 수가 아닌 원소가 있거나 전부 0 이면 ValueError 를

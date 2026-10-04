@@ -5,6 +5,17 @@ from __future__ import annotations
 from types import ModuleType
 
 
+def _reached_zero_division(exc: BaseException | None) -> bool:
+    """예외 사슬에 ZeroDivisionError 가 있는가 - 다른 예외로 바꿔 올려도 1 / 0 은 실행된 것이다."""
+    seen: set[int] = set()
+    while exc is not None and id(exc) not in seen:
+        if isinstance(exc, ZeroDivisionError):
+            return True
+        seen.add(id(exc))
+        exc = exc.__cause__ or exc.__context__
+    return False
+
+
 def attack(mod: ModuleType) -> bool:
     """정상 금액이 마지막 줄에 닿는가.
 
@@ -23,9 +34,12 @@ def attack(mod: ModuleType) -> bool:
     class _Amount(int):
         pass
 
+    # 🔴 거절하는 것은 주장이 정하지 않는다 - 음수를 ValueError 로 거절하는 안전한 변형을 거절했다 (독립 검토).
+    #    1 / 0 을 실행하고 다른 예외로 바꿔 올린 것은 예외 사슬로 본다
     for amount in (-1, -99, -(2**80), _Amount(-5), True, False):
         try:
             mod.discount(amount)
-        except ZeroDivisionError:
-            return True
+        except Exception as exc:  # noqa: BLE001
+            if _reached_zero_division(exc):
+                return True
     return False

@@ -6,6 +6,7 @@ from __future__ import annotations
 import gc
 import io
 import locale
+import os
 import tempfile
 import warnings
 from collections.abc import Callable
@@ -73,26 +74,48 @@ def _open_on(paths: list[Path]) -> list[io.IOBase]:
     return [o for o in gc.get_objects() if isinstance(o, io.IOBase) and not o.closed and str(getattr(o, "name", "")) in names]
 
 
+def _fd_open_on(paths: list[Path]) -> bool:
+    """이 프로세스에 그 파일들을 가리키는 fd 가 열려 있는가 - 비용이 힙 크기가 아니라 fd 수에 비례한다."""
+    nodes = set()
+    for path in paths:
+        try:
+            st = os.stat(path)
+        except (OSError, ValueError):  # 없는 경로 · NUL 이 든 경로
+            continue
+        nodes.add((st.st_dev, st.st_ino))
+    for fd in os.listdir("/dev/fd"):
+        try:
+            st = os.fstat(int(fd))
+        except OSError:
+            continue
+        if (st.st_dev, st.st_ino) in nodes:
+            return True
+    return False
+
+
 def _leaks(mod: ModuleType, paths: list[Path], out: io.TextIOBase) -> tuple[bool, BaseException | None]:
     """merge 를 부르고 (코드가 닫지 않은 파일이 있는가, 올라온 예외) 를 돌려준다. 남은 핸들은 여기서 닫는다.
 
     🔴 예외가 프레임을 쥔 동안에 본다 - 놓으면 가비지 수집이 닫아 버린다.
     🔴 성공한 호출은 ResourceWarning 으로 본다 - 코드가 닫지 않은 파일은 돌아오는 순간 가비지 수집이 닫으며 경고한다.
+    🔴 아직 살아 있는 핸들은 fd 로 본다 - 예외의 프레임이 쥐었든 순환 참조에 남았든 fd 가 열려 있다. 힙을 훑는 것은
+       닫으려고 객체를 찾을 때뿐이다 - 매번 훑으면 비용이 테스트 프로세스의 힙을 따라가 [실측] 힙 300만 객체에서 증명
+       한 번이 16초였다 (판정은 변이 40개 모두 같다).
     """
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always", ResourceWarning)
         raised: BaseException | None = None
-        leaked: list[io.IOBase] = []
         try:
             mod.merge([str(path) for path in paths], out)
         except BaseException as exc:  # noqa: BLE001 - 실패도 시나리오다 - 연 파일이 닫혔는지 본다
             raised = exc
-            leaked = _open_on(paths)
-        for handle in leaked:
-            handle.close()
-        gc.collect()
+        held = _fd_open_on(paths)
+        if held:
+            for handle in _open_on(paths):
+                handle.close()
+            gc.collect()
     unclosed = [w for w in caught if issubclass(w.category, ResourceWarning)]
-    return bool(leaked or unclosed), raised
+    return held or bool(unclosed), raised
 
 
 def attack(mod: ModuleType) -> bool:

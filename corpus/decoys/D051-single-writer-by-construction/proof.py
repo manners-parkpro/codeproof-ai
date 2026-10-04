@@ -33,12 +33,16 @@ def attack(mod: ModuleType) -> bool:
     if got != sum(values) or mod._totals["sum"] != sum(values):
         return True
     # 🔴 run 을 여러 스레드가 함께 부른다 (교차 패밀리 감사) - 호출마다 워커가 하나여도 호출끼리 겹친다
-    mod._totals["sum"] = 0
-    parts = [list(range(k, _ITEMS, 4)) for k in range(4)]
-    callers = [threading.Thread(target=mod.run, args=(part,)) for part in parts]
-    with race_window("_accumulate"):
-        for caller in callers:
-            caller.start()
-        for caller in callers:
-            caller.join()
-    return mod._totals["sum"] != sum(values)
+    # 🔴 크기마다 따로 친다 (독립 검토) - 작은 목록에서만 락을 건너뛰는 약화는 큰 목록 하나로 재면 지나간다
+    for size in (40, 400, _ITEMS):
+        mod._totals["sum"] = 0
+        parts = [list(range(k, size, 4)) for k in range(4)]
+        callers = [threading.Thread(target=mod.run, args=(part,)) for part in parts]
+        with race_window("_accumulate"):
+            for caller in callers:
+                caller.start()
+            for caller in callers:
+                caller.join()
+        if mod._totals["sum"] != sum(range(size)):
+            return True
+    return False

@@ -1,0 +1,41 @@
+{
+  "what": "교차 패밀리 감사의 수정안 · 에이전트 지적 규칙 · 독립 검토로 고친 옛 쌍 18개를 같은 렌즈로 한 번 더 봤다 - 6라운드 선언의 「고친 쌍은 고친 뒤 같은 렌즈로 한 번만 더 본다」를 옛 쌍에 건 것 · 주 지표 밖",
+  "date": "2026-10-04",
+  "pairs": [
+    "D002",
+    "D005",
+    "D012",
+    "D014",
+    "D019",
+    "D022",
+    "D024",
+    "D027",
+    "D030",
+    "D032",
+    "D037",
+    "D038",
+    "D042",
+    "D046",
+    "D047",
+    "D051",
+    "D053",
+    "D060"
+  ],
+  "cli": "codex-cli 0.158.0",
+  "model": "gpt-6-astra",
+  "effort": "high",
+  "flags": "exec --ignore-user-config --ignore-rules --ephemeral --skip-git-repo-check --sandbox read-only --color never --output-schema schema.json --json (빈 작업 디렉터리)",
+  "prompt_head": "results/cross-family-round6/prompt_head.md (지금 §3.5 위협 모델 문단을 그대로 넣은 판)",
+  "prompt_head_sha256": "33f1e09965831321789c2e122bf869af961d6334ddd5e8a34f69cc4870119d8f",
+  "schema": "results/cross-family-round6/schema.json",
+  "schema_sha256": "04c80bb60b53ad47ba7d45ac65676c79a3617d3cab6086ece74d92d9f45d24ad",
+  "prompt": "prompt_head.md 뒤에 meta.toml · decoy.py · twin.py · proof.py 를 줄 번호와 함께 붙인다 (쌍마다 prompt_sha256) - 생성기 scripts/cross_family_prompt.py · 실행기 scripts/cross-family-audit.sh · 재현 scripts/cross_family_repro.py",
+  "pairs_state": "커밋 821624b 의 네 파일 (프롬프트에 그 판의 줄이 모두 있다 [실측])",
+  "usage_total": {
+    "input_tokens": 300511,
+    "cached_input_tokens": 49152,
+    "output_tokens": 14196,
+    "reasoning_output_tokens": 10784
+  },
+  "result": "지적 9 (7쌍) · 재현 8 · 위협 모델 안 8 · 재현 안 됨 1 (D037). 주장을 좁힌 쌍 6 (D005 · D014 · D022 · D032 · D038 · D053) · 고치지 않은 범위 안 주장 밖 결함 1 (D032 빈 칸 하나). 판정은 recheck_verdicts.jsonl. 재확인 뒤의 수정은 어느 렌즈도 보지 않았다 (교훈 #62 - 좁히기만)"
+}

@@ -10,7 +10,7 @@ apparent_defect = """
 lure_lines = [16, 17]
 
 [safety]
-claim = "build 가 만든 문자열을 POSIX sh 가 읽으면 binary 와 args 의 원소가 각각 글자 그대로 한 낱말이 된다 - 셸 메타문자 · 변수 대입 · = 확장이 살아남지 않는다 (cmd.exe · fish 처럼 POSIX 가 아닌 셸은 이 주장이 말하지 않는다)"
+claim = "build 가 만든 문자열을 POSIX sh 가 읽으면 binary 와 args 의 원소가 각각 글자 그대로 한 낱말이 된다 - 셸 메타문자 · 변수 대입 · = 확장이 살아남지 않는다 (cmd.exe · fish 처럼 POSIX 가 아닌 셸과, (str, Enum) 혼합형처럼 문자열 서식이 값 대신 다른 글자를 내는 str 하위 타입은 이 주장이 말하지 않는다)"
 justification = """
 build 가 binary 와 args 의 원소를 모두 넘기는 것은 이름만 그럴듯한 trim_arg 가 아니라 quote_arg 이고,
 그 함수는 shlex.quote 로 내부의 작은따옴표를 탈출시키고, shlex.quote 가 감싸지 않고 둔 값(안전한
