@@ -1,0 +1,24 @@
+decoy_id = "D120-chunk-end-is-the-next-start"
+trap_kind = "contract_half_open"
+
+[bait]
+apparent_defect = """
+조각의 끝을 start + size 로 잡는다. 조각마다 size + 1 개를 담아 다음 조각의 첫 항목과 겹치거나, 마지막 조각이 데이터 끝을 넘는
+off-by-one 으로 읽힌다 - 끝은 start + size - 1 이어야 할 것처럼 보인다.
+"""
+lure_lines = [7, 7]
+
+[safety]
+claim = "chunks 는 size 가 1 이상이면 data(str · list · tuple)를 앞에서부터 size 개씩 겹침도 빠짐도 없이 나눈다 - 조각을 차례로 이으면 data 그대로이고, 빈 조각은 없으며 마지막 조각만 size 보다 짧을 수 있다 - size 가 1 보다 작으면 거절한다"
+justification = """
+파이썬 조각 data[start : start + size] 는 끝을 포함하지 않는 반열린 구간이므로 정확히 start 부터 size 개를 담고, range 가 start 를
+size 씩 늘리기 때문에 한 조각의 끝 경계가 곧 다음 조각의 시작이라 겹침도 빈틈도 없다. 끝이 길이를 넘는 마지막 조각은 조각 규칙에
+따라 남은 항목만 담는다. size 가 1 보다 작으면 그 앞의 확인이 ValueError 로 거절하므로 음수 걸음의 range 가 빈 목록을 만드는 일도 없다.
+"""
+guard_symbol = "chunks"
+guard_lines = [7, 7]
+
+[twin]
+defect = """
+조각의 끝을 start + size - 1 로 잡는다. 반열린 조각이라 조각마다 마지막 항목 하나가 빠지고, 이어 붙이면 data 보다 짧다.
+"""

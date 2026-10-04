@@ -1,0 +1,25 @@
+decoy_id = "D119-export-method-from-a-fixed-table"
+trap_kind = "constant_only_sink"
+
+[bait]
+apparent_defect = """
+_render 가 인자로 받은 method 이름으로 getattr 을 해서 그 메서드를 부른다. 이름이 바깥 입력에서 오면 exporter 의 아무 메서드 -
+지우기 · 내부용 메서드 · 던더 - 나 부를 수 있는 동적 디스패치 주입으로 읽힌다.
+"""
+lure_lines = [15, 15]
+
+[safety]
+claim = "export 는 어떤 fmt 든 exporter 의 메서드 가운데 to_csv 나 to_json 만 부른다 - fmt 가 csv 이면 to_csv, json 이면 to_json 하나만 한 번 부르고, 그 밖의 fmt 로는 그 둘 말고 다른 메서드에 닿지 않으며 많아야 한 번 부른다"
+justification = """
+_render 는 export 에서만 불리고, export 는 method 를 _METHODS[fmt] 로 고르므로 getattr 에 닿는 이름은 표의 값 to_csv 나 to_json
+둘뿐이다. 표에 없는 fmt 는 그 첨자 접근이 KeyError 를 내기 때문에 _render 에 닿지 않고, 표는 모듈 안에서 바뀌지 않는 글자 그대로의
+dict 라 이름은 바깥 입력에서 만들어지지 않는다.
+"""
+guard_symbol = "export"
+guard_lines = [19, 19]
+
+[twin]
+defect = """
+export 가 표에 없는 fmt 를 메서드 이름으로 그대로 넘긴다. fmt 로 "delete_all" · "__init__" 같은 이름을 주면 _render 의 getattr 이
+exporter 의 그 메서드를 부른다.
+"""

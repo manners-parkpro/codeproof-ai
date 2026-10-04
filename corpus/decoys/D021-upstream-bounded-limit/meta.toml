@@ -10,7 +10,7 @@ _rows 가 인자로 받은 limit 만큼 리스트를 통째로 할당한다. 호
 lure_lines = [6, 7]
 
 [safety]
-claim = "_rows 의 할당 크기는 _MAX_LIMIT 을 넘을 수 없다"
+claim = "fetch 는 _MAX_LIMIT(500) 원소보다 큰 리스트를 할당하지 않는다 - fetch 를 거쳐 _rows 에 닿는 limit 은 언제나 1 이상 500 이하다"
 justification = """
 _rows 는 비공개 함수이고 이 모듈에서 부르는 곳은 fetch 한 곳뿐인데, fetch 가
 1 <= requested <= _MAX_LIMIT 을 먼저 확인하고 벗어나면 ValueError 로 빠져나가기

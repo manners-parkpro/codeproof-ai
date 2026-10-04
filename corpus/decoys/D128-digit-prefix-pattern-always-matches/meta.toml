@@ -1,0 +1,25 @@
+decoy_id = "D128-digit-prefix-pattern-always-matches"
+trap_kind = "type_narrowed"
+
+[bait]
+apparent_defect = """
+split_version 이 re.Pattern.match 의 결과를 None 확인 없이 곧바로 .group() 한다. match 는 맞지 않으면 None 을 돌려주므로 숫자로
+시작하지 않는 꼬리표에서 AttributeError 로 죽는 Optional 처리 누락처럼 보인다 (mypy 도 union-attr 로 짚는다).
+"""
+lure_lines = [9, 9]
+
+[safety]
+claim = "split_version 은 어떤 tag 에도 예외 없이 (head, rest) 를 돌려주고, head 는 tag 맨 앞에 이어진 ASCII 숫자(0~9) 전부 - 숫자로 시작하지 않으면 빈 문자열 - 이며 head + rest 는 tag 와 같다"
+justification = """
+_DIGITS 는 [0-9]* 로 숫자가 0개여도 맞는 패턴이기 때문에, match 가 위치 0 에서 시도하면 적어도 빈 문자열에는 언제나 맞아 None 을
+돌려주는 경우가 없다. 그래서 .group() 은 늘 문자열이고, * 는 욕심껏 맞추므로 head 는 맨 앞에 이어진 ASCII 숫자를 하나도 남기지 않는다.
+[0-9] 는 유니코드 숫자(٣ · １ 같은 것)를 포함하지 않으며 rest 는 tag 를 head 의 길이에서 자른 나머지라 두 조각을 이으면 tag 다.
+"""
+guard_symbol = "_DIGITS"
+guard_lines = [5, 5]
+
+[twin]
+defect = """
+_DIGITS 가 [0-9]+ 라 숫자가 하나는 있어야 맞는다. "beta" 나 빈 문자열처럼 숫자로 시작하지 않는 꼬리표에서 match 가 None 을 돌려주고,
+.group() 이 AttributeError 로 죽는다.
+"""

@@ -10,7 +10,7 @@ _roster 가 모듈 전역 딕셔너리 안의 리스트를 그대로 반환한�
 lure_lines = [9, 10]
 
 [safety]
-claim = "_roster 가 돌려준 참조로 전역 명단을 바꿀 수 없다"
+claim = "members 가 돌려준 리스트를 어떻게 바꿔도 전역 명단은 바뀌지 않는다"
 justification = """
 _roster 는 비공개 함수이고 이 모듈에서 부르는 곳은 members 한 곳뿐인데,
 members 가 list(...) 로 새 리스트를 만들어 내보내기 때문에 호출자가 받는 것은

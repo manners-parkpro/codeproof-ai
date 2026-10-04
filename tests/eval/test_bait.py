@@ -96,6 +96,8 @@ class TestTrapCoverage:
         빈값 검사 · 대입식 · TypeGuard · 센티널)은 **정당하다고 인정**해 침묵하지만,
         생성자가 세운 불변식으로 좁힌 것은 보지 못하고 선언 타입대로 연산자 오류를 낸다.
         [실측 · 74쌍] D072 가 그 첫 사례이고, 그 지적은 증명된 음성 위의 거짓 경보다.
+        [실측 · 130쌍] D128 이 둘째다 - 빈 문자열에도 맞는 정규식(`[0-9]*`)이라 match 가
+        None 을 돌려주지 않는다는 불변식을 mypy 는 모르고 미끼 줄에 union-attr 를 낸다.
 
         🔴 물린 쌍을 고쳐 이 단언을 지키지 않는다 - 물림을 보고 쌍을 바꾸지 않는다
            (DESIGN §3.5). 물린 쌍이 바뀌면 그 지적을 열어 보고 이 테스트와 문서를 갱신한다.
@@ -106,7 +108,10 @@ class TestTrapCoverage:
         ]
         assert stats, "type_narrowed decoy 가 사라졌다"
         biting = {s.sample_id: s.biting_reviewers for s in stats if s.biting_reviewers}
-        assert biting == {"D072-constructor-rejects-the-missing-value": ("mypy",)}, (
+        assert biting == {
+            "D072-constructor-rejects-the-missing-value": ("mypy",),
+            "D128-digit-prefix-pattern-always-matches": ("mypy",),
+        }, (
             f"type_narrowed 를 무는 쌍 · 리뷰어가 바뀌었다: {biting} - "
             "리뷰어가 추가됐거나 새 쌍이 다른 좁힘을 쓴다면 이 테스트와 문서를 갱신한다"
         )

@@ -1,0 +1,28 @@
+decoy_id = "D129-server-ring-never-runs-out"
+trap_kind = "unreachable_branch"
+
+[bait]
+apparent_defect = """
+next_server 가 서버 반복자가 다 떨어지면(StopIteration) 조용히 "localhost" 를 돌려준다. 몇 번 부른 뒤부터는 요청이 실제 서버가 아닌
+자기 자신으로 가는, 실패를 숨기고 엉뚱한 곳으로 보내는 대체 분기 결함처럼 보인다.
+"""
+lure_lines = [16, 16]
+
+[safety]
+claim = "next_server 는 몇 번을 부르든 \"localhost\" 를 돌려주지 않고, 이어지는 호출마다 \"10.0.0.1\" · \"10.0.0.2\" · \"10.0.0.3\" 을 한 바퀴에 하나씩 같은 차례로 끊김 없이 되풀이해 돌려준다 - 어느 서버에서 시작하는지와 바퀴 안의 차례는 정하지 않는다"
+justification = """
+_ring 은 모듈을 읽을 때 itertools.cycle(_SERVERS) 로 한 번 만들어지고, cycle 은 첫 바퀴에서 받은 원소를 쌓아 두었다가 다 돈 뒤
+처음부터 다시 내놓기 때문에 원소가 하나 이상이면 next 가 StopIteration 을 내는 일이 없다. _SERVERS 는 세 원소의 tuple 이므로
+except StopIteration 분기와 그 안의 "localhost" 에는 닿지 않고, next_server 는 세 서버를 tuple 의 차례대로 되풀이해 돌려준다.
+next 는 모듈 락 안에서 부르므로 여러 스레드가 함께 불러도 반복자를 한 번에 하나씩만 당긴다 - free-threaded 빌드에서는 같은 반복자를
+락 없이 여러 스레드가 당기면 원소가 겹치거나 빠질 수 있다. 그래도 여러 스레드가 받는 차례는 주장 밖이다. 모듈 속성 _ring 이나
+_SERVERS 를 다시 묶는 것은 비공개 속성을 직접 바꾸는 것이라 주장 밖이다.
+"""
+guard_symbol = "_ring"
+guard_lines = [7, 7]
+
+[twin]
+defect = """
+_ring 이 iter(_SERVERS) 라 세 서버를 한 번씩 돌려준 뒤 StopIteration 이 나고, 네 번째 호출부터는 언제나 "localhost" 를 돌려줘 요청이
+실제 서버로 가지 않는다.
+"""

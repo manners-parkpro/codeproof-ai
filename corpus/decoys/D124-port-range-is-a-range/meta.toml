@@ -1,0 +1,28 @@
+decoy_id = "D124-port-range-is-a-range"
+trap_kind = "frozen_after_init"
+
+[bait]
+apparent_defect = """
+allowed_ports 가 모듈이 쥔 허용 포트 모음 _PORTS 를 사본 없이 그대로 돌려준다. 호출자가 받은 값에 포트를 더하거나 지우면 모듈의
+허용 목록이 바뀌어 is_allowed 가 22 같은 포트를 허용하게 되는, 공유 가변 상태를 내주는 결함처럼 보인다.
+"""
+lure_lines = [9, 9]
+
+[safety]
+claim = "is_allowed(port) 는 port 가 1024 이상 49151 이하이면 참이고 그 밖이면 거짓이며, allowed_ports 가 돌려준 값을 호출자가 공개 메서드 · 공개 속성 · 항목 대입 · 제자리 연산자 어느 것으로 고치려 해도 이 답과 이후 allowed_ports 가 돌려주는 포트(1024~49151 의 정수 하나씩)는 바뀌지 않는다"
+justification = """
+_PORTS 는 모듈을 읽을 때 range 로 한 번 만들어지고, range 는 원소를 바꾸거나 더하거나 지우는 메서드가 하나도 없는 불변 시퀀스이기
+때문에 allowed_ports 가 _PORTS 객체 자체를 돌려줘도 받은 쪽은 append · 항목 대입 · del · += 어느 것으로도 그 객체를 바꿀 수 없다
+(메서드가 없거나 TypeError 로 거절된다). 그래서 is_allowed 가 보는 _PORTS 는 언제나 처음의 1024~49151 이다. range 의 in 은 정확한
+int 와 bool 이면 경계와 견줘 답하고, IntEnum 같은 int 하위 클래스면 원소와 == 로 하나씩 견줘 답하므로 어느 쪽이든 같은 값의 정수처럼
+판정된다. 모듈 속성 _PORTS 를 다시 묶는 것은 비공개 속성을 직접 바꾸는 것이라 주장 밖이고, 돌려받은 객체의 __init__ 을 다시 부르는
+것도 frozen 을 우회하는 의도적 수단이라 주장 밖이다.
+"""
+guard_symbol = "_PORTS"
+guard_lines = [5, 5]
+
+[twin]
+defect = """
+_PORTS 를 list 로 쥔다. allowed_ports 가 그 list 를 그대로 돌려주므로 호출자가 allowed_ports().append(22) 나 clear() 를 하면 모듈의
+허용 목록이 바뀌어 is_allowed(22) 가 참이 되거나 모든 포트가 거절된다.
+"""

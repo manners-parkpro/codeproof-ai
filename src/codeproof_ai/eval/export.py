@@ -42,6 +42,7 @@
 from __future__ import annotations
 
 import ast
+import hashlib
 import json
 from typing import TYPE_CHECKING, Any
 
@@ -178,6 +179,23 @@ def build_prompt(
 def schema_text() -> str:
     """실행기가 CLI 에 강제할 스키마. 해시가 안정되도록 키를 정렬한다."""
     return json.dumps(review_schema(), ensure_ascii=False, indent=2, sort_keys=True)
+
+
+def sample_digest(sample: LabeledSample) -> str:
+    """리뷰어가 받은 코드의 지문 - `pack` 이 묶음에 싣고 `report` 가 지금 코퍼스와 견준다.
+
+    🔴 잰 뒤에 decoy 코드를 고치면 옛 지적이 새 코드로 조용히 채점된다 (DESIGN §9 의 5).
+       docstring 손잡이를 거치기 전의 원문으로 잰다 - 손잡이는 RUN.json 의 `docstrings` 가
+       따로 적는다.
+       경로와 내용을 길이와 함께 넣는다 - 경계가 없으면 다른 파일 나눔이 같은 지문이 된다.
+    """
+    h = hashlib.sha256()
+    for f in sorted(sample.target.files, key=lambda f: f.path):
+        for part in (f.path, f.content):
+            data = part.encode("utf-8", "surrogatepass")
+            h.update(len(data).to_bytes(8, "big"))
+            h.update(data)
+    return h.hexdigest()
 
 
 def export_for_agent(

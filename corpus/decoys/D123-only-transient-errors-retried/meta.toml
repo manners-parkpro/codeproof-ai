@@ -1,0 +1,26 @@
+decoy_id = "D123-only-transient-errors-retried"
+trap_kind = "exception_absorbed"
+
+[bait]
+apparent_defect = """
+run 이 job 의 실패를 except Exception 으로 넓게 잡고 다시 시도한다. ValueError 나 TypeError 같은 프로그래밍 오류까지 삼키고 job 을
+되풀이해 부르므로, 고쳐야 할 오류가 재시도 뒤에 가려지고 부작용 있는 job 이 여러 번 실행되는 결함처럼 보인다.
+"""
+lure_lines = [19, 19]
+
+[safety]
+claim = "run 은 attempts 가 1 보다 작으면 job 을 부르지 않고 거절한다. 그 밖에는 job 이 값을 돌려주면 그 값을 바로 돌려주고, TimeoutError 나 ConnectionError(하위 클래스 포함)가 아닌 예외를 던지면 job 을 더 부르지 않고 그 예외 객체를 그대로 던지며, TimeoutError · ConnectionError 는 job 을 모두 attempts 번 부를 때까지만 삼키고 마지막 호출이 던진 예외는 그대로 던진다"
+justification = """
+run 의 except Exception 은 모든 Exception 을 잡지만 잡은 예외를 곧바로 _classify 에 넘기고, _classify 는 _RETRYABLE 에 들지 않는
+예외를 받은 객체 그대로 다시 던지기 때문에 그런 예외는 루프를 끝내고 run 밖으로 나간다. 그래서 except 를 지나 다음 시도로 넘어가는
+것은 TimeoutError 와 ConnectionError 뿐이다. 루프는 attempts - 1 번만 돌고 마지막 job() 은 try 밖에 있으므로 그 호출이 던진 예외는
+종류와 상관없이 그대로 올라가며, Exception 이 아닌 BaseException 은 except 에 걸리지 않아 처음부터 그대로 나간다.
+"""
+guard_symbol = "_classify"
+guard_lines = [9, 10]
+
+[twin]
+defect = """
+except 가 잡은 예외를 _classify 에 넘기지 않고 모두 삼킨다. job 이 ValueError 같은 고칠 수 없는 오류를 던져도 attempts 번까지 다시
+부르므로 부작용이 되풀이되고, 처음 던진 예외 객체는 사라지고 마지막 호출의 것만 올라간다.
+"""

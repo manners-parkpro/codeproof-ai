@@ -10,16 +10,16 @@ def _transaction(conn: sqlite3.Connection) -> Iterator[None]:
     conn.execute("SAVEPOINT transfer")
     try:
         yield
+        conn.execute("RELEASE transfer")
     except BaseException:
         conn.execute("ROLLBACK TO transfer")
-        raise
-    finally:
         conn.execute("RELEASE transfer")
+        raise
 
 
 def transfer(conn: sqlite3.Connection, src: str, dst: str, points: int) -> None:
     with _transaction(conn):
-        taken = conn.execute("UPDATE wallet SET points = points - ? WHERE user = ?", (points, src))
-        given = conn.execute("UPDATE wallet SET points = points + ? WHERE user = ?", (points, dst))
+        taken = conn.execute("UPDATE wallet SET points = points - ? WHERE user = ? AND typeof(points - ?) = 'integer'", (points, src, points))
+        given = conn.execute("UPDATE wallet SET points = points + ? WHERE user = ? AND typeof(points + ?) = 'integer'", (points, dst, points))
         if taken.rowcount != 1 or given.rowcount != 1:
             raise LookupError(f"{src} -> {dst}")

@@ -23,7 +23,7 @@ from codeproof_ai.corpus.decoy import validate_corpus
 from codeproof_ai.corpus.mutants import breaks, load_mutants
 from codeproof_ai.domain.reviewer import ReviewerKind
 from codeproof_ai.eval.bait import BaitStatus, measure
-from codeproof_ai.eval.export import DOCSTRING_MODES, export_for_agent
+from codeproof_ai.eval.export import DOCSTRING_MODES, export_for_agent, sample_digest
 from codeproof_ai.eval.grading.corroboration import StaticCorroborationGrader
 from codeproof_ai.eval.grading.injected import InjectedDefectGrader
 from codeproof_ai.eval.grading.paired import PairedFixGrader
@@ -1040,7 +1040,8 @@ def _collected(src: Path, samples: list[LabeledSample]) -> tuple[list[LabeledSam
        끊긴 실행이 「작은 코퍼스」로 통과한다. 그래서 pack 이 잰 샘플을 적고(`packed_samples`)
        report 는 그 샘플만 재생한다 - 그 안에서는 지금처럼 엄격하다 (`_replay`).
     """
-    packed = (read_run_record(src) or {}).get("packed_samples")
+    record = read_run_record(src) or {}
+    packed = record.get("packed_samples")
     if not (isinstance(packed, list) and packed and all(isinstance(p, str) for p in packed)):
         print(
             f"  🔴 {src / RUN_FILE} 에 packed_samples 가 없다 - 어느 샘플을 쟀는지 모르면 수집 뒤 "
@@ -1076,8 +1077,35 @@ def _collected(src: Path, samples: list[LabeledSample]) -> tuple[list[LabeledSam
             file=sys.stderr,
         )
         return None
+    stale = _stale_since_packing(src, record.get("packed_digests"), collected, listed)
+    if stale:
+        print(stale, file=sys.stderr)
+        return None
     unmeasured = sum(1 for s in samples if s.is_proven_safe and s.sample_id not in listed)
     return collected, unmeasured
+
+
+def _stale_since_packing(
+    src: Path, digests: object, collected: list[LabeledSample], listed: set[str]
+) -> str | None:
+    """잰 코드와 지금 코퍼스가 다르면 그 사유, 같으면 None.
+
+    🔴 잰 뒤 코드가 바뀐 샘플은 재생하지 않는다 - 옛 지적이 새 코드로 조용히 채점된다
+       (DESIGN §9 의 5). 지문이 없으면 잰 코드가 지금 코퍼스와 같은지 말할 수 없다.
+    """
+    if not (isinstance(digests, dict) and set(digests) == listed):
+        return (
+            f"  🔴 {src / RUN_FILE} 에 packed_digests 가 없거나 packed_samples 와 다르다 - "
+            "잰 코드가 지금 코퍼스와 같은지 모르면 옛 지적을 새 코드로 채점할 수 있다. "
+            "`codeproof pack` 으로 다시 묶는다"
+        )
+    changed = sorted(s.sample_id for s in collected if digests[s.sample_id] != sample_digest(s))
+    if changed:
+        return (
+            f"  🔴 {src} 가 잰 뒤 코드가 바뀐 샘플이 {len(changed)}개 있다 (예: {changed[:3]}) - "
+            "옛 지적을 새 코드로 채점하게 된다. 그 샘플을 다시 재거나 묶음에서 뺀다"
+        )
+    return None
 
 
 def _agent_sections(root: Path, samples: list[LabeledSample]) -> list[AgentSection] | None:
@@ -1184,6 +1212,9 @@ def _cmd_pack(corpus: Path, src: Path, out: Path, *, runs: int | None = None) ->
         record["packed_runs"] = str(runs)
     # 🔴 묶은 샘플을 적는다 - 없으면 「수집 뒤 늘어난 코퍼스」와 「끊긴 실행」을 가를 수 없다 (F6).
     record["packed_samples"] = packed
+    # 🔴 잰 코드의 지문 - 뒤에 decoy 를 고치면 report 가 그 샘플을 싣지 않는다 (DESIGN §9 의 5).
+    verified = sorted(replayed[3], key=lambda s: s.sample_id)
+    record["packed_digests"] = {s.sample_id: sample_digest(s) for s in verified}
     (out / RUN_FILE).write_text(
         json.dumps(record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )

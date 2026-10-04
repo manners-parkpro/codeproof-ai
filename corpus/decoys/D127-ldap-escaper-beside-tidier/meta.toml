@@ -1,0 +1,27 @@
+decoy_id = "D127-ldap-escaper-beside-tidier"
+trap_kind = "noop_shim_neighbor"
+
+[bait]
+apparent_defect = """
+user_filter 가 사용자가 준 uid 를 LDAP 필터 문자열에 f-string 으로 끼워 넣는다. uid 에 * 나 )(uid=* 같은 값을 넣으면 모든 사용자에
+맞는 필터가 되거나 조건이 더해지는 LDAP 주입(CWE-90) 결함처럼 보인다.
+"""
+lure_lines = [18, 18]
+
+[safety]
+claim = "user_filter 는 UTF-8 로 바꿀 수 없거나 바꾼 길이가 256바이트를 넘는 uid 를 거절하고, 그 밖의 uid 로 만든 필터를 RFC 4515 로 읽으면 언제나 (objectClass=person) 과 uid 같음 비교 하나를 & 로 묶은 필터이며, 그 uid 비교 값은 공백을 정리한 uid(\" \".join(uid.split()))를 글자 그대로 담는다 - uid 의 * · ( · ) · \\ · NUL 은 와일드카드나 필터 구문으로 읽히지 않는다"
+justification = """
+user_filter 는 uid 를 _tidy 로 정리한 뒤 이웃한 _escape 에 넘기고, _escape 는 RFC 4515 가 값 안에서 이스케이프하라고 정한 다섯 문자
+\\ · * · ( · ) · NUL 을 각각 \\5c · \\2a · \\28 · \\29 · \\00 으로 바꾸기 때문에 필터에 들어간 값에는 이스케이프 안 된 * 나 괄호가
+남지 않는다. 그래서 값은 같음 비교의 assertion value 로만 읽히고 필터 구조는 언제나 상수 틀 그대로다. 한 글자씩 바꾸므로 _escape 가
+만든 백슬래시가 다시 이스케이프되는 일도 없다. 맨 앞의 uid.encode("utf-8") 은 짝 없는 서로게이트를 UnicodeEncodeError(ValueError)로
+거절하고 바이트 길이 상한을 건다.
+"""
+guard_symbol = "_escape"
+guard_lines = [12, 12]
+
+[twin]
+defect = """
+user_filter 가 이웃한 _escape 대신 공백 정리만 하는 _tidy 의 결과를 그대로 넣는다. uid 가 * 이면 (uid=*) 가 되어 모든 사용자에 맞고,
+x)(objectClass=* 같은 값은 필터에 조건을 더한다.
+"""

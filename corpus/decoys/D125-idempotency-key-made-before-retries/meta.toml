@@ -1,0 +1,26 @@
+decoy_id = "D125-idempotency-key-made-before-retries"
+trap_kind = "idempotent_retry"
+
+[bait]
+apparent_defect = """
+_retry 가 TimeoutError 를 삼키고 같은 송금 호출을 다시 부른다. 타임아웃은 서버가 이미 송금을 처리한 뒤 응답만 잃은 경우에도 나므로,
+멱등하지 않은 송금 요청을 그대로 다시 보내 같은 돈이 두 번 나가는 중복 실행 결함처럼 보인다.
+"""
+lure_lines = [13, 14]
+
+[safety]
+claim = "transfer 한 번이 post 를 부르는 모든 호출은 transfer 가 받은 account · amount 그대로와 같은 멱등 키를 넘기고, 그 키는 transfer 를 부를 때마다 122비트 이상의 무작위로 새로 만든 것이라 다른 transfer 호출(다른 프로세스의 것 포함)의 키와 겹치지 않는다. post 가 TimeoutError(하위 클래스 포함)를 던지면 다시 부르되 모두 3번까지이고, TimeoutError 가 아닌 예외는 다시 부르지 않고 그 예외를 그대로 올린다"
+justification = """
+키는 transfer 가 _retry 를 부르기 전에 uuid.uuid4().hex(운영체제 난수 122비트)로 한 번 만들어 지역 이름 key 에 묶고, _retry 에 넘기는 람다는 그 이름을 닫아
+쥐기 때문에 _retry 가 람다를 몇 번 되풀이해 불러도 post 는 매번 같은 key 를 받는다. 그래서 응답만 잃은 첫 요청을 다시 보내도 서버는
+같은 키로 중복을 알아보고 송금을 한 번만 적용한다. _retry 의 루프는 _ATTEMPTS - 1 번까지 TimeoutError 만 삼키고 마지막 호출은 try
+밖에 있으므로 호출은 3번을 넘지 않으며, 다른 예외는 except 에 걸리지 않아 받은 객체 그대로 올라간다.
+"""
+guard_symbol = "transfer"
+guard_lines = [19, 19]
+
+[twin]
+defect = """
+람다가 부를 때마다 uuid4 로 새 키를 만든다. 첫 요청이 서버에 적용된 뒤 응답만 잃어 TimeoutError 가 나면 다시 보내는 요청은 다른 키를
+달고 가므로, 서버가 중복을 알아보지 못해 같은 송금이 두 번 적용된다.
+"""

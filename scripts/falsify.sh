@@ -62,7 +62,7 @@ SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict conv
            report-half-pair compare-same-samples compare-skip-note pack-records-samples
            pack-stray-samples sarif-end bandit-range twin-convention twin-convention-paired
            repro-unknown repro-kind race-switch-lower race-switch-restore invisible-rule invisible-lines
-           ruff-target mypy-python mutant-weakening mutant-safe mutant-stale)
+           ruff-target mypy-python mutant-weakening mutant-safe mutant-stale report-digests pack-records-digests)
 
 claim_layering() { echo "런타임(analysis)은 정답 라벨(eval)을 볼 수 없다 — A1"; }
 break_layering() {
@@ -444,6 +444,16 @@ guard_compare-skip-note() { uv run pytest tests/cli/test_commands.py -q -k diffe
 claim_pack-records-samples() { echo "pack 은 묶은 샘플을 기록에 적는다 — report 가 그 샘플로만 재생한다 (F6)"; }
 break_pack-records-samples() { perl -0pi -e 's/^    record\["packed_samples"\] = .*\n//m' src/codeproof_ai/cli.py; }
 guard_pack-records-samples() { uv run pytest tests/cli/test_commands.py -q -k records_the_samples; }
+
+claim_report-digests() { echo "잰 뒤 코드가 바뀐 샘플이 든 묶음은 싣지 않는다 — 옛 지적이 새 코드로 채점된다 (DESIGN §9 의 5)"; }
+break_report-digests() {
+  perl -0pi -e 's/^    if not \(isinstance\(digests, dict\) and set\(digests\) == listed\):$/    return None  # falsify.sh\n$&/m' src/codeproof_ai/cli.py
+}
+guard_report-digests() { uv run pytest tests/cli/test_commands.py -q -k "changed_after_measuring or without_packed_digests"; }
+
+claim_pack-records-digests() { echo "pack 은 묶은 샘플마다 잰 코드의 지문을 적는다 — 없으면 report 가 바뀐 코드를 알아보지 못한다 (DESIGN §9 의 5)"; }
+break_pack-records-digests() { perl -0pi -e 's/^    record\["packed_digests"\] = .*\n//m' src/codeproof_ai/cli.py; }
+guard_pack-records-digests() { uv run pytest tests/cli/test_commands.py -q -k records_the_samples; }
 
 claim_pack-stray-samples() { echo "pack 은 코퍼스 밖 샘플이 섞인 실행을 묶지 않는다 — 검증 안 된 샘플이 기록에 실린다 (F6)"; }
 break_pack-stray-samples() { perl -0pi -e 's/^    if stray:$/    if False:  # falsify.sh/m' src/codeproof_ai/cli.py; }

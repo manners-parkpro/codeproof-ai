@@ -10,12 +10,13 @@ close 도 컨텍스트 매니저도 없는 형태라 커넥션 누수로 읽히�
 lure_lines = [13, 18]
 
 [safety]
-claim = "_insert_all 은 커서를 누수시킬 수 없다"
+claim = "_insert_all 이 커서를 닫지 않아도 유일한 호출부 store 는 어떤 경로로 블록을 벗어나든 cursor.close() 를 부른다 - close 자신이 실패하는 것은 커서 구현의 몫이고 이 주장 밖이다"
 justification = """
 _insert_all 은 커서를 만들지 않고 인자로 받기만 하므로 소유권이 없고, 유일한
 호출부인 store 가 contextlib.closing 블록 안에서 넘기기 때문에 블록을 벗어나는
-모든 경로에서 커서가 닫힌다. 루프 중간에 예외가 전파되는 경우도 closing 의
-__exit__ 가 실행되므로 마찬가지다. 자원을 열지 않은 쪽이 닫으면 호출자가
+모든 경로에서 cursor.close() 가 불린다. 루프 중간에 예외가 전파되는 경우도 closing 의
+__exit__ 가 실행되므로 마찬가지다. close 가 스스로 실패해 자원을 놓지 못하는 것은 store 가
+고칠 수 없는 커서 구현의 실패라 주장 밖이다. 자원을 열지 않은 쪽이 닫으면 호출자가
 같은 커서를 계속 쓰려 할 때 이중 해제가 된다.
 """
 guard_symbol = "store"

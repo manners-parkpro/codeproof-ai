@@ -109,6 +109,8 @@ class TestAgainstShippedCorpus:
         [실측 · 74쌍] 기본 룰로 구별한 쌍은 D067 하나다 - 가드를 지우자 twin 에
         `except Exception: continue` 만 남아 S112 가 twin 에서만 운다. 나머지는 둘 다
         침묵하거나(P-B) 둘 다 지적하거나(P-V) 안전한 쪽만 지적한다(P-R).
+        [실측 · 130쌍] D123 이 같은 꼴로 더해졌다 - 가드(_classify)를 지운 twin 에
+        `except Exception: pass` 만 남아 S110 이 twin 에서만 운다.
 
         🔴 개수가 아니라 **어느 쌍인지**를 본다. 구별한 쌍이 바뀌면 코퍼스나 분석기가
            바뀐 것이다 - 그 쌍의 지적을 열어 보고 갱신한다.
@@ -122,7 +124,10 @@ AnalyzerReviewer(RuffAnalyzer()), samples, [ProvableSafetyGrader()], harness_sha
 
         assert total == len(samples) // 2, "모든 decoy 가 짝을 이뤄야 한다"
         discriminated = {p.pair_id for p in pairs if p.verdict is PairVerdict.CORRECT}
-        assert discriminated == {"D067-only-best-effort-hooks-are-swallowed"}, (
+        assert discriminated == {
+            "D067-only-best-effort-hooks-are-swallowed",
+            "D123-only-transient-errors-retried",
+        }, (
             f"Ruff 가 구별한 쌍이 바뀌었다: {sorted(discriminated)} - 실측이 바뀌었다"
         )
 

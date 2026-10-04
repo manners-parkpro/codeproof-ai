@@ -10,21 +10,26 @@ transfer 가 보내는 사람의 포인트를 먼저 깎고, 두 지갑 중 하�
 lure_lines = [21, 25]
 
 [safety]
-claim = "이체가 실패하면 두 지갑의 포인트는 연결의 트랜잭션 모드와 상관없이 이체 전과 같다"
+claim = "스키마가 트랜잭션 전체를 되돌리지 않는 한, 이체가 실패하면 두 지갑의 포인트는 연결의 트랜잭션 모드와 상관없이 이체 전과 같고, 64비트 정수 범위를 넘는 이체는 실패로 끝난다"
 justification = """
 두 UPDATE 와 LookupError 는 모두 with _transaction(conn) 블록 안에서 일어나고, _transaction 은
 블록에 들어가기 전에 SAVEPOINT 를 직접 만들고 블록에서 어떤 예외가 나든 그 세이브포인트까지
 ROLLBACK TO 한 뒤 다시 던지므로 차감만 반영된 상태가 남을 수 없다. 세이브포인트는 연결이
 autocommit 이든 이미 열린 트랜잭션 안이든 똑같이 만들어지고 그 뒤의 변경만 되돌리기 때문에,
 실패한 이체는 호출자가 먼저 한 변경을 건드리지 않고 자기 흔적만 지운다. 두 UPDATE 의 rowcount
-를 모두 보므로 어느 쪽 지갑이 없어도 예외가 나고 되돌림이 일어난다.
+를 모두 보므로 어느 쪽 지갑이 없어도 예외가 나고 되돌림이 일어난다. 가장 바깥 RELEASE 는 커밋이라
+지연 제약으로 실패할 수 있는데, 그 RELEASE 도 try 안에 있어 같은 except 가 ROLLBACK TO 로 되돌린 뒤
+다시 던진다. 두 UPDATE 는 WHERE 의 typeof(...) = 'integer' 로 계산이 64비트 정수 범위를 넘는 행을
+고르지 않으므로(SQLite 는 넘친 정수 계산을 실수로 바꾼다) 넘치는 이체는 rowcount 가 0 이 되어
+LookupError 로 실패하고 되돌려진다. 스키마의 ON CONFLICT ROLLBACK 이나 트리거의 RAISE(ROLLBACK) 은
+SQLite 가 바깥 트랜잭션까지 통째로 되돌려 세이브포인트가 사라지므로 이 주장 밖이다.
 """
 guard_symbol = "_transaction"
 guard_lines = [8, 17]
 
 [twin]
 defect = """
-_transaction 이 예외에서 되돌리지 않고 finally 의 RELEASE 만 한다. 받는 사람이 없어 LookupError
+_transaction 이 예외에서 되돌리지 않고 RELEASE 만 한다. 받는 사람이 없어 LookupError
 가 나도 이미 실행된 차감이 남는다 - 세이브포인트가 가장 바깥이면 RELEASE 가 곧 커밋이고, 바깥
 트랜잭션 안이면 호출자가 커밋할 때 함께 확정되어 보내는 사람의 포인트가 사라진다.
 """

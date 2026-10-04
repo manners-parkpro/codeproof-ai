@@ -17,7 +17,7 @@ ValueError 로 끝내므로 tables 는 언제나 모듈에 박아 둔 튜플이�
 고를지만 정하고 문장에 들어가는 글자는 상수에서만 오며, 주입할 통로가 없다.
 """
 guard_symbol = "purge_expired"
-guard_lines = [17, 19]
+guard_lines = [18, 20]
 
 [twin]
 defect = """

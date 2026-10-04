@@ -10,7 +10,7 @@ _under_root 이 is_relative_to 만으로 경로를 판정한다. 그 메서드�
 lure_lines = [8, 9]
 
 [safety]
-claim = "_under_root 의 접두사 비교는 우회될 수 없다"
+claim = "resolve_entry 는 _ROOT 밖을 가리키는 경로를 돌려주지 않는다 - _under_root 의 접두사 비교는 resolve_entry 가 넘기는 값에서 우회될 수 없다"
 justification = """
 _under_root 은 비공개 함수이고 이 모듈에서 부르는 곳은 resolve_entry 한 곳뿐인데,
 그 함수가 resolve 로 .. 와 심볼릭 링크를 모두 해석한 절대 경로를 만들어 넘기기

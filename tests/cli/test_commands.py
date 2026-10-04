@@ -18,7 +18,8 @@ from typing import TYPE_CHECKING, Any
 import pytest
 
 from codeproof_ai.cli import main
-from codeproof_ai.eval.loader import PRESENTED_FILENAME
+from codeproof_ai.eval.export import sample_digest
+from codeproof_ai.eval.loader import PRESENTED_FILENAME, load_decoy_samples
 from codeproof_ai.reviewers.imported import BUNDLE_FILE, RUN_FILE, pack_runs
 from codeproof_ai.store.sqlite import Store
 
@@ -92,11 +93,13 @@ def _runner_output(
     return src
 
 
-def _bundle(src: Path, dest: Path) -> None:
+def _bundle(src: Path, dest: Path, corpus: Path) -> None:
     """`pack` 을 거치지 않은 묶음 - 모자란 묶음도 만들어야 report 가 거부하는지 본다.
 
     pack 처럼 묶은 샘플을 기록에 적는다 (`packed_samples`). 🔴 목록은 실행기 출력의 파일
     이름에서 뽑는다 - 검사 대상(`bundle_sample_ids`)으로 만들면 그것이 틀려도 같이 맞는다.
+    잰 코드의 지문(`packed_digests`)은 묶는 시점의 코퍼스로 잰다 - 지문이 바뀐 코드를
+    알아보는지는 `test_a_sample_changed_after_measuring_is_refused` 가 따로 본다.
     """
     dest.mkdir(parents=True)
     (dest / BUNDLE_FILE).write_text(pack_runs(src), encoding="utf-8")
@@ -104,6 +107,10 @@ def _bundle(src: Path, dest: Path) -> None:
     record["packed_samples"] = sorted(
         {p.name.rsplit(".", 2)[0] for p in src.iterdir() if p.name != RUN_FILE}
     )
+    by_id = {s.sample_id: s for s in load_decoy_samples(corpus)}
+    record["packed_digests"] = {
+        sid: sample_digest(by_id[sid]) for sid in record["packed_samples"] if sid in by_id
+    }
     (dest / RUN_FILE).write_text(json.dumps(record), encoding="utf-8")
 
 
@@ -846,7 +853,7 @@ class TestReport:
         """
         src = _runner_output(root, corpus, runs, short)
         dest = root / "agents" / "claude-code"
-        _bundle(src, dest)
+        _bundle(src, dest, corpus)
         return dest.parent
 
     def _report(self, corpus: Path, agents: Path, out: Path) -> int:
@@ -897,7 +904,7 @@ class TestReport:
     def _pack(self, agents: Path, root: Path, corpus: Path, name: str, **run: Any) -> None:
         (root / name).mkdir()
         src = _runner_output(root / name, corpus, run.pop("runs", 1), **run)
-        _bundle(src, agents / name)
+        _bundle(src, agents / name, corpus)
 
     def test_comparisons_vary_one_axis_only(self, small_corpus: Path, tmp_path: Path) -> None:
         """🔴 리뷰어와 docstring 손잡이가 **둘 다** 다른 실행은 비교하지 않는다 (DESIGN §7.10c).
@@ -1051,6 +1058,39 @@ class TestReport:
         assert "packed_samples 가 없다" in capsys.readouterr().err
         assert not out.exists()
 
+    def test_a_bundle_without_packed_digests_is_refused(
+        self, small_corpus: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """🔴 잰 코드의 지문이 없으면 옛 지적을 새 코드로 채점하는지 말할 수 없다 - 싣지 않는다."""
+        agents = self._agents(tmp_path, small_corpus, runs=2)
+        _edit_record(agents / "claude-code", lambda r: r.pop("packed_digests"))
+        out = tmp_path / "M.md"
+        assert self._report(small_corpus, agents, out) == 2
+        assert "packed_digests 가 없거나" in capsys.readouterr().err
+        assert not out.exists()
+
+    def test_a_sample_changed_after_measuring_is_refused(
+        self, small_corpus: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """🔴 잰 뒤에 decoy 코드를 고치면 그 묶음을 싣지 않는다 - 옛 지적이 새 코드로 채점된다.
+
+        [실측] 교차 패밀리 감사가 에이전트가 잰 D001~D060 에서 코드를 고쳐야 할 쌍을 찾았다 -
+        지문 없이는 report 가 옛 묶음을 바뀐 코드로 조용히 다시 채점했다 (DESIGN §9 의 5).
+        """
+        agents = self._agents(tmp_path, small_corpus, runs=2)
+        edited = tmp_path / "edited"
+        shutil.copytree(small_corpus, edited)
+        decoy = edited / GONE / "decoy.py"
+        edited_code = decoy.read_text(encoding="utf-8") + "# 잰 뒤에 고친 줄\n"
+        decoy.write_text(edited_code, encoding="utf-8")
+        out = tmp_path / "M.md"
+        assert self._report(edited, agents, out) == 2
+        err = capsys.readouterr().err
+        assert "잰 뒤 코드가 바뀐 샘플이 1개" in err
+        assert GONE in err
+        assert not out.exists()
+        assert self._report(small_corpus, agents, out) == 0, "대조군 - 고치지 않은 코퍼스는 싣는다"
+
     def test_a_measured_sample_missing_from_the_corpus_is_refused(
         self, small_corpus: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
@@ -1197,6 +1237,11 @@ class TestPack:
             f"{d.name}{side}" for d in small_corpus.iterdir() for side in ("", "#twin")
         )
         assert record["packed_samples"] == expected
+        digests = record["packed_digests"]
+        assert sorted(digests) == expected, "묶은 샘플마다 지문 하나"
+        assert all(digests[d] != digests[f"{d}#twin"] for d in expected if "#" not in d), (
+            "decoy 와 twin 은 코드가 다르다 - 지문이 같으면 코드를 보지 않는 지문이다"
+        )
         capsys.readouterr()
 
     @pytest.mark.parametrize(

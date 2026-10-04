@@ -1,0 +1,25 @@
+decoy_id = "D118-cache-evicts-under-the-put-lock"
+trap_kind = "caller_held_lock"
+
+[bait]
+apparent_defect = """
+_evict 가 여러 스레드가 함께 쓰는 OrderedDict 를 락 없이 popitem 으로 고친다. 두 스레드가 동시에 지우면 같은 항목을 두 번
+지우려다 KeyError 가 나거나, 읽는 쪽이 지우는 도중의 상태를 보는 경쟁 조건으로 읽힌다.
+"""
+lure_lines = [16, 17]
+
+[safety]
+claim = "여러 스레드가 동시에 put 하고 keys 를 불러도 keys 가 돌려주는 목록은 size 개를 넘지 않고 같은 키를 두 번 담지 않으며, 차례로 부르면 마지막으로 넣은 순서로 가장 최근 size 개의 키를 오래된 것부터 담는다 - size 가 1 보다 작으면 만들 때 거절한다"
+justification = """
+_evict 는 put 에서만 불리고, put 은 넣기 · 순서 옮기기 · 지우기를 모두 self._lock 을 쥔 채 하므로 지우는 동안 다른 put 이 끼어들지
+않는다. keys 도 같은 락을 쥐고 목록을 만들기 때문에 넣은 뒤 지우기 전의 size + 1 개 상태를 보지 못한다. OrderedDict 의 키는 겹치지
+않고, 다시 넣은 키는 move_to_end 로 끝으로 가며 popitem(last=False) 가 가장 오래된 키부터 지우므로 남는 것은 가장 최근 size 개다.
+"""
+guard_symbol = "put"
+guard_lines = [20, 20]
+
+[twin]
+defect = """
+put 이 락 없이 넣고 지운다. 다른 스레드의 keys 가 넣은 직후 · 지우기 전의 size + 1 개를 보고, 동시에 지우는 put 들이 서로의 상태를
+건드린다.
+"""

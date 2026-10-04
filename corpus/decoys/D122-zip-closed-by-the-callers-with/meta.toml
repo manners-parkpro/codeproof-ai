@@ -1,0 +1,30 @@
+decoy_id = "D122-zip-closed-by-the-callers-with"
+trap_kind = "enclosing_context"
+
+[bait]
+apparent_defect = """
+_open_archive 가 ZipFile 을 with 없이 열어 그대로 돌려준다. 닫는 곳이 보이지 않아 목차(central directory)를 쓰지 않은 깨진 zip 이
+남고 파일 핸들도 새는 자원 누수처럼 읽힌다.
+"""
+lure_lines = [9, 9]
+
+[safety]
+claim = "이름에 NUL 도 역슬래시도 없는 entries 로 부르면, backup 은 target 이 이미 있으면 건드리지 않고 거절한다. target 을 zip 으로 새로 만든 뒤에는, 정상으로 돌아오면 target 은 entries 의 항목만 모두 담은 zip 이고, entries 를 읽거나(반복자를 얻는 것 포함) 항목을 쓰다 예외로 끝나도 backup 을 빠져나가는 순간 target 은 파일 핸들까지 이미 닫혀 그때까지 쓴 항목만 담은 zip 으로 읽힌다"
+justification = """
+_open_archive 는 연 ZipFile 을 닫지 않고 돌려주지만 그것을 부르는 곳은 backup 하나이고, backup 이 돌려받은 값을 곧바로 with 의 문맥
+관리자로 쓰기 때문에 backup 을 빠져나가는 모든 경로에서 with 가 ZipFile.close 를 부른다. close 는 목차를 쓰고 파일을 닫으므로,
+entries 가 던진 예외든 writestr 이 이름을 바꾸다 던진 예외든 그 예외가 backup 밖으로 나가기 전에 target 은 그때까지 쓴 항목을 담은
+zip 이 된다. _open_archive 는 "x" 모드로 열어 target 이 이미 있으면 FileExistsError 로 거절하므로 지난 백업을 잘라 버리지도 않는다.
+디스크가 차서 쓰기 자체가 실패하는 경우와 여러 스레드 · 프로세스가 같은 target 에 함께 쓰는 경우는 주장 밖이다. 이름에 NUL 이나
+역슬래시가 든 항목은 writestr 이 ZipInfo 를 만들며 zipfile 의 규칙대로 이름을 고쳐 담는다 - 첫 NUL 에서 끊고, 역슬래시가 경로
+구분자인 OS 에서는 / 로 바꾼다 - 그래서 그런 이름은 주장에 넣지 않았다.
+"""
+guard_symbol = "backup"
+guard_lines = [14, 14]
+
+[twin]
+defect = """
+backup 이 ZipFile 을 with 없이 받아 닫지 않는다. entries 나 writestr 이 예외를 던지면 그 예외의 트레이스백이 backup 의 프레임을 붙들어
+ZipFile 이 열린 채 남으므로, 예외를 잡은 쪽이 보는 target 은 목차가 없는 깨진 zip 이다. 정상 종료에서도 닫기를 CPython 의 참조
+해제(ZipFile.__del__)에 맡긴다.
+"""

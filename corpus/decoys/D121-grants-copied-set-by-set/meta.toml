@@ -1,0 +1,27 @@
+decoy_id = "D121-grants-copied-set-by-set"
+trap_kind = "defensive_copy"
+
+[bait]
+apparent_defect = """
+export 가 Roles 가 들고 있는 권한 dict 를 호출자에게 그대로 내주는 것처럼 보인다. 호출자가 받은 dict 나 그 안의 집합에 역할을
+더하면 그 사용자의 실제 권한이 바뀌는, 내부 상태를 새어 나가게 하는 별칭 결함으로 읽힌다.
+"""
+lure_lines = [18, 18]
+
+[safety]
+claim = "export 는 그때까지 grant 한 권한을 사용자마다 담아 돌려주고, 돌려준 dict 와 그 안의 집합을 어떻게 고쳐도 roles_of 와 이후의 export 가 보는 권한은 바뀌지 않는다"
+justification = """
+export 는 _copied 가 만든 값을 돌려주고, _copied 는 새 dict 를 만들면서 사용자마다의 집합도 set(roles) 로 새로 만들기 때문에
+돌려준 dict 와 집합은 Roles 의 _grants 와 어느 객체도 함께 쓰지 않는다. 그래서 받은 쪽이 사용자를 지우거나 집합에 역할을 더해도
+_grants 는 그대로이고, 사본은 export 를 부를 때마다 새로 만들므로 나중에 grant 한 권한도 다음 export 에 들어간다. _copied 는
+_grants 를 dict.copy 로 한 번에 복사한 뒤 그 사본을 돌므로 그동안 다른 스레드가 새 사용자에게 grant 해도 순회가 깨지지 않는다 -
+그래도 여러 스레드가 함께 쓰는 경우의 결과는 주장 밖이다 (락이 없는 보통 클래스다).
+"""
+guard_symbol = "_copied"
+guard_lines = [15, 15]
+
+[twin]
+defect = """
+_copied 가 바깥 dict 만 새로 만들고 안쪽 집합은 _grants 의 것을 그대로 담는다. 받은 쪽이 export()["lee"].add("admin") 처럼 집합을
+고치면 그 사용자의 실제 권한이 바뀐다.
+"""

@@ -15,7 +15,8 @@ justification = """
 search_url 이 부르는 것은 공백만 정리하는 tidy_param 이 아니라 encode_param 이고, 그 함수는
 quote(value, safe="") 로 영숫자와 - _ . ~ 를 뺀 모든 문자를 퍼센트 인코딩하므로 & 와 = 와 # 이
 각각 %26 · %3D · %23 이 된다. 따라서 검색어는 q 의 값 안에만 머물고, 새 매개변수를 더하거나 page 를
-하나 더 붙이거나 뒤를 프래그먼트로 잘라 낼 수 없다.
+하나 더 붙이거나 뒤를 프래그먼트로 잘라 낼 수 없다. UTF-8 로 나타낼 수 없는 짝 없는 서로게이트는 quote 가
+인코딩하지 못하고 UnicodeEncodeError(ValueError)로 거절해 URL 자체를 만들지 않으므로 이 경우에도 쿼리가 바뀌지 않는다.
 """
 guard_symbol = "encode_param"
 guard_lines = [13, 14]

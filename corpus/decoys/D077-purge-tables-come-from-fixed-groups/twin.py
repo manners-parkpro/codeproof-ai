@@ -10,6 +10,7 @@ _GROUPS = {
 
 def _purge(conn: sqlite3.Connection, table: str, cutoff: str) -> int:
     cursor = conn.execute(f"DELETE FROM {table} WHERE created_at < ?", (cutoff,))
+    cursor.fetchall()
     return cursor.rowcount
 
 

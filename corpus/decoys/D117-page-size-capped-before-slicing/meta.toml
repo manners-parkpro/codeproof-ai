@@ -1,0 +1,25 @@
+decoy_id = "D117-page-size-capped-before-slicing"
+trap_kind = "bounded_input"
+
+[bait]
+apparent_defect = """
+page 가 호출자가 준 limit 만큼 items 를 잘라 돌려준다. limit 에 아주 큰 값을 넣으면 목록 전체를 한 번에 돌려줘, 한 요청이
+응답 크기와 메모리를 무한정 키우는 상한 없는 입력 결함으로 읽힌다.
+"""
+lure_lines = [10, 10]
+
+[safety]
+claim = "page 는 offset 이 0 이상이고 limit 이 1 이상이면 items[offset:] 의 앞쪽 min(limit, 100)개를 순서대로 돌려주고 - 그래서 어떤 limit 이든 100개를 넘지 않는다 - offset 이 음수이거나 limit 이 1 보다 작으면 거절한다"
+justification = """
+자르기 직전의 limit = min(limit, _MAX_PAGE) 가 limit 을 100 이하로 줄이므로, 반열린 조각 items[offset : offset + limit] 은 많아야
+100개를 담는다. 그 앞의 확인이 음수 offset 과 1 보다 작은 limit 을 ValueError 로 거절하기 때문에 음수 첨자를 끝에서부터 세는
+파이썬 조각 규칙도 끼어들지 않고, 받아들인 요청의 결과는 items[offset:] 의 앞쪽 min(limit, 100)개다. offset 이 목록 끝을
+넘으면 빈 목록이다.
+"""
+guard_symbol = "page"
+guard_lines = [9, 9]
+
+[twin]
+defect = """
+limit 을 상한으로 줄이는 줄이 없다. limit 에 100 보다 큰 값을 주면 그만큼 - 목록 전체까지 - 한 번에 돌려준다.
+"""
