@@ -60,9 +60,10 @@ SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict conv
            mix-decoy-unit plan-coverage plan-design
            report-collected report-packed-samples report-bundle-record report-corpus-gone
            report-half-pair compare-same-samples compare-skip-note pack-records-samples
-           pack-stray-samples sarif-end bandit-range twin-convention twin-convention-paired
+           pack-stray-samples sarif-end sarif-category sarif-other-tool bandit-range twin-convention twin-convention-paired
            repro-unknown repro-kind race-switch-lower race-switch-restore invisible-rule invisible-lines
-           ruff-target mypy-python mutant-weakening mutant-safe mutant-stale report-digests pack-records-digests)
+           ruff-target mypy-python mutant-weakening mutant-safe mutant-stale report-digests pack-records-digests
+           proof-optimize)
 
 claim_layering() { echo "런타임(analysis)은 정답 라벨(eval)을 볼 수 없다 — A1"; }
 break_layering() {
@@ -128,6 +129,13 @@ break_mypy-python() {
   perl -0pi -e 's/\n        f"--python-version=\{_PYTHON\}",//' src/codeproof_ai/analysis/python/mypy_.py
 }
 guard_mypy-python() { uv run pytest tests/analysis/test_adapters.py -q -k python_version; }
+
+claim_proof-optimize() { echo "증명은 python -O 로 읽은 판도 친다 — assert 로 쓴 가드는 그 실행에서 사라진다 (G3a1)"; }
+break_proof-optimize() {
+  perl -0pi -e 's/    return _has_debug_code\(path\) and _hit\(attack, load_module\(path, f"\{alias\}_O", optimize=True\)\)\n/    return False  # falsify.sh\n/' \
+    src/codeproof_ai/corpus/proof.py
+}
+guard_proof-optimize() { uv run pytest tests/corpus/test_proofs.py -q -k an_assert_guard_is_broken; }
 
 claim_mutant-weakening() { echo "증명이 전에 잡던 약화를 놓치게 되면 변이 테스트가 운다 — 쌍의 mutants.py (G3a1)"; }
 break_mutant-weakening() {
@@ -465,6 +473,20 @@ break_sarif-end() {
     src/codeproof_ai/reviewers/formats.py
 }
 guard_sarif-end() { uv run pytest tests/reviewers/test_formats.py -q -k "end_of_region or end_line_without"; }
+
+claim_sarif-category() { echo "가져온 Ruff SARIF 도 직접 실행과 같은 출처의 분류를 쓴다 — OTHER 로 두면 관례 주장이 FP · 탐지가 된다 (F4a)"; }
+break_sarif-category() {
+  perl -0pi -e 's/category=known\.get\(rule_id, Category\.OTHER\),/category=Category.OTHER,  # falsify.sh/' \
+    src/codeproof_ai/reviewers/formats.py
+}
+guard_sarif-category() { uv run pytest tests/reviewers/test_unified.py -q -k every_finding_and_judgment; }
+
+claim_sarif-other-tool() { echo "다른 도구가 낸 SARIF 는 룰 id 가 같아도 Ruff 의 분류를 빌려 오지 않는다 — 모르는 도구는 결함 주장이다 (F4a)"; }
+break_sarif-other-tool() {
+  perl -0pi -e 's/known = self\._categories\.get\(str\(driver\.get\("name"\) or ""\)\.lower\(\), \{\}\)/known = next(iter(self._categories.values()), {})  # falsify.sh/' \
+    src/codeproof_ai/reviewers/formats.py
+}
+guard_sarif-other-tool() { uv run pytest tests/reviewers/test_formats.py -q -k another_tool_with_the_same_rule_id; }
 
 claim_bandit-range() { echo "bandit 지적의 범위는 line_range 다 — 대표 줄에 다른 줄의 열을 붙이지 않는다 (A2a · B1)"; }
 break_bandit-range() { perl -0pi -e 's/^    if not lines:$/    if True:  # falsify.sh/m' src/codeproof_ai/reviewers/formats.py; }

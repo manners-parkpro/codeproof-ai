@@ -10,6 +10,7 @@ import json
 import subprocess
 import tempfile
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -122,6 +123,40 @@ class TestSarifImport:
         d_counts = pair_summary(score_pairs(direct.outcomes, "provable_safety"))
         i_counts = pair_summary(score_pairs(imported.outcomes, "provable_safety"))
         assert d_counts == i_counts, "가져온 결과가 직접 실행과 다르다 - 파서가 틀렸다"
+
+    def test_every_finding_and_judgment_matches_direct_execution(self, sarif_dir: Path) -> None:
+        """🔴 짝 요약만 견주지 않는다 - 지적 하나하나의 룰 · 분류 · 위치 · 판정까지 같아야 한다.
+
+        [실측] 요약만 견주던 때 가져오기는 분류를 전부 OTHER 로 실어 Ruff 의 관례 주장을 FP 로
+        셌다 (130쌍에서 판정 2건이 달랐다). 짝 판정은 우연히 같아서 지나쳤고, 그 지적이 결함 구간에
+        얹힌 쌍(D137)이 생기고서야 구별률이 갈렸다.
+        """
+        samples = load_decoy_samples(DECOYS)
+        graders = [ProvableSafetyGrader()]
+        reviewers = (
+            AnalyzerReviewer(RuffAnalyzer(select=("S", "B", "F", "SIM"))),
+            ImportedReviewer(sarif_dir, name="ruff-sarif", identity="ruff/sarif"),
+        )
+        runs = [run_reviewer(r, samples, graders) for r in reviewers]
+
+        def seen(o: Any) -> tuple[list[tuple[str, str, str]], list[tuple[str, str, str]]]:
+            found = sorted(
+                (str(ob.finding.rule_id), str(ob.finding.category.value), repr(ob.finding.location))
+                for ob in o.observations.observed
+            )
+            judged = sorted(
+                (str(j.finding_key), str(j.outcome.value), str(j.matched_defect))
+                for js in o.judgments.values() for j in js
+            )
+            return found, judged
+
+        direct, imported = ([seen(o) for o in r.outcomes] for r in runs)
+        assert imported == direct, "가져온 지적이나 판정이 직접 실행과 다르다"
+        # 공허하지 않다 - 관례 주장이 하나는 있어야 분류를 견준 것이다 (H2)
+        assert any(
+            not ob.finding.category.is_defect_claim
+            for o in runs[0].outcomes for ob in o.observations.observed
+        )
 
     def test_sarif_columns_are_normalized(self, sarif_dir: Path) -> None:
         """SARIF 는 1-based 문자 - 내부 규약은 0-based (B1)."""

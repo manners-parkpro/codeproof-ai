@@ -1,0 +1,26 @@
+decoy_id = "D147-ledger-entries-read-as-a-copy"
+trap_kind = "defensive_copy"
+
+[bait]
+apparent_defect = """
+balance_after 가 ledger.entries 로 받은 목록에 가정한 금액을 append 한다. 그 목록이 원장 안의 것이면 「이 금액을 더하면 잔액이
+얼마인가」를 묻기만 해도 원장에 항목이 실제로 늘어나는 제자리 변형 결함처럼 보인다.
+"""
+lure_lines = [24, 24]
+
+[safety]
+claim = "balance_after 는 어떤 Ledger 든 그 원장을 바꾸지 않고 - 부른 뒤의 entries 는 부르기 전과 같다 - 지금 원장 항목의 합에 amount 를 더한 값을 돌려준다. 금액은 bool 이 아닌 int 다 - bool 금액은 Ledger 를 만들 때 · record · balance_after 모두 거절하고, 거절해도 원장은 그대로다"
+justification = """
+Ledger.entries 는 프로퍼티라 읽을 때마다 list(self._entries) 로 새 목록을 만들어 돌려주므로, balance_after 가 받은 entries 에
+append 해도 바뀌는 것은 그 사본뿐이고 원장의 _entries 는 그대로다. 항목은 제자리에서 바뀌지 않는 int 라 얕은 사본으로 충분하고,
+사본에는 지금 원장 항목 전부가 들어 있어 거기에 amount 하나를 더해 합을 구하기 때문에 돌려준 값이 지금 항목의 합에 amount 를
+더한 값이다. 원장을 바꾸는 길은 record 하나이고, 금액은 어느 길이든 _amount 가 bool 을 거절한 뒤에만 원장이나 사본에 들어간다.
+"""
+guard_symbol = "entries"
+guard_lines = [15, 16]
+
+[twin]
+defect = """
+entries 가 원장 안의 목록을 그대로 돌려준다. balance_after 를 한 번 부르면 가정한 금액이 원장에 실제 항목으로 남고, 부를 때마다
+잔액이 그만큼 늘어난다.
+"""

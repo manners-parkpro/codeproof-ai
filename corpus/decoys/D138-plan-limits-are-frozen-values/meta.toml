@@ -1,0 +1,24 @@
+decoy_id = "D138-plan-limits-are-frozen-values"
+trap_kind = "frozen_after_init"
+
+[bait]
+apparent_defect = """
+limits_for 가 요금제마다 모듈에 하나뿐인 한도 객체를 그대로 돌려준다. 받은 쪽이 limits.projects 를 바꾸면 같은 요금제를 쓰는 모든
+사용자의 한도가 함께 바뀌는, 공유된 가변 전역 상태 결함처럼 보인다.
+"""
+lure_lines = [19, 19]
+
+[safety]
+claim = "limits_for 가 돌려준 객체에 속성 대입 · 삭제 · setattr 를 해도 - 거절되든 받아들여지든 - 그 뒤 어느 요금제의 limits_for 도 처음 한도(FREE 는 projects 3 · seats 1, TEAM 은 projects 50 · seats 10)를 돌려준다"
+justification = """
+Limits 는 frozen=True 인 dataclass 라 만든 뒤의 속성 대입과 삭제를 __setattr__ · __delattr__ 가 FrozenInstanceError 로 거절하고,
+slots=True 라 인스턴스에 __dict__ 가 없어 속성 사전을 거쳐 고칠 길도 없다. Plan 의 멤버 값은 모듈을 읽을 때 한 번 만든 그 Limits
+객체들이고 Enum 은 멤버를 다시 묶는 대입을 막으므로, limits_for 가 돌려주는 객체는 처음 만든 그대로다.
+"""
+guard_symbol = "Limits"
+guard_lines = [7, 7]
+
+[twin]
+defect = """
+Limits 가 frozen 이 아니다. limits_for(Plan.FREE).projects = 1000 한 번이면 그 뒤 FREE 요금제를 쓰는 모두가 프로젝트를 1000개 만든다.
+"""

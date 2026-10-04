@@ -1,0 +1,26 @@
+decoy_id = "D133-pattern-picked-from-a-local-table"
+trap_kind = "constant_only_sink"
+
+[bait]
+apparent_defect = """
+extract 가 호출자가 준 kind 로 고른 값을 그대로 re.findall 의 정규식 자리에 넣는다. kind 가 사용자 입력이면 임의의 정규식을 넣어
+의도하지 않은 조각을 뽑게 하거나, 역추적이 폭주하는 패턴으로 서버를 멈추게 하는 정규식 주입(ReDoS) 결함처럼 보인다.
+"""
+lure_lines = [14, 14]
+
+[safety]
+claim = "extract 는 kind 가 'order' · 'phone' · 'postcode' 중 하나면 text 에서 그 종류의 고정 패턴과 맞는 조각을 왼쪽부터 겹치지 않게 차례로 돌려주고, 그 밖의 kind 는 거절한다 - 패턴은 order 가 'ORD-' 와 ASCII 숫자 8개(앞에 ASCII 영숫자, 뒤에 ASCII 숫자가 붙지 않은 것), phone 이 '010-' · ASCII 숫자 4개 · '-' · ASCII 숫자 4개, postcode 가 ASCII 숫자 5개(phone · postcode 둘 다 앞뒤에 ASCII 숫자가 붙지 않은 것)다. 그래서 kind 의 글은 정규식으로 쓰이지 않는다"
+justification = """
+re.findall 이 받는 패턴은 patterns[kind] 하나뿐이고, patterns 는 같은 함수 안에서 리터럴로 만든 세 항목의 dict 다. 그 앞의 확인이 표에
+없는 kind 를 ValueError 로 거절하므로 findall 에 닿는 것은 세 리터럴 중 하나이고, kind 자신의 글은 dict 의 키로 비교될 뿐 패턴이
+되지 않는다. 세 패턴은 반복 횟수가 정해진 [0-9]{n} 과 고정 글자, 앞뒤 둘러보기만 써서 한 자리에서 시도하는 일이 상수 크기라 역추적이
+폭주하지 않고, [0-9] 라 ASCII 가 아닌 숫자는 맞지 않는다.
+"""
+guard_symbol = "extract"
+guard_lines = [12, 13]
+
+[twin]
+defect = """
+표에 없는 kind 를 거절하지 않고 kind 의 글을 그대로 정규식으로 쓴다. kind 에 '.*' 나 '(a+)+$' 를 넣으면 임의의 조각을 뽑거나 역추적이
+폭주한다.
+"""

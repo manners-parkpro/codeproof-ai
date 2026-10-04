@@ -1,0 +1,28 @@
+decoy_id = "D141-script-json-escaper-beside-compactor"
+trap_kind = "noop_shim_neighbor"
+
+[bait]
+apparent_defect = """
+page 가 state 를 JSON 으로 만들어 <script> 요소 안에 그대로 끼워 넣는다. state 의 문자열에 "</script><script>…" 가 들어 있으면
+script 요소가 거기서 닫히고 뒤의 글이 새 태그가 되는 XSS 결함처럼 보인다 - 바로 위의 _compact_json 은 공백만 줄일 뿐 아무것도
+이스케이프하지 않는다.
+"""
+lure_lines = [16, 16]
+
+[safety]
+claim = "page 는 json.dumps(state, allow_nan=False) 로 쓸 수 있는 어떤 state 든 html.parser 로 읽으면 type 이 application/json 이고 id 가 state 이며 다른 속성이 없는 script 요소 하나만 있는 조각을 돌려주고, 그 script 의 글은 NaN · Infinity 없는 표준 JSON(RFC 8259)이며 json.loads 로 읽으면 json.loads(json.dumps(state)) 와 같은 값이다. 그렇게 쓸 수 없는 state(NaN · inf 를 담은 것 등)는 거절한다"
+justification = """
+page 는 이웃한 _compact_json 이 아니라 _script_json 을 부르고, _script_json 은 json.dumps 의 결과에서 & · < · > 를 JSON 의 \\u0026 ·
+\\u003c · \\u003e 이스케이프로 바꾼다. 그 세 글자는 JSON 문법에서 문자열 안에만 나올 수 있고 \\uXXXX 는 같은 글자를 나타내므로 값은
+그대로이고, 끼운 글에는 < 가 하나도 남지 않아 script 의 원문 글을 끝내는 "</script" 나 "<!--" 를 만들 수 없다. 그래서 파서는
+우리가 쓴 </script> 에서만 요소를 닫는다 - ASCII 밖의 글자를 그대로 쓰든 \\uXXXX 로 쓰든 같다. 두 도우미 모두 allow_nan=False 라
+표준 JSON 에 없는 NaN · Infinity 는 쓰지 않고 ValueError 로, json.dumps 가 모르는 형은 TypeError 로 거절한다.
+"""
+guard_symbol = "_script_json"
+guard_lines = [10, 12]
+
+[twin]
+defect = """
+page 가 아무것도 이스케이프하지 않는 _compact_json 을 부른다. state 의 문자열에 "</script><img src=x onerror=…>" 가 있으면 script
+요소가 닫히고 그 뒤가 새 태그가 된다.
+"""

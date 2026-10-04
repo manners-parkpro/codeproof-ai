@@ -1,0 +1,27 @@
+decoy_id = "D137-only-gone-socket-errors-are-quiet"
+trap_kind = "exception_absorbed"
+
+[bait]
+apparent_defect = """
+hang_up 이 shutdown 의 OSError 를 잡는다. 연결 재설정 · 파이프 끊김 · 입출력 오류처럼 호출자가 알아야 하는 실패까지 OSError 로 한데
+잡혀 묻히는, 너무 넓은 예외 삼킴 결함으로 보인다.
+"""
+lure_lines = [22, 22]
+
+[safety]
+claim = "hang_up 은 sock.shutdown(socket.SHUT_RDWR) 을 한 번 부르고, 그것이 errno 가 ENOTCONN 이나 EBADF 인 OSError(하위 클래스 포함)로 실패하면 그 실패를 삼킨 뒤 쓰기 쪽을 닫으려 sock.shutdown(socket.SHUT_WR) 를 한 번 더 부르며 그 실패도 같은 errno 만 삼킨다. 어느 부름에서든 그 밖의 errno(없음 포함)의 OSError 와 OSError 가 아닌 예외는 받은 객체 그대로 올리고, 아니면 None 을 돌려준다 - 그래서 연결된 스트림 소켓은 상대가 쓰기만 먼저 닫았어도 hang_up 이 돌아온 뒤 상대가 끝(EOF)을 받는다"
+justification = """
+except 절은 OSError 를 잡지만 바로 다음 줄이 exc.errno 를 _ALREADY_GONE 과 견줘 그 밖이면 맨 raise 로 같은 예외 객체를 다시 올린다.
+_ALREADY_GONE 은 모듈이 만든 frozenset 이라 담긴 값은 ENOTCONN(연결된 적이 없거나 이미 끊김) 과 EBADF(이미 닫힌 소켓) 둘뿐이다.
+macOS 는 상대가 쓰기만 먼저 닫은 연결에서도 SHUT_RDWR 을 ENOTCONN 으로 거절하고 우리 쓰기 쪽을 열어 두므로, 삼킨 뒤
+_close_write 가 SHUT_WR 로 쓰기 쪽을 따로 닫는다 - 그것까지 같은 errno 로 실패해야 정말 끊긴 것이라 삼키고, 그 밖의 실패는 맨
+raise 로 그대로 올린다. errno 가 없는 OSError 는 None 이 집합에 없어 올라가고, OSError 가 아닌 예외는 except 에 걸리지 않는다.
+"""
+guard_symbol = "_ALREADY_GONE"
+guard_lines = [23, 24]
+
+[twin]
+defect = """
+SHUT_RDWR 의 OSError 를 errno 를 보지 않고 모두 삼키고 쓰기 쪽 닫기로 넘어간다. 연결 재설정(ECONNRESET) · 입출력 오류(EIO) 같은
+SHUT_RDWR 의 실패가 호출자에게 닿지 않는다.
+"""

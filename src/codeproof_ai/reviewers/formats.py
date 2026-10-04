@@ -16,6 +16,8 @@ from codeproof_ai.domain.location import Location, Position, Span
 from codeproof_ai.llm.parse import ParseOutcome, parse_findings
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from codeproof_ai.domain.target import ReviewTarget
 
 
@@ -65,9 +67,18 @@ _SARIF_LEVEL: dict[str, Severity] = {
 
 
 class SarifFormat:
-    """SARIF 2.1.0. CodeQL · semgrep · Snyk · Trivy · Ruff 등."""
+    """SARIF 2.1.0. CodeQL · semgrep · Snyk · Trivy · Ruff 등.
+
+    Args:
+        categories: 도구 이름(소문자 `driver.name`) -> 룰 id -> 분류. 🔴 도구가 준 분류만 싣는다 -
+            모르는 도구 · 룰은 OTHER(결함 주장)로 둔다 (F4a). [실측] 전에는 전부 OTHER 여서 Ruff 의
+            관례 주장(SIM105 · style)이 직접 실행에서는 판정 불가, 가져오기에서는 FP · 탐지가 됐다.
+    """
 
     name = "sarif"
+
+    def __init__(self, categories: Mapping[str, Mapping[str, Category]] | None = None) -> None:
+        self._categories = categories or {}
 
     def recognizes(self, payload: Any) -> bool:
         return _has_list(payload, "runs")
@@ -87,8 +98,9 @@ class SarifFormat:
                 for r in (driver.get("rules") or [])
                 if isinstance(r, dict) and r.get("id") is not None
             }
+            known = self._categories.get(str(driver.get("name") or "").lower(), {})
             for res in run.get("results") or []:
-                got = self._one(res, rules, source, target)
+                got = self._one(res, rules, known, source, target)
                 if isinstance(got, Finding):
                     out.append(got)
                 else:
@@ -97,7 +109,12 @@ class SarifFormat:
         return ParseOutcome(findings=tuple(out), rejected=tuple(rejected))
 
     def _one(
-        self, res: Any, rules: dict[str, Any], source: str, target: ReviewTarget
+        self,
+        res: Any,
+        rules: dict[str, Any],
+        known: Mapping[str, Category],
+        source: str,
+        target: ReviewTarget,
     ) -> Finding | str:
         """결과 하나를 Finding 으로. 문자열이면 버린 이유다."""
         if not isinstance(res, dict):
@@ -125,7 +142,7 @@ class SarifFormat:
             message=str((res.get("message") or {}).get("text", "")),
             # SARIF: 1-based 문자 -> 내부 규약 0-based 문자 (B1)
             location=Location(path=path, span=_sarif_span(region, line)),
-            category=Category.OTHER,
+            category=known.get(rule_id, Category.OTHER),
             severity=_SARIF_LEVEL.get(
                 str(res.get("level", "warning")), Severity.WARNING
             ),

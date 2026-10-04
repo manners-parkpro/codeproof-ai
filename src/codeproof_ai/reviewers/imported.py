@@ -35,9 +35,10 @@ import json
 import re
 from typing import TYPE_CHECKING, Any
 
+from codeproof_ai.analysis.python.ruff import introspect_categories, ruff_version
 from codeproof_ai.domain.reviewer import ReviewerKind, ReviewResult
 from codeproof_ai.domain.run import ToolVersion
-from codeproof_ai.reviewers.formats import FORMATS
+from codeproof_ai.reviewers.formats import FORMATS, SarifFormat
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -144,6 +145,12 @@ class ImportedReviewer:
         self.kind = kind
         self.fmt = fmt
         self._parser = FORMATS[fmt]
+        self._ruff: ToolVersion | None = None
+        if fmt == "sarif" and (ruff := introspect_categories()):
+            # 🔴 Ruff 가 낸 SARIF 는 직접 실행과 같은 출처의 분류를 쓴다 - 관례 주장이
+            #    결함 주장이 되지 않게 (F4a). 분류를 준 판은 tool_versions 로 신고한다 (E01).
+            self._parser = SarifFormat({"ruff": ruff})
+            self._ruff = ruff_version()
         self._cursor: dict[str, int] = {}
         self.run_record = read_run_record(root)
         self.rejected: list[str] = []
@@ -153,6 +160,9 @@ class ImportedReviewer:
 
     def config_signature(self) -> str:
         base = f"imported({self.name},fmt={self.fmt},kind={self.kind.value}"
+        if self.fmt == "sarif":
+            # 🔴 분류 출처를 적는다 - 도구의 것과 OTHER 는 다른 숫자를 낸다 (F4a)
+            base += ",cat=ruff-tool" if self._ruff else ",cat=none"
         run = self.run_record
         if run is None:
             return base + ")"
@@ -175,6 +185,8 @@ class ImportedReviewer:
         return {}
 
     def tool_versions(self) -> tuple[ToolVersion, ...]:
+        if self._ruff is not None:
+            return (self._ruff,)
         run = self.run_record
         if run is None or not run.get("cli_version"):
             return ()

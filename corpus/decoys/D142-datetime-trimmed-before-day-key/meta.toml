@@ -1,0 +1,26 @@
+decoy_id = "D142-datetime-trimmed-before-day-key"
+trap_kind = "type_narrowed"
+
+[bait]
+apparent_defect = """
+_day_key 가 받은 값의 isoformat() 을 그대로 날짜 열쇠로 쓴다. datetime 은 date 의 하위 타입이라 형 검사를 통과해 여기까지 오는데,
+그러면 열쇠에 "T10:30:00" 같은 시각이 붙어 같은 날의 기록이 시각마다 다른 묶음으로 갈라지는 결함으로 보인다.
+"""
+lure_lines = [7, 7]
+
+[safety]
+claim = "bucket 은 어떤 date · datetime 이든(하위 타입 포함) 그 값의 날짜 부분을 'YYYY-MM-DD' 꼴(연도 네 자리 · 달과 날 두 자리)로 돌려준다 - datetime 은 시각과 시간대를 버리고 그 값에 적힌 날짜를 쓴다(다른 시간대로 옮기지 않는다)"
+justification = """
+_day_key 를 부르는 곳은 bucket 하나이고, bucket 은 먼저 isinstance(value, datetime) 으로 datetime 과 그 하위 타입을 골라 value.date()
+로 바꾼다. datetime 이 date 의 하위 타입이므로 이 확인이 date 확인보다 앞서야 하는데, bucket 은 datetime 만 묻기 때문에 그 차례가
+문제되지 않는다. 그래서 _day_key 에 닿는 값은 시각이 없는 date 이고, date.isoformat() 은 연도를 네 자리로 채운 YYYY-MM-DD 를
+돌려준다. date() 는 시간대를 옮기지 않고 그 값에 적힌 연 · 월 · 일을 쓴다.
+"""
+guard_symbol = "bucket"
+guard_lines = [11, 12]
+
+[twin]
+defect = """
+bucket 이 datetime 을 date 로 바꾸지 않는다. datetime(2024, 3, 1, 10, 30) 의 열쇠가 "2024-03-01T10:30:00" 이 되어 같은 날의 기록이
+시각마다 다른 묶음으로 갈라진다.
+"""

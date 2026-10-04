@@ -115,6 +115,12 @@ def introspect_categories(timeout: float = 30.0) -> dict[str, Category]:
     return mapping
 
 
+def ruff_version(timeout: float = 30.0) -> ToolVersion:
+    out = run_tool("ruff", ["--version"], timeout)
+    raw = out.stdout.strip() or out.stderr.strip()
+    return ToolVersion(name="ruff", version=raw.replace("ruff ", "") or "unknown")
+
+
 class RuffAnalyzer:
     """Ruff 를 리뷰어로 취급한다.
 
@@ -147,9 +153,7 @@ class RuffAnalyzer:
         self._categories = introspect_categories(timeout)
 
     def version(self) -> ToolVersion:
-        out = run_tool("ruff", ["--version"], self.timeout)
-        raw = out.stdout.strip() or out.stderr.strip()
-        return ToolVersion(name="ruff", version=raw.replace("ruff ", "") or "unknown")
+        return ruff_version(self.timeout)
 
     def config_signature(self) -> str:
         noqa = "ignore-noqa" if self.ignore_noqa else "respect-noqa"

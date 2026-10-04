@@ -1,0 +1,26 @@
+decoy_id = "D131-tag-count-is-one-byte"
+trap_kind = "bounded_input"
+
+[bait]
+apparent_defect = """
+read_tags 가 스트림 머리에서 읽은 개수에 이름 크기를 곱한 만큼을 그대로 읽어 달라고 한다. 개수 칸은 보낸 쪽이 정하므로, 거대한
+개수를 담은 머리 하나로 한 번에 수 기가바이트를 읽게 해 메모리를 잡는 상한 없는 입력 결함으로 보인다.
+"""
+lure_lines = [24, 24]
+
+[safety]
+claim = "read_tags 는 어떤 스트림이든 한 번의 read 에 255 × 16 = 4080 바이트를 넘게 요구하지 않는다 - 스트림이 끝까지 있으면 정확히 1 + 개수 × 16 바이트를 읽어 개수만큼의 이름(각 16바이트에서 끝의 NUL 을 떼고 ASCII 로 읽은 것)을 차례로 돌려주고, 그 전에 끝나거나(read 가 빈 값을 주면) 이름에 ASCII 가 아닌 바이트가 있으면 거절한다"
+justification = """
+_COUNT 는 부호 없는 한 바이트(>B)라 unpack 이 돌려주는 개수는 0 부터 255 까지다. 그래서 body 를 위해 _read_exact 가 받는 크기는
+많아야 255 × 16 = 4080 이고, _read_exact 는 남은 크기만큼만 read 에 요구하므로 머리의 1 과 함께 어떤 read 도 4080 을 넘게 요구하지
+않는다. 짧은 읽기는 남은 크기를 줄여 가며 되풀이하고 read 가 빈 값을 주면 EOFError 로 거절하기 때문에, 끝까지 있는 스트림에서는
+정확히 1 + 개수 × 16 바이트를 읽고 그 너머를 건드리지 않는다. 이름은 16바이트마다 끝의 NUL 을 떼어 ASCII 로 읽으므로 ASCII 가
+아닌 바이트는 decode 가 거절한다.
+"""
+guard_symbol = "_COUNT"
+guard_lines = [6, 6]
+
+[twin]
+defect = """
+개수 칸을 네 바이트(>I)로 읽는다. 머리에 0xFFFFFFFF 를 담으면 약 64 GiB 를 한 번에 읽어 달라고 한다.
+"""

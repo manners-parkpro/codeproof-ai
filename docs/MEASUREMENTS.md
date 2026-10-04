@@ -4,33 +4,33 @@
 
 정적분석기 리뷰어 `ruff` (ruff/0.16.8) · 설정 `ruff(select=ALL,target=py314,ignore-noqa,cat=tool)`
 
-코퍼스 **130쌍** · `corpus_hash` `0e9abee6424e699e04d93cd8`
+코퍼스 **150쌍** · `corpus_hash` `128d50305dfb7443c57b5aee`
 
 ## 채점 기준 편차 — 헤드라인
 
-증명된 음성 위의 **같은 지적 651건**을 서로 다른 정답 정의로 채점했다. **지적은 하나도 바뀌지 않았다.**
+증명된 음성 위의 **같은 지적 773건**을 서로 다른 정답 정의로 채점했다. **지적은 하나도 바뀌지 않았다.**
 
 | 채점자 | TP | FP | 판정불가 | FP 가능 |
 |---|---:|---:|---:|:---:|
-| `provable_safety` | 0 | 15 | 636 | o |
-| `injected_defect` | 0 | 651 | 0 | o |
-| `paired_fix` | 0 | 16 | 635 | o |
-| `static_corroboration` | 5 | 0 | 646 | x |
+| `provable_safety` | 0 | 17 | 756 | o |
+| `injected_defect` | 0 | 773 | 0 | o |
+| `paired_fix` | 0 | 18 | 755 | o |
+| `static_corroboration` | 5 | 0 | 768 | x |
 
-🔴 FP 를 낼 수 있는 채점자끼리: **15 ~ 651** — 43.4배. 정의 선택만으로 생긴 FP: **636건**
+🔴 FP 를 낼 수 있는 채점자끼리: **17 ~ 773** — 45.5배. 정의 선택만으로 생긴 FP: **756건**
 
 > FP 를 구조적으로 낼 수 없는 채점자(합의 기반)는 편차 계산에서 뺀다 — 동의 부재는 반증이 아니므로 그 0 을 넣으면 범주 차이를 편차로 오해한다.
 
 ## 짝 채점 (PrimeVul)
 
-**구별 성공 1/130** — 안전한 쪽과 터지는 쪽을 갈라낸 경우다.
+**구별 성공 1/150** — 안전한 쪽과 터지는 쪽을 갈라낸 경우다.
 
 | 판정 | 건수 | 뜻 |
 |---|---:|---|
 | P-C 구별 | 1 | 양성만 지적 — 유일하게 옳다 |
-| P-V 과잉지적 | 5 | 둘 다 지적 |
-| P-B 미탐지 | 116 | 둘 다 미지적 |
-| P-R 역전 | 8 | **음성만** 지적 — 거꾸로다 |
+| P-V 과잉지적 | 6 | 둘 다 지적 |
+| P-B 미탐지 | 134 | 둘 다 미지적 |
+| P-R 역전 | 9 | **음성만** 지적 — 거꾸로다 |
 
 > 지적 단위로만 보면 이 사실이 보이지 않는다. twin 쪽만 세면 Precision 이 높게 나오는데, 그 TP 는 안전한 쪽에도 똑같이 낸 지적이 우연히 결함 자리에 걸린 것이다.
 
@@ -42,46 +42,45 @@
 
 | 미끼 분류 | 물림 | 지적 | 물림율 | 95% CI | decoy | decoy 95% CI |
 |---|---:|---:|---:|---|---:|---|
-| `constant_only_sink` | 6 | 51 | 11.8% | [5.5%, 23.4%] | 6/10 | [31.3%, 83.2%] |
-| `exception_absorbed` | 6 | 52 | 11.5% | [5.4%, 23.0%] | 4/9 | [18.9%, 73.3%] |
-| `idempotent_retry` | 2 | 41 | 4.9% | [1.3%, 16.1%] | 2/9 | [6.3%, 54.7%] |
-| `unreachable_branch` | 1 | 53 | 1.9% | [0.3%, 9.9%] | 1/10 | [1.8%, 40.4%] |
-| `bounded_input` | 0 | 43 | 0.0% | [0.0%, 8.2%] | 0/9 | [0.0%, 29.9%] |
-| `caller_held_lock` | 0 | 44 | 0.0% | [0.0%, 8.0%] | 0/9 | [0.0%, 29.9%] |
-| `contract_half_open` | 0 | 41 | 0.0% | [0.0%, 8.6%] | 0/9 | [0.0%, 29.9%] |
-| `defensive_copy` | 0 | 44 | 0.0% | [0.0%, 8.0%] | 0/9 | [0.0%, 29.9%] |
-| `enclosing_context` | 0 | 53 | 0.0% | [0.0%, 6.8%] | 0/9 | [0.0%, 29.9%] |
-| `frozen_after_init` | 0 | 40 | 0.0% | [0.0%, 8.8%] | 0/9 | [0.0%, 29.9%] |
-| `misleading_name` | 0 | 40 | 0.0% | [0.0%, 8.8%] | 0/10 | [0.0%, 27.8%] |
-| `noop_shim_neighbor` | 0 | 45 | 0.0% | [0.0%, 7.9%] | 0/9 | [0.0%, 29.9%] |
-| `type_narrowed` | 0 | 49 | 0.0% | [0.0%, 7.3%] | 0/10 | [0.0%, 27.8%] |
-| `upstream_validation` | 0 | 55 | 0.0% | [0.0%, 6.5%] | 0/9 | [0.0%, 29.9%] |
+| `exception_absorbed` | 7 | 63 | 11.1% | [5.5%, 21.2%] | 5/11 | [21.3%, 72.0%] |
+| `constant_only_sink` | 6 | 56 | 10.7% | [5.0%, 21.5%] | 6/11 | [28.0%, 78.7%] |
+| `idempotent_retry` | 2 | 53 | 3.8% | [1.0%, 12.8%] | 2/11 | [5.1%, 47.7%] |
+| `unreachable_branch` | 1 | 56 | 1.8% | [0.3%, 9.4%] | 1/11 | [1.6%, 37.7%] |
+| `enclosing_context` | 1 | 60 | 1.7% | [0.3%, 8.9%] | 1/10 | [1.8%, 40.4%] |
+| `bounded_input` | 0 | 57 | 0.0% | [0.0%, 6.3%] | 0/11 | [0.0%, 25.9%] |
+| `caller_held_lock` | 0 | 54 | 0.0% | [0.0%, 6.6%] | 0/10 | [0.0%, 27.8%] |
+| `contract_half_open` | 0 | 56 | 0.0% | [0.0%, 6.4%] | 0/11 | [0.0%, 25.9%] |
+| `defensive_copy` | 0 | 58 | 0.0% | [0.0%, 6.2%] | 0/11 | [0.0%, 25.9%] |
+| `frozen_after_init` | 0 | 45 | 0.0% | [0.0%, 7.9%] | 0/10 | [0.0%, 27.8%] |
+| `misleading_name` | 0 | 43 | 0.0% | [0.0%, 8.2%] | 0/11 | [0.0%, 25.9%] |
+| `noop_shim_neighbor` | 0 | 49 | 0.0% | [0.0%, 7.3%] | 0/10 | [0.0%, 27.8%] |
+| `type_narrowed` | 0 | 53 | 0.0% | [0.0%, 6.8%] | 0/11 | [0.0%, 25.9%] |
+| `upstream_validation` | 0 | 70 | 0.0% | [0.0%, 5.2%] | 0/11 | [0.0%, 25.9%] |
 
-현재 구성비 **2.3%** · 균등 구성비 2.1%
-🔴 구성비만 바꿔 도달 가능: **0.0% ~ 11.8%**
+현재 구성비 **2.2%** · 균등 구성비 2.1%
+🔴 구성비만 바꿔 도달 가능: **0.0% ~ 11.1%**
 
-⚖ 분류 간 차이가 **실재한다** - p=0.0001 (decoy 단위 순열 검정 · 14종 · decoy 130개 · 순열 9999회). ⚠ 다만 10종이 아직 분류당 목표 10쌍에 못 미친다 - 선언한 표본을 다 채운 뒤의 판정이라야 결론이다
-📋 4/14종이 선언 목표 달성 — 목표는 **미리** 박아 둔 값이다. 유의해질 때까지 늘리다 멈추면 optional stopping 이다.
+⚖ 분류 간 차이가 **실재한다** - p=0.0001 (decoy 단위 순열 검정 · 14종 · decoy 150개 · 순열 9999회)
 지적 단위 구간은 실제보다 좁다 — decoy 하나가 여러 지적을 낸다. 판정은 decoy 단위로 한다 (DESIGN §3.5).
 
 ### 가드 위치
 
 | 가드 위치 | 물림 | 지적 | 물림율 | 95% CI | decoy | decoy 95% CI |
 |---|---:|---:|---:|---|---:|---|
-| `callee` | 7 | 190 | 3.7% | [1.8%, 7.4%] | 6/36 | [7.9%, 31.9%] |
-| `local` | 4 | 130 | 3.1% | [1.2%, 7.6%] | 3/26 | [4.0%, 29.0%] |
-| `module` | 2 | 164 | 1.2% | [0.3%, 4.3%] | 2/33 | [1.7%, 19.6%] |
-| `caller` | 2 | 167 | 1.2% | [0.3%, 4.3%] | 2/35 | [1.6%, 18.6%] |
+| `callee` | 8 | 215 | 3.7% | [1.9%, 7.2%] | 7/40 | [8.7%, 31.9%] |
+| `local` | 4 | 148 | 2.7% | [1.1%, 6.7%] | 3/30 | [3.5%, 25.6%] |
+| `caller` | 3 | 199 | 1.5% | [0.5%, 4.3%] | 3/40 | [2.6%, 19.9%] |
+| `module` | 2 | 211 | 0.9% | [0.3%, 3.4%] | 2/40 | [1.4%, 16.5%] |
 
-현재 구성비 **2.3%** · 균등 구성비 2.3%
-🔴 구성비만 바꿔 도달 가능: **1.2% ~ 3.7%** — 3.1배
+현재 구성비 **2.2%** · 균등 구성비 2.2%
+🔴 구성비만 바꿔 도달 가능: **0.9% ~ 3.7%** — 3.9배
 
-⚖ 분류 간 차이를 **아직 주장할 수 없다** - p=0.4155 (decoy 단위 순열 검정 · 4종 · decoy 130개 · 순열 9999회). 같다는 뜻이 아니다 - 이 표본으로는 모른다
+⚖ 분류 간 차이를 **아직 주장할 수 없다** - p=0.3177 (decoy 단위 순열 검정 · 4종 · decoy 150개 · 순열 9999회). 같다는 뜻이 아니다 - 이 표본으로는 모른다
 지적 단위 구간은 실제보다 좁다 — decoy 하나가 여러 지적을 낸다. 판정은 decoy 단위로 한다 (DESIGN §3.5).
 
 ## 에이전트 층 — `claude-code`
 
-리뷰어 `claude-code 2.1.284 · claude-fable-5-1 · effort=low` · 샘플당 **8회** 실행 · 짝 **60쌍** (코퍼스의 다른 70쌍은 이 실행에 없다) · docstring `keep` · 캐시 `uncontrolled` · 파서가 버린 지적 0건
+리뷰어 `claude-code 2.1.284 · claude-fable-5-1 · effort=low` · 샘플당 **8회** 실행 · 짝 **60쌍** (코퍼스의 다른 90쌍은 이 실행에 없다) · docstring `keep` · 캐시 `uncontrolled` · 파서가 버린 지적 0건
 
 설정 `imported(claude-code,fmt=native,kind=agent,runner_version=2,model=claude-fable-5-1,effort=low,isolation=safe-mode,strict-mcp-config,no-session-persistence,DISABLE_AUTOUPDATER=1,permission=dontAsk;tools=Read,Grep,Glob,instruction_hash=7d1332f82a7d41f3c8daf0b9,prompt_hash=305d8e25f7fdbdafc7b89332,schema_hash=b957f782e99241837721bb08,docstrings=keep)`
 
@@ -116,7 +115,7 @@
 
 ## 에이전트 층 — `claude-code-neutral`
 
-리뷰어 `claude-code 2.1.284 · claude-fable-5-1 · effort=low` · 샘플당 **3회** 실행 (앞 3회만 묶음) · 짝 **60쌍** (코퍼스의 다른 70쌍은 이 실행에 없다) · docstring `neutral` · 캐시 `uncontrolled` · 파서가 버린 지적 0건
+리뷰어 `claude-code 2.1.284 · claude-fable-5-1 · effort=low` · 샘플당 **3회** 실행 (앞 3회만 묶음) · 짝 **60쌍** (코퍼스의 다른 90쌍은 이 실행에 없다) · docstring `neutral` · 캐시 `uncontrolled` · 파서가 버린 지적 0건
 
 설정 `imported(claude-code-neutral,fmt=native,kind=agent,runner_version=3,model=claude-fable-5-1,effort=low,isolation=safe-mode,strict-mcp-config,no-session-persistence,DISABLE_AUTOUPDATER=1,permission=dontAsk;tools=Read,Grep,Glob,instruction_hash=7d1332f82a7d41f3c8daf0b9,prompt_hash=305d8e25f7fdbdafc7b89332,schema_hash=b957f782e99241837721bb08,docstrings=neutral)`
 
@@ -151,7 +150,7 @@
 
 ## 에이전트 층 — `codex-cli`
 
-리뷰어 `codex-cli 0.158.0 · gpt-6-astra · effort=low` · 샘플당 **3회** 실행 (앞 3회만 묶음) · 짝 **60쌍** (코퍼스의 다른 70쌍은 이 실행에 없다) · docstring `keep` · 캐시 `uncontrolled` · 파서가 버린 지적 0건
+리뷰어 `codex-cli 0.158.0 · gpt-6-astra · effort=low` · 샘플당 **3회** 실행 (앞 3회만 묶음) · 짝 **60쌍** (코퍼스의 다른 90쌍은 이 실행에 없다) · docstring `keep` · 캐시 `uncontrolled` · 파서가 버린 지적 0건
 
 설정 `imported(codex-cli,fmt=native,kind=agent,runner_version=2,model=gpt-6-astra,effort=low,isolation=ignore-user-config,ignore-rules,ephemeral,permission=sandbox=read-only;exec=allowed,instruction_hash=7d1332f82a7d41f3c8daf0b9,prompt_hash=305d8e25f7fdbdafc7b89332,schema_hash=b957f782e99241837721bb08,docstrings=keep)`
 
@@ -186,7 +185,7 @@
 
 ## 에이전트 층 — `codex-cli-neutral`
 
-리뷰어 `codex-cli 0.158.0 · gpt-6-astra · effort=low` · 샘플당 **3회** 실행 (앞 3회만 묶음) · 짝 **60쌍** (코퍼스의 다른 70쌍은 이 실행에 없다) · docstring `neutral` · 캐시 `uncontrolled` · 파서가 버린 지적 0건
+리뷰어 `codex-cli 0.158.0 · gpt-6-astra · effort=low` · 샘플당 **3회** 실행 (앞 3회만 묶음) · 짝 **60쌍** (코퍼스의 다른 90쌍은 이 실행에 없다) · docstring `neutral` · 캐시 `uncontrolled` · 파서가 버린 지적 0건
 
 설정 `imported(codex-cli-neutral,fmt=native,kind=agent,runner_version=3,model=gpt-6-astra,effort=low,isolation=ignore-user-config,ignore-rules,ephemeral,permission=sandbox=read-only;exec=allowed,instruction_hash=7d1332f82a7d41f3c8daf0b9,prompt_hash=305d8e25f7fdbdafc7b89332,schema_hash=b957f782e99241837721bb08,docstrings=neutral)`
 

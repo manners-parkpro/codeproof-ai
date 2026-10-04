@@ -107,6 +107,33 @@ class TestSarifColumns:
         assert f.quoted_code == "run(cmd, shell=True)"
 
 
+class TestSarifCategories:
+    """🔴 분류는 그 SARIF 를 낸 도구에 묻는다 - 모르는 도구 · 룰은 OTHER(결함 주장)다 (F4a).
+
+    [실측] 전에는 전부 OTHER 여서 Ruff 의 관례 주장(SIM105 · style)이 직접 실행에서는
+    판정 불가, 가져오기에서는 FP · 탐지로 채점됐다.
+    """
+
+    @staticmethod
+    def _from(tool: str) -> Any:
+        payload = _sarif()
+        payload["runs"][0]["tool"]["driver"]["name"] = tool
+        return payload
+
+    def test_the_tools_own_category_is_used(self) -> None:
+        fmt = SarifFormat({"ruff": {"S602": Category.STYLE}})
+        assert fmt.parse(self._from("ruff"), "x", TARGET).findings[0].category is Category.STYLE
+
+    def test_another_tool_with_the_same_rule_id_stays_a_defect_claim(self) -> None:
+        """룰 id 가 같아도 다른 도구가 냈으면 그 분류를 빌려 오지 않는다."""
+        fmt = SarifFormat({"ruff": {"S602": Category.STYLE}})
+        assert fmt.parse(self._from("semgrep"), "x", TARGET).findings[0].category is Category.OTHER
+
+    def test_without_a_catalog_everything_is_a_defect_claim(self) -> None:
+        found = SarifFormat().parse(self._from("ruff"), "x", TARGET).findings[0]
+        assert found.category is Category.OTHER
+
+
 class TestSarifReportedRange:
     """🔴 SARIF 지적도 보고 범위의 끝까지 싣는다.
 

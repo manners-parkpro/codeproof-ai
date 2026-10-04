@@ -1,0 +1,25 @@
+decoy_id = "D150-month-number-matched-before-indexing"
+trap_kind = "upstream_validation"
+
+[bait]
+apparent_defect = """
+month_name 이 받은 번호에서 1 을 빼 _NAMES 의 첨자로 바로 쓴다. 번호가 0 이면 _NAMES[-1] 인 December 가 조용히 나오고 13 이면
+IndexError 가 나는, 범위를 확인하지 않은 첨자 결함처럼 보인다.
+"""
+lure_lines = [19, 19]
+
+[safety]
+claim = "month_name 은 text 가 ASCII 숫자로 쓴 1 부터 12 까지의 달 번호이면 (한 자리 달은 앞에 0 하나를 붙여도 된다 - 7 · 07) 그 달의 영어 이름을 돌려주고, 그 밖의 문자열이면 무엇이든 ValueError 를 낸다 - 0 · 13 · 부호 · 앞뒤 공백이나 줄바꿈 · 밑줄 · 소수점 · 유니코드 숫자 · 빈 문자열 · 앞에 0 이 둘 이상인 것을 포함한다"
+justification = """
+month_name 은 번호를 쓰기 전에 _month 를 거치고, _month 는 _MONTH 의 fullmatch 로 문자열 전체가 0?[1-9] 나 1[0-2] 와 맞을 때만
+int 로 바꾸므로 _NAMES 의 첨자는 늘 0 부터 11 까지다. [1-9] 처럼 글자를 늘어놓은 집합은 ASCII 숫자만 맞고 fullmatch 는 끝의
+줄바꿈도 받지 않기 때문에, 0 · 13 · 공백 · 부호 · 밑줄 · 유니코드 숫자는 int 에 닿기 전에 ValueError 가 된다.
+"""
+guard_symbol = "_month"
+guard_lines = [13, 14]
+
+[twin]
+defect = """
+_month 가 빈 문자열만 막고 int() 로 바꾼다. 0 은 _NAMES[-1] 인 December, -3 은 October 가 되어 범위 밖 번호가 조용히 다른 달
+이름이 되고, 13 은 ValueError 가 아닌 IndexError 가 나며, 앞뒤 공백 · 부호 · 밑줄 · 유니코드 숫자는 그대로 받아들여진다.
+"""

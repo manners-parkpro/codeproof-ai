@@ -1,0 +1,25 @@
+decoy_id = "D144-cell-bounds-checked-at-construction"
+trap_kind = "upstream_validation"
+
+[bait]
+apparent_defect = """
+index 가 칸의 row · col 을 확인 없이 row * COLS + col 로 바꾼다. col 이 COLS 이상이면 다음 줄의 칸과 같은 번호가 되고, 음수면
+앞 줄로 넘어가 다른 칸을 가리키는, 범위 확인이 빠진 결함처럼 보인다.
+"""
+lure_lines = [22, 22]
+
+[safety]
+claim = "row 가 0~5 · col 이 0~8 인 bool 이 아닌 정수 좌표로는 Cell 을 만들 수 있고, index 는 어떤 Cell 이든 0 이상 ROWS × COLS(54) 미만의 정수를 돌려주며 row 나 col 이 다른 두 Cell 은 서로 다른 수를 받는다 - 그 밖의 좌표(bool 좌표 포함)로는 Cell 을 만들 때 거절한다"
+justification = """
+Cell 은 frozen dataclass 라 만든 뒤에는 row · col 이 바뀌지 않고, 만들 때마다 __post_init__ 이 bool 좌표를 TypeError 로 거절하고
+0 <= row < ROWS 와 0 <= col < COLS 를 함께 확인해 밖이면 ValueError 로 거절한다. dataclasses.replace 도 __init__ 을 거치므로 같은 확인을 지난다. 그래서 index 가 받는
+칸은 0 <= col < COLS 이고, row * COLS + col 은 row 마다 겹치지 않는 COLS 칸의 구간 [row * COLS, (row + 1) * COLS) 에 떨어지므로
+서로 다른 칸은 서로 다른 수를, 가장 큰 칸은 ROWS * COLS - 1 을 받는다.
+"""
+guard_symbol = "__post_init__"
+guard_lines = [15, 18]
+
+[twin]
+defect = """
+__post_init__ 이 row 만 확인한다. Cell(0, 9) 를 만들 수 있고 그 번호 9 는 Cell(1, 0) 과 같으며, Cell(1, -1) 은 Cell(0, 8) 과 같은 8 이 된다.
+"""

@@ -1,0 +1,26 @@
+decoy_id = "D135-ranked-rows-copied-before-tagging"
+trap_kind = "defensive_copy"
+
+[bait]
+apparent_defect = """
+rank 가 정렬한 행 dict 에 row["rank"] = place 로 순위를 써 넣는다. 그 dict 가 호출자가 넘긴 것이면 순위를 매기는 것만으로 호출자의
+데이터에 rank 키가 생기고, 같은 행을 다른 목록에서 다시 매기면 앞의 순위를 덮어쓰는 제자리 변형 결함처럼 보인다.
+"""
+lure_lines = [8, 10]
+
+[safety]
+claim = "rank 는 모든 행에 bool 이 아닌 int score 가 있으면 호출자의 목록과 그 안의 dict 를 바꾸지 않고, 각 행의 사본을 score 내림차순(같으면 받은 차례)으로 늘어놓아 1부터 센 rank 를 더한 새 목록을 돌려준다 - 사본은 원래 행의 키와 값 객체를 그대로 담고 이미 rank 키가 있으면 사본에서만 덮어쓴다. score 가 없거나 bool 인 행이 있으면 호출자의 것을 바꾸지 않은 채 거절한다"
+justification = """
+첫 줄의 [dict(row) for row in rows] 가 행마다 새 dict 를 만들어 새 목록에 담으므로, 그 뒤의 정렬과 row["rank"] 대입은 모두 사본과
+새 목록에만 닿는다. 값이 int 라 사본이 값을 나눠 가져도 바뀔 것이 없고, 같은 dict 가 목록에 두 번 있어도 사본은 따로 둘이다. sort 는
+안정 정렬이라 reverse=True 에서도 점수가 같은 행은 받은 차례를 지키며, enumerate(…, 1) 이 1부터 센다. bool 점수는 정렬 앞의 확인에서
+TypeError 로, score 가 없는 행은 정렬의 key 에서 KeyError 로 끝나는데, 둘 다 사본을 읽으므로 그때까지 바뀐 것은 사본뿐이다.
+"""
+guard_symbol = "rank"
+guard_lines = [5, 5]
+
+[twin]
+defect = """
+목록만 새로 만들고 행 dict 는 호출자의 것을 그대로 담는다. 순위를 매기면 호출자의 dict 에 rank 키가 생기고, 같은 dict 가 두 번 있으면
+나중 순위가 앞의 것을 덮어쓴다.
+"""

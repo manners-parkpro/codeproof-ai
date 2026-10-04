@@ -186,6 +186,46 @@ class TestItCatchesTheBugThatSlippedThrough:
         assert "라벨이 거짓" in result.failure
 
 
+class TestTheOptimizedBuildIsAttackedToo:
+    """🔴 `python -O` 는 assert 를 지운다 - assert 로 쓴 가드는 그 실행에서 없다.
+
+    [실측 · 6라운드 검토] 가드의 `if not 조건: raise` 를 `assert 조건` 으로 바꾼 약화를 다섯 쌍의
+    증명이 통과시켰다. 기본 실행에서는 AssertionError 도 거절로 세기 때문이다.
+    """
+
+    _ATTACK = (
+        "def attack(mod: object) -> bool:\n"
+        "    try:\n"
+        "        mod.accept(10)  # type: ignore[attr-defined]\n"
+        "    except (AssertionError, ValueError):\n"
+        "        return False\n"
+        "    return True\n"
+    )
+    _TWIN = "def accept(n: int) -> int:\n    return n\n"
+
+    def _pair(self, tmp_path: Path, decoy: str) -> Path:
+        pair = _fake_pair(tmp_path, self._ATTACK)
+        (pair / "decoy.py").write_text(decoy, encoding="utf-8")
+        (pair / "twin.py").write_text(self._TWIN, encoding="utf-8")
+        return pair
+
+    def test_an_assert_guard_is_broken(self, tmp_path: Path) -> None:
+        decoy = 'def accept(n: int) -> int:\n    assert 0 <= n < 10, "범위 밖"\n    return n\n'
+        assert run_proof(self._pair(tmp_path, decoy)).broke_decoy, (
+            "assert 가드를 못 깼다 - -O 로 돌리면 범위 밖 값이 그대로 지나간다"
+        )
+
+    def test_an_assert_that_only_narrows_is_not_a_break(self, tmp_path: Path) -> None:
+        decoy = (
+            "def accept(n: int) -> int:\n"
+            "    if not 0 <= n < 10:\n"
+            '        raise ValueError("범위 밖")\n'
+            "    assert isinstance(n, int)\n"
+            "    return n\n"
+        )
+        assert run_proof(self._pair(tmp_path, decoy)).ok
+
+
 class TestRaceWindowAlsoLowersTheSwitchInterval:
     """줄 단위 창만으로는 한 줄 안의 호출 경계에서 일어나는 전환이 드러나지 않는다 (4라운드 검토).
 

@@ -37,6 +37,7 @@ D015 로 검산: 세마포어 4에서는 스레드가 4개 들어가 경쟁이 �
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import sys
 import threading
@@ -112,11 +113,14 @@ class ProofResult:
         return None
 
 
-def load_module(path: Path, alias: str) -> ModuleType:
+def load_module(path: Path, alias: str, *, optimize: bool = False) -> ModuleType:
     """파일 하나를 모듈로 읽는다.
 
     같은 basename(decoy.py · twin.py)이 19쌍에 반복되므로 alias 로 구분한다 -
     안 그러면 sys.modules 가 첫 번째 것을 재사용해 **전부 같은 코드를 시험**한다.
+
+    optimize 면 `python -O` 로 읽은 것처럼 assert 와 `__debug__` 에 걸린 코드를 지운다
+    (`compile` 의 optimize=1 - 같은 프로세스 안에서 된다).
     """
     spec = importlib.util.spec_from_file_location(alias, path)
     if spec is None or spec.loader is None:
@@ -125,7 +129,10 @@ def load_module(path: Path, alias: str) -> ModuleType:
     mod = importlib.util.module_from_spec(spec)
     sys.modules[alias] = mod
     try:
-        spec.loader.exec_module(mod)
+        if optimize:
+            exec(compile(path.read_bytes(), str(path), "exec", optimize=1), mod.__dict__)  # noqa: S102
+        else:
+            spec.loader.exec_module(mod)
     except Exception as exc:  # 어떤 예외든 증명 실패로 보고한다
         msg = f"{path} 를 import 하다 터졌다: {exc!r}"
         raise ProofError(msg) from exc
@@ -247,9 +254,27 @@ def _attempt(attack: Attack, path: Path, alias: str) -> bool:
 
     IndexError · KeyError · AssertionError 는 전부 「깨졌다」의 표현이다.
     공격 코드가 삼키면 그 구분이 사라지므로 여기서 잡는다.
+
+    🔴 `python -O` 로 읽은 판도 친다 - 모듈에 assert 나 `__debug__` 가 있을 때만 두 판이 다르다.
+       [실측 · 6라운드 검토] 가드의 `if not 조건: raise` 를 `assert 조건` 으로 바꾼 약화를 다섯 쌍의
+       증명이 통과시켰다 - 기본 실행에서는 AssertionError 도 거절이지만 -O 에서는 가드가 사라진다.
+       어느 판이든 깨지면 깨짐이다 (시도 횟수와 같은 부등호 - 양쪽이 엄격해진다).
     """
-    mod = load_module(path, alias)
+    if _hit(attack, load_module(path, alias)):
+        return True
+    return _has_debug_code(path) and _hit(attack, load_module(path, f"{alias}_O", optimize=True))
+
+
+def _hit(attack: Attack, mod: ModuleType) -> bool:
     try:
         return bool(attack(mod))
     except Exception:  # 터진 것도 결함 실현이다
         return True
+
+
+def _has_debug_code(path: Path) -> bool:
+    """-O 가 지우는 코드가 있는가 - optimize=1 은 assert 와 `__debug__` 만 바꾼다 (`compile`)."""
+    return any(
+        isinstance(node, ast.Assert) or (isinstance(node, ast.Name) and node.id == "__debug__")
+        for node in ast.walk(ast.parse(path.read_bytes()))
+    )
