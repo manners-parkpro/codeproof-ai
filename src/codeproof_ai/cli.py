@@ -19,8 +19,8 @@ from codeproof_ai.analysis.registry import (
     create_analyzer,
 )
 from codeproof_ai.analysis.registry import available as analyzer_available
-from codeproof_ai.corpus.decoy import validate_corpus
-from codeproof_ai.corpus.mutants import breaks, load_mutants
+from codeproof_ai.corpus.decoy import pair_dirs, validate_corpus
+from codeproof_ai.corpus.mutants import breaks, load_mutants, mutant_alias
 from codeproof_ai.domain.reviewer import ReviewerKind
 from codeproof_ai.eval.bait import BaitStatus, measure
 from codeproof_ai.eval.export import DOCSTRING_MODES, export_for_agent, sample_digest
@@ -354,11 +354,7 @@ def _cmd_decoy_mutants(corpus: Path, race_runs: int, prefixes: Sequence[str]) ->
     if race_runs < 0:
         print("--race-runs 는 0 이상이다", file=sys.stderr)
         return 2
-    pairs = sorted(
-        d
-        for d in corpus.glob("D*")
-        if d.is_dir() and (not prefixes or d.name.split("-")[0] in prefixes)
-    )
+    pairs = [d for d in pair_dirs(corpus) if not prefixes or d.name.split("-")[0] in prefixes]
     wrong: list[str] = []
     counted = 0
     with tempfile.TemporaryDirectory(prefix="codeproof-mutants-") as tmp:
@@ -374,7 +370,7 @@ def _cmd_decoy_mutants(corpus: Path, race_runs: int, prefixes: Sequence[str]) ->
                     print(f"  —  {mutant.label} (경쟁 · 건너뜀)")
                     continue
                 broke = sum(
-                    breaks(pair, mutant, workdir, f"_cli_{pair.name[:4]}_{i}_{r}")
+                    breaks(pair, mutant, workdir, mutant_alias(pair, i, r))
                     for r in range(runs)
                 )
                 counted += 1
@@ -383,7 +379,7 @@ def _cmd_decoy_mutants(corpus: Path, race_runs: int, prefixes: Sequence[str]) ->
                 mark = "✓" if ok else "✗"
                 print(f"  {mark}  {mutant.label} ({want} · 깨짐 {broke}/{runs})")
                 if not ok:
-                    wrong.append(f"{pair.name[:4]} {mutant.label} {broke}/{runs}")
+                    wrong.append(f"{pair.name} {mutant.label} {broke}/{runs}")
     print(f"\n변이 {counted}개 · 기대와 다름 {len(wrong)}")
     for w in wrong:
         print(f"  ✗ {w}")

@@ -21,6 +21,10 @@ decoy_id = "D00X-짧은-설명"
 #   noop_shim_neighbor    진짜 sanitize 옆의 no-op shim
 #   unreachable_branch    도달 불가능한 분기
 #   idempotent_retry      재시도가 멱등이라 중복 실행이 무해
+#   defensive_copy        제자리 변형처럼 보이지만 경계에서 복사본을 받음
+#   bounded_input         무제한 할당처럼 보이지만 상류가 상한을 강제
+#   exception_absorbed    광범위 except 가 정리 경로에만 있어 삼키는 것이 정확한 동작
+#   frozen_after_init     가변 전역처럼 보이지만 초기화 후 불변이 강제됨
 trap_kind = "upstream_validation"
 
 # 의도적으로 수용하는 WARN 규칙 id (선택).

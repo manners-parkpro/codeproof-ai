@@ -20,8 +20,10 @@ from codeproof_ai.eval.export import (
     neutral_docstring,
     sample_digest,
 )
+from codeproof_ai.eval.loader import load_decoy_samples
 from codeproof_ai.llm.render import load_prompt, prompt_hash
 from codeproof_ai.llm.schema import review_schema
+from tests.corpora import CORPORA, REPO
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -149,11 +151,13 @@ class TestDocstringKnob:
     (DESIGN §7.10c).
     """
 
-    def test_every_shipped_file_keeps_its_lines(
-        self, shipped_samples: list[LabeledSample]
-    ) -> None:
-        """줄 번호가 그대로여야 정답 구간(미끼 · 가드 · twin)이 맞는다 - 바뀌는 줄은 하나뿐이다."""
-        for s in shipped_samples:
+    @pytest.mark.parametrize("root", CORPORA, ids=lambda r: r.relative_to(REPO).as_posix())
+    def test_every_shipped_file_keeps_its_lines(self, root: Path) -> None:
+        """줄 번호가 그대로여야 정답 구간(미끼 · 가드 · twin)이 맞는다 - 바뀌는 줄은 하나뿐이다.
+
+        neutral 로 재는 코퍼스 전부를 본다 (DESIGN §7.10d 「수집 전에 준비할 것」 ②).
+        """
+        for s in load_decoy_samples(root):
             for f in s.target.files:
                 new = neutral_docstring(f.content)
                 before, after = f.content.splitlines(), new.splitlines()

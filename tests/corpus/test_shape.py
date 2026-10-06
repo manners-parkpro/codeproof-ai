@@ -16,6 +16,7 @@ from pathlib import Path
 
 import pytest
 
+from codeproof_ai.corpus.decoy import pair_dirs
 from codeproof_ai.corpus.shape import GuardShape, classify
 
 DECOYS = Path(__file__).resolve().parents[2] / "corpus" / "decoys"
@@ -170,7 +171,7 @@ class TestTheShippedCorpus:
     @staticmethod
     def _shapes() -> Counter[str]:
         counts: Counter[str] = Counter()
-        for d in sorted(DECOYS.glob("D*")):
+        for d in pair_dirs(DECOYS):
             meta = tomllib.loads((d / "meta.toml").read_text(encoding="utf-8"))
             counts[
                 classify(

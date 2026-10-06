@@ -15,6 +15,7 @@ from codeproof_ai.corpus.decoy import (
     Level,
     decoy_lines_in_twin,
     load_decoy,
+    pair_dirs,
     twin_changed_lines,
     validate_decoy,
 )
@@ -157,15 +158,10 @@ def load_decoy_samples(corpus_root: Path, *, widen_twin: bool = False) -> list[L
     Args:
         widen_twin: twin 정답 구간의 보조 정의 (`decoy_to_samples`).
     """
-    # 🔴 없는 경로는 예외가 아니라 빈 결과다. 호출부(CLI)가 「샘플이 없다」로
+    # 🔴 없는 경로는 예외가 아니라 빈 결과다 (`pair_dirs`). 호출부(CLI)가 「샘플이 없다」로
     #    exit 2 를 내는데, 여기서 FileNotFoundError 가 터지면 그 경로를 못 탄다.
-    if not corpus_root.is_dir():
-        return []
-
     samples: list[LabeledSample] = []
-    for d in sorted(p for p in corpus_root.iterdir() if p.is_dir()):
-        if d.name.startswith("_"):
-            continue
+    for d in pair_dirs(corpus_root):
         try:
             rec = load_decoy(d)
         except DecoyLoadError:

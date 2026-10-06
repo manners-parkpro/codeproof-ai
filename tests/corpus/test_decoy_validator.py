@@ -18,9 +18,11 @@ from codeproof_ai.corpus.decoy import (
     TrapKind,
     changed_lines_in_decoy,
     load_decoy,
+    pair_dirs,
     validate_corpus,
     validate_decoy,
 )
+from tests.corpora import CORPORA, REPO
 
 REPO_DECOYS = Path(__file__).resolve().parents[2] / "corpus" / "decoys"
 
@@ -332,13 +334,15 @@ class TestDiffRanges:
 class TestShippedCorpus:
     """저장소에 실제로 들어 있는 decoy 가 규격을 지키는지."""
 
-    def test_repo_corpus_is_clean(self) -> None:
+    @pytest.mark.parametrize("root", CORPORA, ids=lambda r: r.relative_to(REPO).as_posix())
+    def test_repo_corpus_is_clean(self, root: Path) -> None:
         """🔴 훅과 같은 기준(`--strict`)이다 - 경고도 센다.
 
         훅은 Write·Edit 로 고칠 때만 돈다. Bash·편집기로 고친 decoy 는 이 테스트만 본다.
         [실측] 오류만 보던 때는 쓰이지 않는 수용 표기(V11)를 넣어도 통과했다.
+        복사로만 들어오는 코퍼스(DESIGN §7.10d)도 같은 기준으로 본다.
         """
-        report = validate_corpus(REPO_DECOYS)
+        report = validate_corpus(root)
         detail = "\n".join(f"{n}: {v}" for n, v in report.violations)
         assert report.ok, f"코퍼스에 오류가 있다:\n{detail}"
         assert report.warn_count == 0, f"코퍼스에 경고가 있다 (훅은 --strict):\n{detail}"
@@ -348,3 +352,16 @@ class TestShippedCorpus:
         assert (REPO_DECOYS / "_TEMPLATE").is_dir()
         report = validate_corpus(REPO_DECOYS)
         assert all(name != "_TEMPLATE" for name, _ in report.violations)
+
+
+class TestPairDirs:
+    def test_pairs_are_found_by_structure_not_prefix(self, tmp_path: Path) -> None:
+        """🔴 접두사로 찾지 않는다 - `glob("D*")` 는 codex 가 쓴 코퍼스(XC…)를 조용히 건너뛴다."""
+        for name in ("XC001-b", "D001-a", "_TEMPLATE"):
+            (tmp_path / name).mkdir()
+        (tmp_path / "notes.txt").write_text("", encoding="utf-8")
+        assert [p.name for p in pair_dirs(tmp_path)] == ["D001-a", "XC001-b"]
+
+    def test_a_missing_corpus_is_empty(self, tmp_path: Path) -> None:
+        """없는 경로는 예외가 아니라 빈 목록이다 - CLI 가 「샘플이 없다」로 다룬다."""
+        assert pair_dirs(tmp_path / "없음") == []
