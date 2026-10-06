@@ -1,0 +1,2 @@
+after transfer(a -> b, 150): {'a': -50, 'b': 150}
+claim mentions overdraft: True | (잔액보다 큰 금액은 받는다 - 이 장부는 음수 잔액을 막지 않는다)

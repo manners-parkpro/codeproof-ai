@@ -1,0 +1,4 @@
+send m1 -> True | outbox: ['hello'] | sent: {'m1'} | acks pending: 1
+send m1 again -> True | outbox: ['hello']
+outbox: ['a', '', 'x', '😀'] | sent: ['', 'm1', 'm2', 'mé'] | keys without a send: []
+every recorded key had its body appended first: True

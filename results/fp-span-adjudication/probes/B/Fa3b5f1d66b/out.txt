@@ -1,0 +1,17 @@
+Plan value <Plan.FREE: 'free'> -> 0.0 | isinstance Plan: True
+Plan value <Plan.FREE: 'free'> -> 0.0 | isinstance Plan: True
+Plan value <Plan.FREE: 'free'> -> 0.0 | isinstance Plan: True
+Plan value <Plan.FREE: 'free'> -> 0.0 | isinstance Plan: True
+Plan value <Plan.FREE: 'free'> -> 0.0 | isinstance Plan: True
+Plan value <Plan.FREE: 'free'> -> 0.0 | isinstance Plan: True
+Plan value <Plan.PRO: 'pro'> -> 9.9 | isinstance Plan: True
+Plan value <Plan.PRO: 'pro'> -> 9.9 | isinstance Plan: True
+Plan value <Plan.PRO: 'pro'> -> 9.9 | isinstance Plan: True
+Plan value <Plan.PRO: 'pro'> -> 9.9 | isinstance Plan: True
+Plan value <Plan.PRO: 'pro'> -> 9.9 | isinstance Plan: True
+Plan value <Plan.PRO: 'pro'> -> 9.9 | isinstance Plan: True
+legacy calls with in-type values: []
+subclass Plan -> TypeError <enum 'Sub'> cannot extend <enum 'Plan'>
+plain str 'free' -> 25.0 | isinstance Plan: False
+plain str 'pro' -> 33.333333333333336 | isinstance Plan: False
+legacy calls with plain str: ['free', 'pro']

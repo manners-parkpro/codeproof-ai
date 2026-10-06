@@ -1,0 +1,4 @@
+save_profile returned: None | stored: {'u1': {'email': 'a@example.com'}}
+log output: '' | warnings: []
+module docstring: 프로필 저장 - 저장을 먼저 마치고, 알림 메일만 실패를 삼킨다.
+save failure still raises: ValueError | u2 stored: False

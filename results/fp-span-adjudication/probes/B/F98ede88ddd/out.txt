@@ -1,0 +1,6 @@
+python 3.14.6
+save #1: ok | content='a = 1\n'
+save #2: ok | content='a = 2\n'
+save #3: ok | content='a = 3\n'
+directory after saves: ['config.toml']
+_write direct: ok | 'direct\n'

@@ -1,0 +1,6 @@
+python 3.13.2
+tempfile cleanup swallows FileNotFoundError: True
+content: 'final\n' | mode kept: 0o640
+leftover files: ['config.toml']
+exceptions raised: 0 []
+warnings: []

@@ -1,0 +1,2 @@
+discount(nan) -> ZeroDivisionError | isinstance(nan, int): False
+int-typed samples: 40012 | reaching 1/0: []

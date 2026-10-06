@@ -1,0 +1,3 @@
+direct shape=text n=65537: len=65537 eof=True tail=0 unused=0
+tried=208 rejected=0
+tried=360 rejected=0

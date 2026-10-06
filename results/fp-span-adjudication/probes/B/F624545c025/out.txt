@@ -1,0 +1,4 @@
+missing key -> ConfigError missing required keys: ['port', 'timeout']
+bad value -> ValueError is ConfigError: False invalid literal for int() with base 10: 'abc'
+bad value -> ValueError is ConfigError: False could not convert string to float: 'x'
+ok -> Config(host='h', port=80, timeout=1.5)

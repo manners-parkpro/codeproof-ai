@@ -1,0 +1,5 @@
+exits: propagated SystemExit (same object type as raised) | spans added: []
+interrupted: propagated KeyboardInterrupt (same object type as raised) | spans added: []
+halts: propagated Halt (same object type as raised) | spans added: []
+fails: propagated ValueError (same object type as raised) | spans added: [('fails', 'ValueError')]
+ok: returned 7 | spans added: [('ok', 'ok')]

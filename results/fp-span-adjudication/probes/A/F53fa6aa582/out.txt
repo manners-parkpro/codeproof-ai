@@ -1,0 +1,7 @@
+caller list unchanged: True
+internal order equals construction order: False
+same seed, two calls, same order: False
+returned list is not the internal list: True
+both results are permutations of the tracks: True
+public members: ['shuffled']
+justification states in-place shuffle of the private copy: True

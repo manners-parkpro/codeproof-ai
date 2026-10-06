@@ -1,0 +1,5 @@
+store annotations: {'make_cursor': <class 'object'>, 'rows': collections.abc.Iterable[str], 'return': <class 'int'>}
+type: ignore on the call line: True
+normal path: 2 closed: True
+exception path closed: True
+store(42, ...): TypeError 'int' object is not callable

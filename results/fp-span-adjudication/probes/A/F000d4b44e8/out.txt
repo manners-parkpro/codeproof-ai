@@ -1,0 +1,4 @@
+{default} {-30: ('ok', {'alice': 130, 'bob': -30}), 500: ('ok', {'alice': -400, 'bob': 500}), 30: ('ok', {'alice': 70, 'bob': 30})}
+{'isolation_level': None} {-30: ('ok', {'alice': 130, 'bob': -30}), 500: ('ok', {'alice': -400, 'bob': 500}), 30: ('ok', {'alice': 70, 'bob': 30})}
+{'autocommit': True} {-30: ('ok', {'alice': 130, 'bob': -30}), 500: ('ok', {'alice': -400, 'bob': 500}), 30: ('ok', {'alice': 70, 'bob': 30})}
+{'autocommit': False} {-30: ('ok', {'alice': 130, 'bob': -30}), 500: ('ok', {'alice': -400, 'bob': 500}), 30: ('ok', {'alice': 70, 'bob': 30})}

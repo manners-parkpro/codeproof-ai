@@ -1,0 +1,8 @@
+python 3.14.6 | zlib 1.2.12
+direct shape=zeros n=16384: len=16384 eof=True tail=0 unused=0
+direct shape=zeros n=65537: len=65537 eof=True tail=0 unused=0
+direct shape=random n=16384: len=16384 eof=True tail=0 unused=0
+direct shape=random n=65537: len=65537 eof=True tail=0 unused=0
+direct shape=text n=16384: len=16384 eof=True tail=0 unused=0
+direct shape=text n=65537: len=65537 eof=True tail=0 unused=0
+tried=208 rejected=0

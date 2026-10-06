@@ -1,0 +1,5 @@
+python 3.14.6 | hasattr(ntpath, 'isreserved'): True
+save_attachment('report.pdf') -> report.pdf
+save_attachment('../escaped.txt') -> ValueError: 쓸 수 없는 파일 이름: '../escaped.txt'
+save_attachment('CON') -> ValueError: 쓸 수 없는 파일 이름: 'CON'
+written: ['report.pdf']

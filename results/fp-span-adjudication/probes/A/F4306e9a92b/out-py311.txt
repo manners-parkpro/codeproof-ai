@@ -1,0 +1,5 @@
+python 3.11.11
+tempfile cleanup swallows FileNotFoundError: False
+leftover files: []
+exceptions raised: 10 ["_write: TypeError: NamedTemporaryFile() got an unexpected keyword argument 'delete_on_close'", "save: TypeError: NamedTemporaryFile() got an unexpected keyword argument 'delete_on_close'"]
+warnings: []

@@ -1,0 +1,7 @@
+ValueError        -> propagated same object: True | spans: [('call', 'ValueError')]
+SystemExit        -> propagated same object: True | spans: []
+KeyboardInterrupt -> propagated same object: True | spans: []
+GeneratorExit     -> propagated same object: True | spans: []
+Halt              -> propagated same object: True | spans: []
+generator closed early -> spans: []
+success ->  7 [('ok', 'ok')]

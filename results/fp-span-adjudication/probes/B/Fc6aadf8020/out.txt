@@ -1,0 +1,2 @@
+mail failure swallowed, profile stored: {'email': 'a@example.com'}
+store failure propagates: ValueError email 이 없다 | stored: False

@@ -1,0 +1,5 @@
+backup raised: RuntimeError | target exists: True
+partial zip entries: ['a.txt'] | testzip: None
+retry on the same path: FileExistsError
+claim: rejects existing target -> True
+claim: partial zip on exception -> True

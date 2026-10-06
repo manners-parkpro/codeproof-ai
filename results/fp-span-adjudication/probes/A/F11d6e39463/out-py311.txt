@@ -1,0 +1,9 @@
+python 3.11.11 | ntpath.isreserved present: False
+  'report-2024.v2.pdf' -> AttributeError: module 'ntpath' has no attribute 'isreserved'
+  'CON' -> AttributeError: module 'ntpath' has no attribute 'isreserved'
+  'nul.txt' -> AttributeError: module 'ntpath' has no attribute 'isreserved'
+  'trail.' -> AttributeError: module 'ntpath' has no attribute 'isreserved'
+  '../escaped.txt' -> ValueError: 쓸 수 없는 파일 이름: '../escaped.txt'
+  'sub/../../escaped.txt' -> ValueError: 쓸 수 없는 파일 이름: 'sub/../../escaped.txt'
+  '..' -> ValueError: 쓸 수 없는 파일 이름: '..'
+  entries in box: ['sub'] | entries beside box: ['box']

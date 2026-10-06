@@ -1,0 +1,5 @@
+python 3.11.11 | hasattr(ntpath, 'isreserved'): False
+save_attachment('report.pdf') -> AttributeError: module 'ntpath' has no attribute 'isreserved'
+save_attachment('../escaped.txt') -> ValueError: 쓸 수 없는 파일 이름: '../escaped.txt'
+save_attachment('CON') -> AttributeError: module 'ntpath' has no attribute 'isreserved'
+written: []

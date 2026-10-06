@@ -1,0 +1,3 @@
+int values tried: 4009 | reached 1/0: []
+isinstance(nan, int): False
+discount(nan) -> ZeroDivisionError division by zero

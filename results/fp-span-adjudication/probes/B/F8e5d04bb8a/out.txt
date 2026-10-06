@@ -1,0 +1,3 @@
+store signature: (make_cursor: object, rows: collections.abc.Iterable[str]) -> int
+store -> 2 | closed: True | rows: ['a', 'b']
+exception path closed: True

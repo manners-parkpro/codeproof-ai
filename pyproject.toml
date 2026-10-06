@@ -38,7 +38,7 @@ src = ["src", "tests"]
 #    decoy 는 수상해 보이는 코드를 일부러 담은 물건이라, 린트를 만족시키려고
 #    고치는 순간 표본이 파괴된다 (D005 twin 의 미사용 인자는 가드가 제거됐다는 증거다).
 #    분석기는 --isolated 로 돌므로 이 설정의 영향을 받지 않는다.
-extend-exclude = ["corpus/decoys"]
+extend-exclude = ["corpus/decoys", "results"]   # results 는 기록이다 - 린트에 맞추려 고치면 기록이 바뀐다
 
 [tool.ruff.lint]
 select = [

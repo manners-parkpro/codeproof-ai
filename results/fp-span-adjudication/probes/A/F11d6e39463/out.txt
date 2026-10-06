@@ -1,0 +1,9 @@
+python 3.14.6 | ntpath.isreserved present: True
+  'report-2024.v2.pdf' -> written box/report-2024.v2.pdf
+  'CON' -> ValueError: 쓸 수 없는 파일 이름: 'CON'
+  'nul.txt' -> ValueError: 쓸 수 없는 파일 이름: 'nul.txt'
+  'trail.' -> ValueError: 쓸 수 없는 파일 이름: 'trail.'
+  '../escaped.txt' -> ValueError: 쓸 수 없는 파일 이름: '../escaped.txt'
+  'sub/../../escaped.txt' -> ValueError: 쓸 수 없는 파일 이름: 'sub/../../escaped.txt'
+  '..' -> ValueError: 쓸 수 없는 파일 이름: '..'
+  entries in box: ['report-2024.v2.pdf', 'sub'] | entries beside box: ['box']

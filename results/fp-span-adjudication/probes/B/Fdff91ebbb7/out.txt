@@ -1,0 +1,3 @@
+backup -> RuntimeError source failed
+left at target: [('a.txt', b'alpha'), ('b.txt', b'beta')]
+retry same path -> FileExistsError

@@ -1,0 +1,3 @@
+notify=down  -> ConnectionError: d-1 | ledger: {'d-1': {'delivery': 'd-1', 'points': 50, 'notified': False}}
+notify=other -> RuntimeError: bug in notifier | ledger: {'d-1': {'delivery': 'd-1', 'points': 50, 'notified': False}}
+caller retries -> 1 | ledger: {'d-1': {'delivery': 'd-1', 'points': 50, 'notified': True}}

@@ -1,0 +1,11 @@
+_ROOT: /srv/data | exists: False | is_symlink: False
+resolve_entry('report.csv') -> /srv/data/report.csv
+resolve_entry('sub/x.txt') -> /srv/data/sub/x.txt
+resolve_entry('../../etc/passwd') -> ValueError ../../etc/passwd
+resolve_entry('..') -> ValueError ..
+resolve_entry('a/../../../secret') -> ValueError a/../../../secret
+symlinked root: 'report.csv' -> accepted=False | really inside root=True
+symlinked root: 'new.txt' -> accepted=False | really inside root=True
+symlinked root: '../outside.txt' -> accepted=False | really inside root=False
+symlinked root: '../srv-data/report.csv' -> accepted=False | really inside root=True
+symlinked root: '../real-data/report.csv' -> accepted=False | really inside root=True

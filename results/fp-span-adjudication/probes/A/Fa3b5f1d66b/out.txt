@@ -1,0 +1,6 @@
+FREE identity kept: [True, True, True, True, True, True] rates: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+PRO identity kept: [True, True, True, True, True, True] rates: [9.9, 9.9, 9.9, 9.9, 9.9, 9.9]
+legacy calls for Plan values: []
+Plan subclass: TypeError <enum '_Sub'> cannot extend <enum 'Plan'>
+'free' isinstance(Plan): False rate: 25.0 legacy calls: ['free']
+'pro' isinstance(Plan): False rate: 33.333333333333336 legacy calls: ['pro']

@@ -1,0 +1,5 @@
+missing timeout: -> ConfigError: missing required keys: ['timeout'] | ConfigError? True
+bad port: -> ValueError: invalid literal for int() with base 10: 'eighty' | ConfigError? False
+bad timeout: -> ValueError: could not convert string to float: 'soon' | ConfigError? False
+all good: -> Config(host='h', port=80, timeout=1.5)
+KeyError over all key subsets: 0

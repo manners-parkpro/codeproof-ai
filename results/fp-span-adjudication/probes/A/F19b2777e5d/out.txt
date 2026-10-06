@@ -1,0 +1,19 @@
+/srv exists on this host: False
+default environment (_ROOT = /srv/data, not a link here):
+  [default] 'report.csv' -> /srv/data/report.csv | inside real root: True
+  [default] 'sub/x.txt' -> /srv/data/sub/x.txt | inside real root: True
+  [default] '../../etc/passwd' -> ValueError
+  [default] '..' -> ValueError
+  [default] 'a/../../../secret' -> ValueError
+root is a real directory:
+  [plain] 'report.csv' -> probes/A/F19b2777e5d/tmppmsuxcfy/real/report.csv | inside real root: True
+  [plain] 'sub/x.txt' -> probes/A/F19b2777e5d/tmppmsuxcfy/real/sub/x.txt | inside real root: True
+  [plain] '../../etc/passwd' -> ValueError
+  [plain] '..' -> ValueError
+  [plain] 'a/../../../secret' -> ValueError
+root is a symlink to that directory:
+  [link] 'report.csv' -> ValueError
+  [link] 'sub/x.txt' -> ValueError
+  [link] '../../etc/passwd' -> ValueError
+  [link] '..' -> ValueError
+  [link] 'a/../../../secret' -> ValueError

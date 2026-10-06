@@ -1,0 +1,3 @@
+caller list unchanged: True
+internal order after shuffled(): ['t6', 't7', 't2', 't4', 't0', 't3', 't1', 't5'] | equals original: False
+same seed twice gives same result: False | returned list is a copy: True

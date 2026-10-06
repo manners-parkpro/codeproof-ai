@@ -1,0 +1,8 @@
+Cell(1.5, 2.0) accepted: Cell(row=1.5, col=2.0) | index: 15.5 float | isinstance(1.5, int): False
+int and int-subclass cells: bad indexes: [] | distinct: 54
+IntEnum cell index type: int
+rejected: (True, 1) TypeError
+rejected: (1, False) TypeError
+rejected: (6, 0) ValueError
+rejected: (0, 9) ValueError
+rejected: (-1, 0) ValueError

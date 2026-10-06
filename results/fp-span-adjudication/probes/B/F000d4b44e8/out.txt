@@ -1,0 +1,8 @@
+mode={}                           transfer(alice -> bob,  -30) -> ok   | balances {'alice': 130, 'bob': -30}
+mode={}                           transfer(alice -> bob,  250) -> ok   | balances {'alice': -150, 'bob': 250}
+mode={'isolation_level': None}    transfer(alice -> bob,  -30) -> ok   | balances {'alice': 130, 'bob': -30}
+mode={'isolation_level': None}    transfer(alice -> bob,  250) -> ok   | balances {'alice': -150, 'bob': 250}
+mode={'autocommit': True}         transfer(alice -> bob,  -30) -> ok   | balances {'alice': 130, 'bob': -30}
+mode={'autocommit': True}         transfer(alice -> bob,  250) -> ok   | balances {'alice': -150, 'bob': 250}
+mode={'autocommit': False}        transfer(alice -> bob,  -30) -> ok   | balances {'alice': 130, 'bob': -30}
+mode={'autocommit': False}        transfer(alice -> bob,  250) -> ok   | balances {'alice': -150, 'bob': 250}

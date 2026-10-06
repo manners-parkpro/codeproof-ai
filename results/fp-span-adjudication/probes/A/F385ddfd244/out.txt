@@ -1,0 +1,3 @@
+sizes after 5 saves: [12, 12, 12, 12, 12] | content: 'retries = 3\n'
+leftover files: ['config.toml']
+fsync/fdatasync calls during saves: []

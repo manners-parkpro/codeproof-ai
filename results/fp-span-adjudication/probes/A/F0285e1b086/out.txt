@@ -1,0 +1,5 @@
+run([1,2,3]) -> 6
+run([1,2,3]) again -> 12 | _totals: {'sum': 12}
+4 concurrent callers -> _totals: 79800 == sum(range(400)): True
+proof resets the running total before each scenario: 2
+proof expects the total of all callers: True

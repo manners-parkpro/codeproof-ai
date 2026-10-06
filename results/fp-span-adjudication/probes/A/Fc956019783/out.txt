@@ -1,0 +1,5 @@
+all attempts failed -> ConnectionError d-1
+ledger after failure: {'d-1': {'delivery': 'd-1', 'points': 50, 'notified': False}}
+notify ValueError propagated | ledger: {'d-1': {'delivery': 'd-1', 'points': 50, 'notified': False}, 'd-2': {'delivery': 'd-2', 'points': 50, 'notified': False}}
+caller retries d-1 -> 2 | ledger: {'d-1': {'delivery': 'd-1', 'points': 50, 'notified': True}, 'd-2': {'delivery': 'd-2', 'points': 50, 'notified': False}}
+proof treats the caller's call after failure as a retry that must leave one row: True

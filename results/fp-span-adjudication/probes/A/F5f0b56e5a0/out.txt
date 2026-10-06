@@ -1,0 +1,4 @@
+Plan members and value lengths: [('FREE', 4), ('PRO', 3)]
+rates over every Plan member: [0.0, 9.9] legacy calls: []
+Plan(''): ValueError '' is not a valid Plan
+rate('') -> ZeroDivisionError | isinstance('', Plan): False | legacy calls: ['']

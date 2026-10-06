@@ -1,0 +1,12 @@
+{
+  "what": "측정 뒤 FP 구간 지적 판정 — DESIGN §3.5 「측정 뒤 FP 구간 지적」 (선언 커밋 65150ec · 계산 코드 bdd1e68 · 둘 다 채점 전)",
+  "date": "2026-10-06",
+  "input": "items.jsonl — 두 neutral 묶음(목표 150쌍 · 각 3회)에서 slack 0 provable_safety 가 FP 로 판정한 지적을 (샘플 · 지적 열쇠)로 묶은 28항목. 리뷰어와 회차를 지웠고 key.jsonl 은 두 판정이 끝난 뒤에 열었다",
+  "extract": "uv run python scripts/fp_span_findings.py extract <dir>",
+  "adjudicators": "다른 문맥의 Claude 에이전트 둘 (A · B) — 같은 입력 · 같은 규칙 · 서로의 결과와 열쇠를 보지 않았다. 규칙 · 위협 모델 · 선례는 커밋 bdd1e68 의 DESIGN 에서 그대로 뽑아 넣었다 (§3.5 「기존 쌍 수정」 · 위협 모델 문단 · §F4a 아래 주장 밖 결함 · 「쓰는 단계에서 먼저 치는 것」)",
+  "probes": "probes/<A|B>/<id>/ — 판정자가 decoy.py 사본을 import 해 친 탐침과 출력. decoy 사본은 싣지 않았다 (그 쌍의 corpus/decoys/<id>/decoy.py 를 같은 폴더에 두고 돌린다). 공개 저장소에 로컬 경로를 싣지 않으려고 저장소 뿌리를 <repo>/, 판정 폴더를 probes/ 로 바꿔 적었다",
+  "agreement": "verdict 28/28 일치 (재현 표시만 1항목 갈림)",
+  "result": "correct 1 — D066 decoy 「음수 points 를 넘기면 이체 방향이 뒤집힌다」 (claude 가 3회 모두 냄 · 선례 「음수」 · 두 판정자 모두 재현). 그 밖 27 은 wrong. 리뷰어별 FP 구간 항목: claude 22 (샘플 17) 중 correct 1 · codex 6 (샘플 3) 중 0 · 두 리뷰어 공통 항목 0",
+  "sensitivity": "주 지표 claude - codex +17.8%p [+11.1, +24.9] 구별된다 → correct 를 판정 불가로 두면 +18.4%p [+12.0, +25.3] 구별된다 (A · B 같음) — uv run python scripts/fp_span_findings.py sensitivity results/fp-span-adjudication results/fp-span-adjudication/verdicts-A.jsonl results/fp-span-adjudication/verdicts-B.jsonl",
+  "not_fixed": "D066 은 새 쌍이라 선언대로 고치지 않았다 (판정은 한 번이다)"
+}

@@ -1,0 +1,4 @@
+Cell(1.5, 2.0) accepted -> index 15.5 (float) | isinstance(row, int): False
+Cell(1.0, 2.0) accepted -> index 11.0 (float) | isinstance(row, int): False
+in-type cells with non-int or out-of-range index: [] | IntEnum: 17
+bool -> TypeError

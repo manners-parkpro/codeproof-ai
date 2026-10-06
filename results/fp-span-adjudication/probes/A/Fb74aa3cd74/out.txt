@@ -1,0 +1,6 @@
+acks before: {'pending': 2}
+attempt 1: _deliver -> False | outbox size 1 | acks {'pending': 1}
+attempt 2: _deliver -> True | outbox size 1 | acks {'pending': 1}
+send -> True | outbox: ['hello'] | sent keys: {'m1'}
+acks pending after send (2 -> 1 means one ack was lost and none was received): 1
+times body was put in outbox: 1

@@ -1,0 +1,6 @@
+members: [('FREE', 'free', 4), ('PRO', 'pro', 3)]
+Plan('') -> ValueError '' is not a valid Plan
+rate( <Plan.FREE: 'free'> ) -> 0.0
+rate( <Plan.PRO: 'pro'> ) -> 9.9
+rate( '' ) -> ZeroDivisionError division by zero | isinstance Plan: False
+rate( 'x' ) -> 100.0
