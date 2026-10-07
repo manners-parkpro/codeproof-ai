@@ -23,8 +23,8 @@ PKG = "codeproof_ai"
 
 # 각 레이어가 import 해도 되는 레이어. 자기 자신은 항상 허용.
 #
-#   domain  은 아무것도 import 하지 않는다 (I1)
-#   런타임(analysis·llm·verify) 은 eval 을 볼 수 없다 (I2)
+#   domain  은 아무것도 import 하지 않는다 (A1)
+#   런타임(analysis·llm·verify) 은 eval 을 볼 수 없다 (A1)
 #     → 정답 라벨이 eval 안에 있으므로, 라벨을 볼 방법이 구조적으로 없다
 ALLOWED: dict[str, frozenset[str]] = {
     "domain": frozenset(),
@@ -100,7 +100,7 @@ class TestLayerGraph:
         assert not violations, "레이어 위반:\n" + "\n".join(f"  {v}" for v in violations)
 
     def test_runtime_cannot_reach_labels(self) -> None:
-        """I2 - 런타임은 정답 라벨에 도달할 수 없다.
+        """A1 - 런타임은 정답 라벨에 도달할 수 없다.
 
         타입 이름이 아니라 **레이어**로 검사한다. eval/ 에 무슨 타입이
         새로 생기든 런타임은 볼 수 없다.
@@ -108,7 +108,7 @@ class TestLayerGraph:
         for runtime in ("analysis", "llm", "verify"):
             assert "eval" not in ALLOWED[runtime], (
                 f"{runtime} 가 eval 을 import 할 수 있게 열려 있다. "
-                "그 순간 런타임 검증이 정답을 볼 수 있게 되고 I2 가 무너진다."
+                "그 순간 런타임 검증이 정답을 볼 수 있게 되고 A1 이 무너진다."
             )
 
     def test_domain_depends_on_nothing_internal(self) -> None:
@@ -146,7 +146,7 @@ class TestTheCheckActuallyWorks:
 
 
 class TestDomainPurity:
-    """I1 - domain 은 stdlib 외에 아무것도 import 하지 않는다."""
+    """A1 - domain 은 stdlib 외에 아무것도 import 하지 않는다."""
 
     def test_domain_imports_only_stdlib(self) -> None:
         stdlib = set(sys.stdlib_module_names)
@@ -164,7 +164,7 @@ class TestDomainPurity:
             if bad := roots - stdlib - {PKG, "__future__"}:
                 offenders[str(path.relative_to(SRC))] = bad
         assert not offenders, (
-            f"domain 에 외부 의존성이 들어왔다 (I1 위반): {offenders}. "
+            f"domain 에 외부 의존성이 들어왔다 (A1 위반): {offenders}. "
             "이걸 허용하면 도메인 테스트가 API 키를 요구하기 시작한다."
         )
 

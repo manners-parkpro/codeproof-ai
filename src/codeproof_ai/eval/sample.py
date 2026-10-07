@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 class Stratum(StrEnum):
     """코퍼스 층.
 
-    🔴 층을 섞어서 집계하지 않는다 (CLAUDE.md E2).
+    🔴 층을 섞어서 집계하지 않는다 (CLAUDE.md F3).
        Recall 은 A·B 각각, FPR 은 C·D 각각으로 보고한다.
     """
 
@@ -61,7 +61,7 @@ class Defect:
 class SafetyRationale:
     """decoy 가 왜 안전한지에 대한 서면 근거.
 
-    🔴 이것이 없으면 D층 음성 라벨이 성립하지 않는다 (CLAUDE.md K2).
+    🔴 이것이 없으면 D층 음성 라벨이 성립하지 않는다 (CLAUDE.md G3).
 
     근거 없는 decoy 는 그냥 "아무도 확인 안 한 코드" 이고,
     그건 이 프로젝트가 비판하는 바로 그것 - 증거의 부재를 부재의 증거로
@@ -100,7 +100,7 @@ class SafetyRationale:
 
     def __post_init__(self) -> None:
         if not self.justification.strip():
-            msg = "decoy 에는 서면 안전 근거가 반드시 있어야 한다 (K2)"
+            msg = "decoy 에는 서면 안전 근거가 반드시 있어야 한다 (G3)"
             raise ValueError(msg)
         if self.covered_lines is not None:
             lo, hi = self.covered_lines
@@ -143,7 +143,7 @@ class LabeledSample:
         # D층 **음성**(decoy) 에만 안전 근거를 요구한다.
         # D층 **양성**(twin) 은 결함을 들고 안전 근거가 없다.
         if self.stratum is Stratum.DECOY and not self.defects and self.safety is None:
-            msg = f"{sid}: D층 음성에는 SafetyRationale 이 필수다 (K2)"
+            msg = f"{sid}: D층 음성에는 SafetyRationale 이 필수다 (G3)"
             raise ValueError(msg)
 
         # 짝 채점(PrimeVul P-C/P-V/P-B/P-R)은 짝이 있어야 성립한다.

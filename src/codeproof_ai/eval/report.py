@@ -219,9 +219,11 @@ def _pairs_section(run: ReviewerRun) -> str:
     hit, total = discrimination_rate(pairs)
     counts = pair_summary(pairs)
     return "\n".join([
-        "## 짝 채점 (PrimeVul)",
+        f"## 짝 채점 (PrimeVul) — `{HEADLINE_GRADER}`",
         "",
-        f"**구별 성공 {hit}/{total}** — 안전한 쪽과 터지는 쪽을 갈라낸 경우다.",
+        f"**구별 성공 {hit}/{total}** — 안전한 쪽과 터지는 쪽을 갈라낸 경우다. "
+        f"채점자는 `{HEADLINE_GRADER}` 다 — 구별 성공률은 (리뷰어 x 채점자)의 성질이라 "
+        "같은 실행도 정의마다 다른 숫자가 나온다 (README 결과 3).",
         "",
         "| 판정 | 건수 | 뜻 |",
         "|---|---:|---|",
@@ -346,7 +348,14 @@ def _comparison_section(
         if knob
         else f"docstring 손잡이 `{a.docstrings}` 에서 **리뷰어만** 다르다."
     )
-    design = "§7.10b" if not knob and a.docstrings == "keep" else "§7.10c"
+    # 손잡이 비교는 §7.10c, 리뷰어 비교는 주 지표를 정한 §7.10b
+    # neutral 의 목표 150쌍은 범위를 §3.5 「확장 선언」이 정했다
+    if knob:
+        design = "§7.10c"
+    elif a.docstrings == "keep":
+        design = "§7.10b"
+    else:
+        design = "§7.10b · §3.5 「확장 선언」"
     lines = [
         f"## 에이전트 비교 — `{ra.reviewer}` vs `{rb.reviewer}`",
         "",

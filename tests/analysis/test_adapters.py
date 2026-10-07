@@ -37,7 +37,7 @@ class TestMaterializeIsAFairnessDevice:
 
 
 class TestDecoratorWidening:
-    """D3 - 데코레이터 줄이 함수에 속해야 한다."""
+    """B3 - 데코레이터 줄이 함수에 속해야 한다."""
 
     def test_decorator_lines_map_to_the_function(self) -> None:
         src = "@deco\n@other(1)\ndef target():\n    pass\n"

@@ -192,7 +192,7 @@ class TestSummarize:
 
 class TestEndToEnd:
     def test_runner_separates_strata(self) -> None:
-        """🔴 층을 섞어 집계하지 않는다 (E2)."""
+        """🔴 층을 섞어 집계하지 않는다 (F3)."""
         samples = [_safe_sample(), _buggy_sample()]
         run = run_reviewer(
 AnalyzerReviewer(RuffAnalyzer(select=("F",))), samples, [ProvableSafetyGrader()])

@@ -1,6 +1,6 @@
 """CLI — 이 플랫폼의 주 진입점.
 
-🔴 engine 은 HTTP 를 모른다 (DESIGN §6.4). FastAPI 는 v2 의 얇은 어댑터고,
+🔴 engine 은 HTTP 를 모른다 (DESIGN §6.5). FastAPI 는 v2 의 얇은 어댑터고,
    실험은 전부 여기서 배치로 돈다.
 """
 
@@ -591,7 +591,7 @@ def _print_mix(
 
 
 def _print_strata(run: ReviewerRun) -> None:
-    """🔴 층별로 나눠서 본다. 풀링 금지 (E2)."""
+    """🔴 층별로 나눠서 본다. 풀링 금지 (F3)."""
     print()
     for r in run.results:
         if sum(r.counts.values()) == 0:
@@ -676,7 +676,7 @@ def _graders_for(
 
 
 def _persist(run: ReviewerRun, store_path: str, kind: ReviewerKind) -> None:
-    """결과를 보관한다. 🔴 매니페스트 없이는 외래키가 거부한다 (E1).
+    """결과를 보관한다. 🔴 매니페스트 없이는 외래키가 거부한다 (F1).
 
     `kind` 는 리뷰어가 신고한 종류다 - 재현성 해석을 이름으로 짐작하지 않는다 (A2).
     """

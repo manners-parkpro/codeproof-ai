@@ -39,7 +39,7 @@ class ReviewTarget:
         diff: PR 리뷰면 변경분. 파일 단위 리뷰면 None.
             🔴 diff 를 필수로 두지 않는다 - decoy 를 가짜 diff 로 감싸면
                "무엇이 보이는가" 라는 의미가 흐려진다.
-        repo: 원본 저장소. 소스는 번들하지 않고 여기로 되짚는다 (K1).
+        repo: 원본 저장소. 소스는 번들하지 않고 여기로 되짚는다 (G1).
         commit_sha: 정확한 커밋.
     """
 

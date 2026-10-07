@@ -1,7 +1,7 @@
 """소스 위치 — 도구별 컬럼 규약 차이를 흡수하는 지점.
 
 🔴 내부 단일 규약: 1-based line + 0-based **문자** column.
-   도구 원본 규약이 전부 다르다 (CLAUDE.md D1):
+   도구 원본 규약이 전부 다르다 (CLAUDE.md B1):
 
        Ruff JSON    line 1-based / col 1-based / 문자
        mypy JSON    line 1-based / col 0-based / UTF-8 바이트

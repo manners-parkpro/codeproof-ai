@@ -23,7 +23,7 @@ from codeproof_ai.domain import (
 
 
 class TestD1ColumnNormalization:
-    """D1 — 컬럼 규약 정규화. 비ASCII 회귀 테스트는 절대 지우지 않는다."""
+    """B1 — 컬럼 규약 정규화. 비ASCII 회귀 테스트는 절대 지우지 않는다."""
 
     def test_byte_offset_differs_from_char_offset_on_non_ascii(self) -> None:
         # ast.col_offset 은 UTF-8 바이트, 내부 규약은 문자.
@@ -57,7 +57,7 @@ class TestD1ColumnNormalization:
 
 
 class TestD2FingerprintExcludesLineNumber:
-    """D2 — 지적 식별자에 라인 번호가 들어가면 안 된다."""
+    """B2 — 지적 식별자에 라인 번호가 들어가면 안 된다."""
 
     def _finding(self, line: int) -> Finding:
         return Finding(
@@ -88,7 +88,7 @@ class TestD2FingerprintExcludesLineNumber:
 
 
 class TestE1ManifestIsMandatory:
-    """E1 — effort 미지정·잘못된 캐시 정책은 매니페스트 단계에서 막는다."""
+    """D4 · F2 — effort 미지정·잘못된 캐시 정책은 매니페스트 단계에서 막는다."""
 
     def _manifest(self, **kw: object) -> RunManifest:
         defaults: dict[str, object] = {
