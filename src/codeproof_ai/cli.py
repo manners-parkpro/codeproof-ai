@@ -125,7 +125,7 @@ def _add_decoy_parsers(sub: argparse._SubParsersAction[argparse.ArgumentParser])
     dmu.add_argument("pairs", nargs="*", help="쌍 접두사 (폴더 이름의 앞부분) - 없으면 전부")
 
     dg = decoy_sub.add_parser(
-        "gate", help="codex 가 쓴 쌍의 관문 - 기계로 보는 것만 (DESIGN §7.10d)"
+        "gate", help="쌍의 관문 - 기계로 보는 것만"
     )
     dg.add_argument("--corpus", default="corpus/xauthor/codex")
     dg.add_argument(

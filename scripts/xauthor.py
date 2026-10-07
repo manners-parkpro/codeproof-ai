@@ -12,12 +12,14 @@
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import re
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 import time
 from pathlib import Path
@@ -104,7 +106,25 @@ def _run(cmd: list[str], **kw: Any) -> subprocess.CompletedProcess[str]:
 
 
 def build_wheel(out: Path) -> Path:
-    done = _run([_tool("uv"), "build", "--wheel", "--out-dir", str(out)], cwd=REPO)
+    """상자용 wheel - 커밋한 판(HEAD)의 pyproject · src 로, 긴 설명(README) 없이 짓는다.
+
+    🔴 README 는 wheel METADATA 본문이 되어 상자에서 읽힌다 - 실험의 가설이 적혀 있다
+       (DESIGN §7.10d 「2단계 전 보정」).
+    """
+    tree = out / "tree"
+    tree.mkdir()
+    archive = subprocess.run(  # noqa: S603 - 인자는 이 함수가 만든다
+        [_tool("git"), "archive", "HEAD", "pyproject.toml", "src"],
+        cwd=REPO, capture_output=True, check=False,
+    )
+    if archive.returncode:
+        raise RuntimeError(archive.stderr.decode(errors="replace"))
+    with tarfile.open(fileobj=io.BytesIO(archive.stdout)) as tar:
+        tar.extractall(tree, filter="data")
+    pyproject = tree / "pyproject.toml"
+    text = re.sub(r"(?m)^readme = .*\n", "", pyproject.read_text(encoding="utf-8"))
+    pyproject.write_text(text, encoding="utf-8")
+    done = _run([_tool("uv"), "build", "--wheel", "--out-dir", str(out), str(tree)], cwd=REPO)
     if done.returncode:
         raise RuntimeError(done.stderr)
     return next(out.glob("codeproof_ai-*.whl"))

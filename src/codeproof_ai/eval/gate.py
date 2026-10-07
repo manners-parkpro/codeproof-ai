@@ -1,6 +1,6 @@
-"""codex 가 쓴 쌍의 관문 - 기계로 보는 것만 (DESIGN §7.10d 「관문」).
+"""쌍의 관문 - 기계로 보는 것만 (DESIGN 「관문」).
 
-    codeproof decoy gate [ID ...] --corpus corpus/xauthor/codex [--race-runs 30]
+    codeproof decoy gate [ID ...] --corpus <코퍼스> [--race-runs 30]
 
 저자는 상자에서, 하네스는 권한 프로필 아래서 같은 명령을 돈다. 쌍 하나가 넘으려면 전부 통과한다:
 
@@ -13,8 +13,10 @@
               twin 은 decoy 에 없는 docstring 을 더하지 않는다
     plan      도출한 가드 위치가 `corpus/plan.py` 에서 그 분류의 칸 안이다
 
-🔴 목표 150쌍 코퍼스에는 걸지 않는다 - cues 는 §7.10d 가 새로 정한 규칙이고, 그 코퍼스의
-   1·2라운드 쌍에는 mutants.py 가 없다.
+🔴 기존 코퍼스에는 걸지 않는다 - cues 는 이 관문이 새로 정한 규칙이고, 기존 코퍼스의
+   앞 라운드 쌍에는 mutants.py 가 없다.
+🔴 이 모듈의 문서와 `decoy gate` 도움말은 저자 상자에서 읽힌다 - 실험의 목적을 적지 않는다
+   (근거는 DESIGN 에 둔다).
 🔴 모델이 쓴 코드(증명 · 변이)를 실행한다 - 하네스는 이 명령을 권한 프로필 아래서 돈다.
 """
 
@@ -115,7 +117,7 @@ def neutral_problem(source: str) -> str | None:
     """neutral 내보내기가 줄 수를 지키고 모듈 docstring 한 줄만 「목적.」으로 바꾸는가.
 
     아니면 그 이유를 낸다. 줄 번호가 그대로여야 정답 구간(미끼 · 가드 · twin)이 맞는다
-    (DESIGN §7.10c).
+    (DESIGN 「docstring 단서는 끄고 잰다」).
     """
     try:
         new = neutral_docstring(source)
@@ -175,7 +177,7 @@ def inner_docstrings(source: str) -> list[tuple[int, int, str]]:
 
 
 def _cues(rec: DecoyRecord) -> Check:
-    """단서 규칙 - 단서는 claude 가 더 쓴다 (§7.10b). 새면 결과가 「더 짚는다」 쪽으로 기운다."""
+    """단서 규칙 - 코드 밖 단서가 새면 리뷰어가 코드 대신 단서를 읽는다 (DESIGN 「단서」)."""
     problems = []
     try:
         for name, source in (("decoy.py", rec.decoy_source), ("twin.py", rec.twin_source)):

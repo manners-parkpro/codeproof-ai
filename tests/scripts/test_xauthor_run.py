@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import shutil
 import sys
 from dataclasses import replace
 from pathlib import Path
@@ -155,6 +156,24 @@ class TestHarnessProblems:
     def test_another_pair_id_is_not_mine(self, tmp_path: Path) -> None:
         box = self._box(tmp_path, {"XC002-bounded": "bounded_input"})
         assert xr.harness_problems(box, "XC001", "bounded_input")[0] is None
+
+
+class TestGateOutput:
+    """관문 출력이 끝까지 찍혔는가 - 종료 코드만으로는 쌍의 코드가 끝낸 관문을 못 가린다."""
+
+    FULL = "XC001-x\n" + "".join(f"  ✓  {c}\n" for c in xr.GATE_CHECKS) + "\n관문 1쌍 · 통과 1\n"
+
+    def test_a_full_pass_is_read(self) -> None:
+        assert xr.gate_output_ok(self.FULL)
+        assert xr.gate_output_ok(self.FULL.replace("✓  proof", "✓  proof  공격 2번"))
+
+    @pytest.mark.parametrize("line", ["  ✓  proof\n", "\n관문 1쌍 · 통과 1\n"])
+    def test_a_missing_line_is_not_a_pass(self, line: str) -> None:
+        assert not xr.gate_output_ok(self.FULL.replace(line, "\n", 1))
+
+    def test_a_failed_check_is_not_a_pass(self) -> None:
+        assert not xr.gate_output_ok(self.FULL.replace("✓  mutants", "✗  mutants"))
+        assert not xr.gate_output_ok("")
 
 
 class TestReproduced:
@@ -327,6 +346,19 @@ class TestSummary:
         assert [r["attempts"] for r in s["pairs"]] == [1, 3, 1]
         assert s["pairs"][2]["outcome"] == "진행 중"
 
+    def test_cut_sessions_are_calls_without_tokens(self, tmp_path: Path) -> None:
+        """끊긴 세션은 기록 없이 cut/ 으로 간다 - 호출로는 세고 토큰은 모른다."""
+        out = tmp_path / "out"
+        self._pair(out, "XC001", "bounded_input", None, ["write-1"])
+        cut = out / "XC001" / "cut"
+        cut.mkdir()
+        (cut / "01-write-1.reason").write_text("credits\n", encoding="utf-8")
+        (cut / "02-audit.reason").write_text("interrupted\n", encoding="utf-8")
+        s = xr.summarize(out)
+        cut_sessions = [s["totals"][c]["cut_sessions"] for c in ("write", "audit")]
+        assert cut_sessions == [1, 1]
+        assert (s["totals"]["write"]["sessions"], s["totals"]["write"]["input_tokens"]) == (1, 10)
+
 
 # ── 흐름 - 가짜 codex 로 세션 → 관문 → 감사 → 재현 → 마무리를 돈다 (유료 호출 없음) ──────────────
 
@@ -345,6 +377,10 @@ if args[:1] == ["sandbox"]:
 box, last, prompt = Path(args[args.index("-C") + 1]), Path(args[args.index("-o") + 1]), args[-1]
 n = conf["calls"]
 conf["calls"] = n + 1
+if conf.get("sleep_at") == n:
+    conf_path.write_text(json.dumps(conf))
+    import time
+    time.sleep(30)
 cuts = conf.get("cut_at")
 if n == cuts or (isinstance(cuts, list) and n in cuts):
     conf_path.write_text(json.dumps(conf))
@@ -360,7 +396,7 @@ if conf.get("refuse_at") == n:
     sys.exit(1)
 if "--output-schema" in args:
     last.write_text(json.dumps({"findings": conf["audits"].pop(0) if conf["audits"] else []}))
-else:
+elif not conf.get("no_pair"):
     pid = re.search(r"쌍 식별자: `(XC\d{3})`", prompt)[1]
     dest = box / "corpus" / f"{pid}-fake"
     if not dest.exists():
@@ -372,6 +408,8 @@ else:
         meta.write_text(text)
     if "감사가 재현한 문제" in prompt:
         (box / "response.md").write_text("1. 고쳤다")
+        if conf.get("break_on_fix"):
+            (dest / "proof.py").write_text("def attack(mod):\n    return False\n")
     last.write_text(dest.name)
 conf_path.write_text(json.dumps(conf))
 print(json.dumps({"type": "thread.started"}))
@@ -505,6 +543,99 @@ class TestFlowWithAFakeCodex:
         assert xr.outcome_of(pair.d) == "refused"
         assert self._calls(pair) == sent == 2
         assert self._refused_events(pair) == [("XC001", "audit")]
+
+    @staticmethod
+    def _source(p: Any, tail: str) -> str:
+        """관문 시험 쌍의 사본 - proof.py 끝에 코드를 더한다."""
+        src = p.out.parent / "source"
+        shutil.copytree(GATE_PAIR, src, ignore=shutil.ignore_patterns("__pycache__"))
+        proof = src / "proof.py"
+        proof.write_text(proof.read_text(encoding="utf-8") + tail, encoding="utf-8")
+        return str(src)
+
+    def _outcome(self, p: Any) -> tuple[str, str]:
+        o = json.loads((p.d / "outcome.json").read_text(encoding="utf-8"))
+        return o["outcome"], o["why"]
+
+    def test_a_pair_failing_the_gate_three_times_fails(self, pair: Any) -> None:
+        """관문 rc 1 은 시도 실패다 - 세 번이면 쌍을 버린다. 관문이 본 판은 시도마다 남는다."""
+        self._configure(pair, source=self._source(pair, "\n\ndef attack(mod):\n    return False\n"))
+        xr.run_pair(pair)
+        assert self._outcome(pair) == ("failed", f"관문 {xr.ATTEMPTS}번 실패")
+        gates = [json.loads((pair.d / f"gate-{a}.json").read_text(encoding="utf-8"))
+                 for a in range(1, xr.ATTEMPTS + 1)]
+        assert [(g["pass"], g["rc"] not in (0, None)) for g in gates] == [(False, True)] * 3
+        assert (pair.d / "gate-1.pair" / "proof.py").exists()
+
+    def test_a_pair_that_ends_the_gate_early_does_not_pass(self, pair: Any) -> None:
+        """🔴 쌍의 코드가 SystemExit(0) 으로 관문을 끝내면 rc 0 이어도 통과가 아니다."""
+        self._configure(pair, source=self._source(pair, "\n\nraise SystemExit(0)\n"))
+        xr.run_pair(pair)
+        gate = json.loads((pair.d / "gate-1.json").read_text(encoding="utf-8"))
+        assert (gate["pass"], gate["rc"]) == (False, 0)
+        assert "검사 출력이 끝까지 없다" in (pair.d / "gate-1.txt").read_text(encoding="utf-8")
+        assert xr.outcome_of(pair.d) == "failed"
+
+    def test_a_session_at_the_time_limit_counts_as_an_attempt(
+        self, pair: Any, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """시간 상한은 크레딧 끊김이 아니다 - 시도로 센다 (공짜 재시도가 아니다)."""
+        monkeypatch.setattr(xr.xa, "EXEC_TIMEOUT_S", 2)
+        self._configure(pair, sleep_at=0, audits=[[]])
+        xr.run_pair(pair)
+        first = json.loads((pair.d / "write-1.json").read_text(encoding="utf-8"))
+        assert first["timed_out"] is True
+        s = xr.summarize(pair.out)
+        assert (s["pairs"][0]["outcome"], s["pairs"][0]["attempts"]) == ("accepted", 2)
+        assert (s["credit_cuts"], s["idle_cuts"], s["pairs"][0]["not_counted"]) == (0, 0, [])
+
+    def test_an_interrupted_session_is_set_aside_and_run_again(self, pair: Any) -> None:
+        """하네스가 중단한 세션(이벤트만 남음)은 세지 않고 그 전 상자로 되돌려 다시 돈다."""
+        self._configure(pair, audits=[[]])
+        xr.make_box(pair.box)
+        xr.snapshot(pair.box, pair.snap)
+        (pair.box / "stray.txt").write_text("반쯤 쓴 것", encoding="utf-8")
+        (pair.d / "write-1.jsonl").write_text('{"type": "thread.started"}\n', encoding="utf-8")
+        xr.run_pair(pair)
+        reason = (pair.d / "cut" / "01-write-1.reason").read_text(encoding="utf-8")
+        assert reason.strip() == "interrupted"
+        assert not (pair.d / "box-files" / "stray.txt").exists()
+        s = xr.summarize(pair.out)
+        assert (s["pairs"][0]["outcome"], s["pairs"][0]["attempts"]) == ("accepted", 1)
+        assert (s["interrupted"], s["windows_used"]) == (1, 1)
+        assert s["totals"]["write"]["cut_sessions"] == 1
+
+    def test_a_problem_left_at_the_recheck_fails_the_pair(self, pair: Any) -> None:
+        found = [self._finding("REPRODUCED")]
+        self._configure(pair, audits=[found, found])
+        xr.run_pair(pair)
+        assert self._outcome(pair) == ("failed", "재확인에서 재현되는 문제가 남았다")
+
+    def test_a_fix_that_breaks_the_gate_fails_the_pair(self, pair: Any) -> None:
+        self._configure(pair, audits=[[self._finding("REPRODUCED")]], break_on_fix=True)
+        xr.run_pair(pair)
+        assert self._outcome(pair) == ("failed", "고친 뒤 관문을 넘지 못했다")
+        assert not (pair.d / "recheck.json").exists()
+
+    def test_a_missing_box_after_a_write_stops_for_a_human(self, pair: Any) -> None:
+        self._configure(pair)
+        (pair.d / "write-1.json").write_text("{}", encoding="utf-8")
+        with pytest.raises(xr.Stop) as stop:
+            xr.run_pair(pair)
+        assert stop.value.rc == xr.HUMAN
+
+    def test_a_kind_ends_after_four_failed_pairs(
+        self, pair: Any, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """분류마다 실패한 쌍은 넷까지 - run 전체를 돈다 (관문을 돌 쌍이 없어 빠르다)."""
+        monkeypatch.setattr(xr, "preflight", lambda _out: pair.venv)
+        monkeypatch.setattr(xr, "KINDS", [GATE_KIND])
+        self._configure(pair, no_pair=True)
+        assert xr.run(pair.out) == xr.DONE
+        outcomes = [xr.outcome_of(d) for d in xr.pair_dirs(pair.out)]
+        assert outcomes == ["failed"] * xr.FAILED_PER_KIND
+        summary = json.loads((pair.out / "summary.json").read_text(encoding="utf-8"))
+        assert summary["kinds_filled"] == 0
 
     def test_a_wrong_kind_fails_the_gate_three_times(self, pair: Any) -> None:
         self._configure(pair, wrong_kind=True)

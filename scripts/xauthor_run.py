@@ -69,6 +69,10 @@ REFUSED = "content was flagged"
 """안전 필터의 거절 문구 [실측 · XC010 audit · 2026-10-07: "This content was flagged for possible
 cybersecurity risk. …" · turn.failed · 0턴]."""
 PAIR_FILES = ("meta.toml", "decoy.py", "twin.py", "proof.py", "mutants.py")
+GATE_CHECKS = ("validate", "proof", "mutants", "neutral", "cues", "plan")
+GATE_PASSED = "관문 1쌍 · 통과 1"
+"""관문 출력의 정본은 `codeproof decoy gate` 다 (eval/gate.py 의 검사 · cli.py 의 요약 줄).
+흐름 테스트가 진짜 관문의 출력과 대조한다."""
 USAGE_KEYS = (
     "input_tokens", "cached_input_tokens", "cache_write_input_tokens",
     "output_tokens", "reasoning_output_tokens",
@@ -172,6 +176,16 @@ def harness_problems(box: Path, pid: str, kind: str) -> tuple[Path | None, list[
     if meta.get("trap_kind") != kind:
         return pair, [f"하네스: trap_kind 는 {kind} 여야 한다 - 적힌 것 {meta.get('trap_kind')!r}"]
     return pair, []
+
+
+def gate_output_ok(stdout: str) -> bool:
+    """관문 출력이 끝까지 찍혔는가 - 검사마다 ✓ 이고 마지막 줄이 통과 요약이다.
+
+    🔴 종료 코드만 보면 쌍의 코드가 SystemExit(0) 으로 관문 프로세스를 끝낼 때 검사 없이 통과한다.
+    """
+    lines = [ln.strip() for ln in stdout.strip().split("\n")]
+    passed = {m[1] for ln in lines if (m := re.fullmatch(r"✓\s+(\S+)(?:\s.*)?", ln))}
+    return set(GATE_CHECKS) <= passed and lines[-1] == GATE_PASSED
 
 
 def reproduced(stdout: str) -> bool:
@@ -425,6 +439,7 @@ def gate(p: Pair, step: str) -> bool:
         rc: int | None = None
         text = ""
         if pair is not None:
+            _keep(pair, p.d / f"{step}.pair")  # 관문이 본 판 - 상자는 시도 사이에 덮인다
             codeproof = str(p.venv / "bin" / "codeproof")
             cmd = _sandboxed(p.box, p.venv, codeproof, "decoy", "gate", p.pid, "--corpus", "corpus")
             rc, timed_out, stdout, stderr = run_group(
@@ -433,6 +448,9 @@ def gate(p: Pair, step: str) -> bool:
             text = stdout + stderr
             if timed_out:
                 problems.append(f"하네스: 관문이 {GATE_TIMEOUT_S // 60}분 안에 끝나지 않았다")
+            elif rc == 0 and not gate_output_ok(stdout):
+                problems.append("하네스: 관문이 rc 0 으로 끝났는데 검사 출력이 끝까지 없다"
+                                " - 쌍의 코드가 관문 프로세스를 끝냈을 수 있다")
         body = "\n".join([*problems, text]).strip() + "\n"
         (p.d / f"{step}.txt").write_text(body, encoding="utf-8")
         _json(record, {"pass": not problems and rc == 0, "rc": rc, "problems": problems})
@@ -482,20 +500,31 @@ def audit(p: Pair, step: str) -> list[dict[str, Any]]:
     return [f for f in _load(rep) if f["reproduced"]]
 
 
+def _keep(src: Path, dest: Path) -> None:
+    """저자가 쓴 폴더를 기록으로 복사한다 - 바이트코드는 빼고, 링크는 따라가지 않는다."""
+    shutil.rmtree(dest, ignore_errors=True)
+    shutil.copytree(src, dest, symlinks=True, ignore=shutil.ignore_patterns("__pycache__"))
+
+
 def finish(p: Pair, outcome: str, why: str) -> None:
-    """쌍 파일만 복사한다 - 상자의 home · tmp 는 기록이 아니다. 끝난 쌍의 상자와 스냅숏은 지운다."""
+    """저자가 쓴 것을 복사한다 - 쌍 폴더 전부와 상자 맨 위 파일 (home · tmp 는 기록이 아니다).
+
+    끝난 쌍의 상자와 스냅숏은 지운다.
+    """
     corpus = p.box / "corpus"
     pair = next((q for q in sorted(corpus.iterdir()) if q.name.startswith(f"{p.pid}-")), None)
     extras: list[str] = []
     if pair is not None:
-        dest = p.d / "final" / pair.name
-        dest.mkdir(parents=True, exist_ok=True)
-        for name in PAIR_FILES:
-            if (pair / name).exists():
-                shutil.copy2(pair / name, dest / name)
+        _keep(pair, p.d / "final" / pair.name)
         extras = sorted(q.name for q in pair.iterdir() if q.name not in PAIR_FILES)
     if (p.box / "response.md").exists():
         shutil.copy2(p.box / "response.md", p.d / "response.md")
+    top = [q for q in sorted(p.box.iterdir())
+           if (q.is_file() or q.is_symlink()) and q.name not in (PROMPT.name, "response.md")]
+    if top:
+        (p.d / "box-files").mkdir(exist_ok=True)
+        for q in top:
+            shutil.copy2(q, p.d / "box-files" / q.name, follow_symlinks=False)
     _json(p.d / "outcome.json", {
         "pair": p.pid, "outcome": outcome, "why": why,
         "pair_dir": pair.name if pair else None, "extras": extras,
@@ -596,7 +625,7 @@ def _git(*args: str) -> str:
 
 def _first_start() -> dict[str, str]:
     """첫 시작 - 커밋한 하네스로 venv 를 만들고, 격리를 다시 점검하고, 카탈로그를 대조한다."""
-    paths = ("src", "scripts", "results/xauthor", str(TEMPLATE))
+    paths = ("pyproject.toml", "src", "scripts", "results/xauthor", str(TEMPLATE))
     if dirty := _git("status", "--porcelain", "--", *paths):
         why = "하네스가 커밋되지 않았다 - venv 와 프롬프트는 커밋과 같아야 한다"
         raise Stop(HUMAN, f"{why}:\n{dirty}")
@@ -655,7 +684,7 @@ def summarize(out: Path) -> dict[str, Any]:
 
     실패한 시도까지 센다 (선언 「1단계 · 타당성」).
     """
-    zero = {"sessions": 0, "turns": 0, **dict.fromkeys(USAGE_KEYS, 0)}
+    zero = {"sessions": 0, "cut_sessions": 0, "turns": 0, **dict.fromkeys(USAGE_KEYS, 0)}
     totals = {c: dict(zero) for c in CATEGORIES}
     rows = []
     for d in pair_dirs(out):
@@ -668,6 +697,9 @@ def summarize(out: Path) -> dict[str, Any]:
                 t[k] += r["usage"][k]
         cut = d / "cut"
         reasons = sorted(cut.glob("*.reason")) if cut.exists() else []
+        for q in reasons:  # 끊긴 세션은 호출로만 센다 - 쓴 토큰은 기록이 없어 모른다
+            step = q.name.split("-", 1)[1].removesuffix(".reason")
+            totals["write" if step.startswith("write-") else step]["cut_sessions"] += 1
         rows.append({
             "pair": d.name, "kind": pair_kind(d), "outcome": outcome_of(d) or "진행 중",
             "attempts": sum(r["category"] == "write" for r in records), "sessions": len(records),
