@@ -5,16 +5,19 @@
 
 from __future__ import annotations
 
+import argparse
 import ast
 import importlib.util
 import json
 import re
 import subprocess
+import zipfile
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
 
+from codeproof_ai.cli import build_parser
 from codeproof_ai.corpus.decoy import pair_dirs
 
 if TYPE_CHECKING:
@@ -349,3 +352,52 @@ class TestNothingOfClaudePairsInTheBox:
         assert _claude_traces("[실측] D051 은 두 단계 건너다", names) == ["D051"]
         assert _claude_traces(f"`{some}` 를 가드로 쓴다", names) == [some]
         assert _claude_traces("FP 66건 중 45건이 D103 이었다", names) == []
+
+
+AXES = re.compile(r"claude(?!\.md)|codex|7\.10|더 짚", re.IGNORECASE)
+"""실험의 목적이 드러나는 말 - 두 패밀리를 견준다는 것 · 그 절 번호 · 가설의 방향.
+
+`CLAUDE.md` 는 저자 프롬프트에도 실린 규칙 파일의 이름이라 뺀다.
+"""
+
+
+def _subparsers(parser: argparse.ArgumentParser) -> dict[str, argparse.ArgumentParser]:
+    actions = [a for a in parser._actions if isinstance(a, argparse._SubParsersAction)]
+    return dict(actions[0].choices) if actions else {}
+
+
+class TestThePurposeIsNotShownToTheAuthor:
+    """§7.10d 「2단계 전 보정」 - 저자가 상자에서 돌리고 읽는 면에 실험의 목적을 적지 않는다.
+
+    [실측 · 1단계 저자 세션 15개] 15/15 가 `codeproof decoy --help` 에서
+    「codex 가 쓴 쌍의 관문 … (DESIGN §7.10d)」를 봤다 · 모듈 문서를 읽은 세션 2/15 · METADATA 0/15.
+    패키지 소스에는 이 프로젝트의 목적상 claude · codex 가 그대로 있다 -
+    막는 것은 저자가 돌리고 읽는 면이다.
+    """
+
+    def test_the_help_the_author_runs_does_not_name_it(self) -> None:
+        top = build_parser()
+        decoy = _subparsers(top)["decoy"]
+        helps = {"codeproof": top.format_help(), "codeproof decoy": decoy.format_help()}
+        helps |= {f"codeproof decoy {n}": p.format_help() for n, p in _subparsers(decoy).items()}
+        assert len(helps) >= 6
+        assert {k: AXES.findall(v) for k, v in helps.items() if AXES.search(v)} == {}
+
+    def test_the_gate_module_does_not_name_it(self) -> None:
+        source = (REPO / "src" / "codeproof_ai" / "eval" / "gate.py").read_text(encoding="utf-8")
+        assert AXES.findall(source) == []
+
+    def test_the_box_wheel_has_no_long_description(self, tmp_path: Path) -> None:
+        """README 는 METADATA 본문이 된다 - 가설이 적혀 있다. 상자용 wheel 은 그것 없이 짓는다."""
+        with zipfile.ZipFile(xa.build_wheel(tmp_path)) as z:
+            meta = z.read(next(n for n in z.namelist() if n.endswith("METADATA"))).decode()
+            assert any(n.endswith("eval/gate.py") for n in z.namelist())
+        assert "Description-Content-Type" not in meta
+        assert AXES.findall(meta) == []
+
+    def test_the_axes_catch_what_the_author_saw(self) -> None:
+        """대조 - 정규식이 공허하면 위 테스트는 무엇이 보여도 통과한다."""
+        assert AXES.search("gate  codex 가 쓴 쌍의 관문 - 기계로 보는 것만 (DESIGN §7.10d)")
+        assert AXES.search("단서는 Claude 가 더 쓴다 - 새면 「더 짚는다」 쪽으로")
+        assert not AXES.search("CLAUDE.md G3 · G3a1 을 그대로 넣는다")
+

@@ -81,7 +81,8 @@ SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict conv
            xauthor-run-restore xauthor-audit-schema xauthor-run-refused xauthor-run-refused-kind
            xauthor-run-refused-resume xauthor-run-idle-cut scripts-typed xauthor-run-gate-output
            xauthor-run-gate-rc xauthor-run-timeout xauthor-run-kind-budget xauthor-run-interrupted
-           xauthor-run-recheck xauthor-run-fix-gate xauthor-run-box-missing)
+           xauthor-run-recheck xauthor-run-fix-gate xauthor-run-box-missing xauthor-box-help
+           xauthor-box-gate-doc xauthor-box-metadata)
 
 claim_layering() { echo "런타임(analysis)은 정답 라벨(eval)을 볼 수 없다 — A1"; }
 break_layering() {
@@ -867,6 +868,18 @@ guard_xauthor-run-fix-gate() { uv run pytest tests/scripts/test_xauthor_run.py -
 claim_xauthor-run-box-missing() { echo "쓴 기록이 있는데 상자가 없으면 사람을 부른다 — 새 상자로 이어 쓰면 앞 시도를 잃는다 (rc 4)"; }
 break_xauthor-run-box-missing() { perl -0pi -e 's/            raise Stop\(HUMAN, f"\{p\.pid\} 의 상자가 없다 - \{p\.box\}"\)/            pass/' "$_XR"; }
 guard_xauthor-run-box-missing() { uv run pytest tests/scripts/test_xauthor_run.py -q -k missing_box; }
+
+claim_xauthor-box-help() { echo "저자가 돌리는 도움말에 실험의 목적이 없다 — 1단계 저자 15/15 가 「codex 가 쓴 쌍의 관문」을 봤다 (§7.10d 2단계 전 보정)"; }
+break_xauthor-box-help() { perl -0pi -e 's/"gate", help="쌍의 관문 - 기계로 보는 것만"/"gate", help="codex 가 쓴 쌍의 관문 - 기계로 보는 것만"/' src/codeproof_ai/cli.py; }
+guard_xauthor-box-help() { uv run pytest tests/scripts/test_xauthor.py -q -k help_the_author_runs; }
+
+claim_xauthor-box-gate-doc() { echo "관문 모듈의 문서에 실험의 목적이 없다 — 저자는 모듈 문서를 읽는다 (§7.10d 2단계 전 보정)"; }
+break_xauthor-box-gate-doc() { perl -0pi -e 's/"""쌍의 관문 - 기계로 보는 것만 \(DESIGN 「관문」\)\./"""codex 가 쓴 쌍의 관문 - 기계로 보는 것만 (DESIGN 「관문」)./' src/codeproof_ai/eval/gate.py; }
+guard_xauthor-box-gate-doc() { uv run pytest tests/scripts/test_xauthor.py -q -k gate_module; }
+
+claim_xauthor-box-metadata() { echo "상자용 wheel 은 README 를 METADATA 에 싣지 않는다 — README 에 가설이 적혀 있다 (§7.10d 2단계 전 보정)"; }
+break_xauthor-box-metadata() { perl -0pi -e 's/"--out-dir", str\(out\), str\(tree\)\]/"--out-dir", str(out)]/' "$_XA"; }
+guard_xauthor-box-metadata() { uv run pytest tests/scripts/test_xauthor.py -q -k long_description; }
 
 claim_xauthor-audit-schema() { echo "감사 exec 은 저자 exec 에 스키마 하나만 더한다 — 감사 카나리가 감사 인자 그대로를 본다 (§7.10d 상자)"; }
 break_xauthor-audit-schema() { perl -0pi -e 's/        args \+= \["--output-schema", str\(schema\)\]\n/        args += ["--output-schema", str(schema), "--skip-git-repo-check"]\n/' "$_XA"; }

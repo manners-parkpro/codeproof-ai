@@ -625,7 +625,7 @@ def _git(*args: str) -> str:
 
 def _first_start() -> dict[str, str]:
     """첫 시작 - 커밋한 하네스로 venv 를 만들고, 격리를 다시 점검하고, 카탈로그를 대조한다."""
-    paths = ("src", "scripts", "results/xauthor", str(TEMPLATE))
+    paths = ("pyproject.toml", "src", "scripts", "results/xauthor", str(TEMPLATE))
     if dirty := _git("status", "--porcelain", "--", *paths):
         why = "하네스가 커밋되지 않았다 - venv 와 프롬프트는 커밋과 같아야 한다"
         raise Stop(HUMAN, f"{why}:\n{dirty}")
