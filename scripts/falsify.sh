@@ -864,7 +864,8 @@ break_xauthor-run-idle-cut() { perl -0pi -e 's/        idle = not window_has_ses
 guard_xauthor-run-idle-cut() { uv run pytest tests/scripts/test_xauthor_run.py -q -k refill; }
 
 claim_scripts-typed() { echo "scripts/ 도 타입 검사를 받는다 — 빠지면 외부 출력을 읽는 실행기의 None · 비목록 경로가 조용히 산다"; }
-break_scripts-typed() { perl -0pi -e 's/def windows_used\(out: Path\) -> int:/def windows_used(out: Path) -> str:/' "$_XR"; }
+# 🔴 깨기는 파일 크기를 바꾼다 - 같은 크기면 되돌린 뒤 같은 초 안의 mypy 가 증분 캐시의 옛 결과를 낸다 (DESIGN 교훈 #67)
+break_scripts-typed() { perl -0pi -e 's/def windows_used\(out: Path\) -> int:/def windows_used(out: Path) -> str | None:/' "$_XR"; }
 guard_scripts-typed() { uv run mypy; }
 
 claim_xauthor-run-gate-output() { echo "관문은 검사 출력이 끝까지 찍혀야 통과다 — 종료 코드만 보면 쌍의 코드가 SystemExit(0) 으로 끝낸 관문이 통과한다 (§7.10d 관문)"; }
