@@ -55,7 +55,9 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
+    # 가드 반증이 늘면서 ubuntu 15~17분이 됐고 느린 러너에서 20분에 두 번 끊겼다 — 같은 커밋을 다시 돌면
+    # 17분 08초에 통과했다 [실측 · 2026-10-08 · 가드 153개 · run 37648226421]. 멈춤은 여전히 잡는다.
+    timeout-minutes: 30
     env:
       UV_LOCKED: "1"
     steps:
