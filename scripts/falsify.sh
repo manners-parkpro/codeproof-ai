@@ -79,6 +79,7 @@ SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict conv
            xauthor-inventory-ids xauthor-builtin-instructions xauthor-pair-leak xauthor-pair-leak-readme
            xauthor-run-credit xauthor-run-repro xauthor-run-kind xauthor-run-budget xauthor-run-frozen
            review-unlabeled review-no-defect-claim review-self-corroboration review-static-citation
+           review-silent-agent review-agent-citation
            xauthor-run-restore xauthor-audit-schema xauthor-run-refused xauthor-run-refused-kind
            xauthor-run-refused-resume xauthor-run-idle-cut scripts-typed xauthor-run-gate-output
            xauthor-run-gate-rc xauthor-run-timeout xauthor-run-kind-budget xauthor-run-interrupted
@@ -758,6 +759,14 @@ guard_review-self-corroboration() { uv run pytest tests/review/test_review.py -q
 claim_review-static-citation() { echo "정적분석기의 지적에는 인용 검증을 걸지 않는다 — 파일을 직접 읽어 늘 맞으니 근거를 부풀린다"; }
 break_review-static-citation() { perl -0pi -e 's/        if not kinds\[name\]\.is_deterministic:/        if True:/' "$_REV"; }
 guard_review-static-citation() { uv run pytest tests/review/test_review.py -q -k reviewed_without_grading; }
+
+claim_review-silent-agent() { echo "답을 남기지 않은 에이전트 실행은 오류다 — 「지적 0건」으로 접으면 미측정이 미탐지가 된다 (F4)"; }
+break_review-silent-agent() { perl -0pi -e 's/    if reviewer\.available_runs\(sample\.sample_id\) < 1:/    if False:/' "$_REV"; }
+guard_review-silent-agent() { uv run pytest tests/review/test_review.py -q -k silent_agent; }
+
+claim_review-agent-citation() { echo "에이전트 지적에는 인용 검증을 건다 — 지어낸 인용은 근거 0 이다 (E3 하드 게이트)"; }
+break_review-agent-citation() { perl -0pi -e 's/        if not kinds\[name\]\.is_deterministic:/        if False:/' "$_REV"; }
+guard_review-agent-citation() { uv run pytest tests/review/test_review.py -q -k "verified_with_its_quote or made_up_quote"; }
 
 _XA=scripts/xauthor.py
 _XR=scripts/xauthor_run.py
