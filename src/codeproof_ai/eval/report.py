@@ -22,13 +22,18 @@ from typing import TYPE_CHECKING
 
 from codeproof_ai.eval.figures import (
     Estimate,
+    Example,
     PairCounts,
     PairRung,
+    Scoreboard,
     Spread,
     agents_svg,
+    examples_svg,
     pairs_svg,
+    scoreboard_svg,
     spread_svg,
 )
+from codeproof_ai.eval.glance import glance
 from codeproof_ai.eval.grading.injected import InjectedDefectGrader
 from codeproof_ai.eval.grading.safety import ProvableSafetyGrader
 from codeproof_ai.eval.metrics import credibility_warning
@@ -156,6 +161,7 @@ def render_measurements(
     *,
     selections: Sequence[Spread] = (),
     ladder: Sequence[PairRung] = (),
+    glance: Glance | None = None,
 ) -> str:
     """측정값 문서 전체.
 
@@ -189,6 +195,7 @@ def render_measurements(
         _pairs_section(run),
         _pair_ladder_section(ladder),
         _mix_section(run, samples),
+        _glance_section(glance),
         *(_agent_section(a, samples) for a in agents),
         *(
             _comparison_section(a, b, samples, widened)
@@ -347,6 +354,118 @@ def _reviewer_pair(agents: Sequence[AgentSection]) -> tuple[AgentSection, AgentS
     )
 
 
+DISPLAY = {"claude": "Claude Code", "codex": "Codex CLI"}
+"""그림 · 점수판에 쓰는 제품 이름 - 실행 기록의 `agent` 로 고른다. 모르면 리뷰어 이름 그대로."""
+
+
+@dataclass(frozen=True, slots=True)
+class Glance:
+    """점수판과 예시 - 측정값 문서의 「점수판」 절과 두 그림이 같은 값을 쓴다."""
+
+    reviewers: tuple[str, str]
+    board: Scoreboard
+    examples: tuple[Example, ...]
+    kinds: int
+    """잰 짝의 함정 분류 수."""
+
+
+def at_a_glance(
+    agents: Sequence[AgentSection], samples: Sequence[LabeledSample]
+) -> Glance | None:
+    """리뷰어만 다른 첫 짝의 점수판과 예시 (`glance`). 짝이 없거나 값이 없으면 None."""
+    if (pair := _reviewer_pair(agents)) is None:
+        return None
+    a, b = pair
+    names = (DISPLAY.get(a.agent, a.run.reviewer), DISPLAY.get(b.agent, b.run.reviewer))
+    found = glance(a.run, b.run, samples, names=names, conditions=_conditions(a, b))
+    if found is None:
+        return None
+    measured = _measured(a)
+    kinds = {
+        s.safety.category
+        for s in samples
+        if s.sample_id in measured and s.safety is not None and s.safety.category
+    }
+    return Glance((a.run.reviewer, b.run.reviewer), *found, kinds=len(kinds))
+
+
+def _conditions(a: AgentSection, b: AgentSection) -> str:
+    """점수판의 조건 줄 - 실행 기록에서 읽는다. 두 실행이 다르면 둘 다 적는다."""
+    sa, sb = dict(a.setup), dict(b.setup)
+
+    def both(key: str) -> str:
+        va, vb = sa.get(key, "?"), sb.get(key, "?")
+        return va if va == vb else f"{va} · {vb}"
+
+    same = sa.get("prompt_hash") == sb.get("prompt_hash")
+    return (
+        f"모델 {sa.get('model', '?')} · {sb.get('model', '?')} · effort {both('effort')} · "
+        f"{'같은 프롬프트' if same else '프롬프트가 다르다'} · docstring {a.docstrings or '?'} — "
+        "차이에는 모델과 제품(도구 · 권한)이 함께 들어 있다"
+    )
+
+
+def _glance_section(found: Glance | None) -> str:
+    """🔴 점수판 - 새 측정이 아니다. 같은 짝 판정을 다시 묶었을 뿐이고 주 지표는 하나다."""
+    if found is None:
+        return ""
+    ra, rb = found.reviewers
+    board = found.board
+    loose = board.slacks[-1]
+    lines = [
+        f"## 점수판 — `{ra}` vs `{rb}`",
+        "",
+        f"아래 「에이전트 비교」와 같은 묶음 · 같은 채점(`{HEADLINE_GRADER}`)의 짝 판정을 "
+        "지표 넷으로 다시 묶었다 — 새 측정이 아니다. 값은 한 번 돌렸을 때의 기대 비율"
+        "(slack 0)이고, 차이는 같은 짝을 함께 복원추출한 부트스트랩 95% "
+        f"(재표집 {RESAMPLES} · 시드 {SEED}).",
+        "",
+        f"| 지표 | 짝 판정 | `{ra}` | `{rb}` | 차이 | 95% 구간 | 판정 | slack 0→{loose} |",
+        "|---|---|---:|---:|---:|---|---|---|",
+    ]
+    for row in board.rows:
+        e = row.diff
+        verdict = "구별된다" if row.distinguishable else "구별되지 않는다"
+        tag = " (주)" if row.primary else ""
+        band = f"[{e.lo * 100:+.1f}, {e.hi * 100:+.1f}]%p"
+        moves = " · ".join(f"{x.strict:.1%}→{x.loose:.1%}" for x in (row.a, row.b))
+        lines.append(
+            f"| {row.label}{tag} | {' · '.join(row.verdicts)} | {row.a.strict:.1%} | "
+            f"{row.b.strict:.1%} | {e.point * 100:+.1f}%p | {band} | {verdict} | {moves} |"
+        )
+    moved = [row.label for row in board.rows if not row.stable]
+    ladder = "·".join(map(str, board.slacks))
+    lines += [
+        "",
+        "- 주 지표는 「정확히 갈랐다」(P-C) 다 — 수집 전에 선언했다 (DESIGN §7.10b). "
+        "나머지 셋은 같은 짝 판정을 다시 묶은 **사후 보조**다.",
+        f"- 🔴 slack {ladder} 에서 차이의 방향이나 판정이 흔들린다: " + " · ".join(moved)
+        if moved
+        else f"- o slack {ladder} 에서 네 지표 모두 차이의 방향과 판정이 같다.",
+        f"- 조건: {board.conditions}",
+        "",
+    ]
+    if found.examples:
+        lines += [
+            "### 예시 — 규칙으로 고른 짝",
+            "",
+            "이긴 쪽은 모든 회차 · 모든 slack 에서 P-C, 진 쪽은 모든 회차 · 모든 slack 에서 "
+            "같은 오답인 짝 가운데 decoy 가 가장 짧은 것 (같으면 식별자 순) — 방향마다 하나. "
+            "slack 0 하나로 고르면 결함 옆 줄에 낸 맞는 지적이 「놓침」인 짝이 뽑힌다.",
+            "",
+            "| 짝 | 함정 | decoy 줄 | 늘 P-C | 늘 같은 오답 |",
+            "|---|---|---:|---|---|",
+        ]
+        for ex in found.examples:
+            quiet = " · 지적 없음" if ex.loser.silent else ""
+            lines.append(
+                f"| `{ex.pair_id}` | `{ex.kind}` | {ex.lines} | {ex.winner.name} "
+                f"| {ex.loser.name} · {ex.loser.verdict}{quiet} |"
+            )
+        lines.append("")
+    return "\n".join(lines)
+
+
 def _estimate(
     label: str, point: float | None, interval: tuple[float, float] | None
 ) -> Estimate | None:
@@ -363,6 +482,7 @@ def render_figures(
     agents: Sequence[AgentSection] = (),
     *,
     ladder: Sequence[PairRung] = (),
+    glance: Glance | None = None,
 ) -> dict[str, str]:
     """그림 이름 → SVG. 생성물(측정값 문서)과 같은 실행 · 같은 계산에서 그린다."""
     negatives = sum(1 for s in samples if s.is_proven_safe)
@@ -374,6 +494,12 @@ def render_figures(
     }
     if ladder:
         figures["pairs.svg"] = pairs_svg(ladder)
+    if glance is not None:
+        figures["scoreboard.svg"] = scoreboard_svg(glance.board)
+        if glance.examples:
+            figures["examples.svg"] = examples_svg(
+                glance.examples, pairs=glance.board.pairs, kinds=glance.kinds
+            )
     if (pair := _reviewer_pair(agents)) is not None:
         a, b = pair
         grader = next(g for g in a.graders if g.name == HEADLINE_GRADER)

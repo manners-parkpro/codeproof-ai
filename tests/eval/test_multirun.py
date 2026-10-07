@@ -23,7 +23,15 @@ from codeproof_ai.eval.grading.injected import InjectedDefectGrader
 from codeproof_ai.eval.grading.paired import PairedFixGrader
 from codeproof_ai.eval.grading.safety import ProvableSafetyGrader
 from codeproof_ai.eval.loader import PRESENTED_FILENAME, load_decoy_samples
-from codeproof_ai.eval.multirun import at_least, difference, expectation, thresholds, total_runs
+from codeproof_ai.eval.multirun import (
+    at_least,
+    difference,
+    expectation,
+    mean_share,
+    thresholds,
+    total_runs,
+    verdicts_by_run,
+)
 from codeproof_ai.eval.pairing import PairVerdict, score_pairs
 from codeproof_ai.eval.runner import ReviewerRun, regrade_view, run_reviewer
 from codeproof_ai.reviewers.imported import ImportedReviewer
@@ -205,6 +213,41 @@ class TestDifference:
         once = _run(tmp_path / "once", {sid: [rs[0]] for sid, rs in FLAKY.items()})
         first = difference(flaky.outcomes, once.outcomes, _samples(), _grader(G))
         assert first == difference(flaky.outcomes, once.outcomes, _samples(), _grader(G))
+
+
+class TestVerdictGroups:
+    """점수판의 「짚음」 · 「헛경고」도 같은 짝 판정을 다시 묶은 것이다 - 같은 관점 · 같은 구간."""
+
+    CAUGHT = frozenset({PairVerdict.CORRECT, PairVerdict.OVER_FLAG})
+    ALARM = frozenset({PairVerdict.OVER_FLAG, PairVerdict.REVERSED})
+
+    def test_a_group_counts_every_verdict_in_it(self, flaky: ReviewerRun) -> None:
+        # 실행 0 은 P-C, 실행 1 은 P-V - 두 실행 모두 twin 을 짚었고 decoy 경고는 실행 1 뿐이다.
+        caught = expectation(flaky.outcomes, _samples(), _grader(G), hits=self.CAUGHT)
+        alarm = expectation(flaky.outcomes, _samples(), _grader(G), hits=self.ALARM)
+        assert (caught.per_run, caught.point) == ((1, 1), 1.0)
+        assert (alarm.per_run, alarm.point) == ((0, 1), 0.5)
+
+    def test_the_default_is_the_declared_primary(self, flaky: ReviewerRun) -> None:
+        only = frozenset({PairVerdict.CORRECT})
+        assert expectation(flaky.outcomes, _samples(), _grader(G)) == expectation(
+            flaky.outcomes, _samples(), _grader(G), hits=only
+        )
+
+    def test_the_point_alone_is_the_same_mean(self, flaky: ReviewerRun) -> None:
+        by_run = verdicts_by_run(flaky.outcomes, _samples(), _grader(G))
+        e = expectation(flaky.outcomes, _samples(), _grader(G), hits=self.ALARM)
+        assert mean_share(by_run, self.ALARM) == e.point
+
+    def test_complementary_groups_mirror(self, tmp_path: Path, flaky: ReviewerRun) -> None:
+        """「놓침」은 「짚음」의 여집합이다 - 차이와 구간이 부호만 바뀌어야 한다."""
+        once = _run(tmp_path / "once", {sid: [rs[0]] for sid, rs in FLAKY.items()})
+        rest = frozenset(PairVerdict) - self.ALARM
+        a = difference(flaky.outcomes, once.outcomes, _samples(), _grader(G), hits=self.ALARM)
+        b = difference(flaky.outcomes, once.outcomes, _samples(), _grader(G), hits=rest)
+        assert a.point == pytest.approx(0.5)
+        assert a.point is not None and a.interval is not None and b.interval is not None
+        assert (b.point, b.interval) == (-a.point, (-a.interval[1], -a.interval[0]))
 
 
 class TestExpectationInterval:

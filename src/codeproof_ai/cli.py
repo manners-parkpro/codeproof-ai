@@ -44,6 +44,7 @@ from codeproof_ai.eval.report import (
     RULE_SELECTIONS,
     SETUP_KEYS,
     AgentSection,
+    at_a_glance,
     pair_ladder,
     render_figures,
     render_measurements,
@@ -1367,12 +1368,14 @@ def _cmd_report(
     spreads = [spread_of(sel, r, graders) for sel, r in selections.items()]
     # 짝 판정 사다리 - 측정값 문서의 표와 짝 그림이 같은 목록을 쓴다 (A2a)
     ladder = pair_ladder(selections, samples)
+    # 점수판 · 예시 - 측정값 문서의 「점수판」과 두 그림이 같은 값을 쓴다
+    glance = at_a_glance(sections, samples)
     body = render_measurements(
-        run, samples, graders, sections, widened, selections=spreads, ladder=ladder
+        run, samples, graders, sections, widened, selections=spreads, ladder=ladder, glance=glance
     )
     if out == "-" or not selections:
         return _emit_generated(body, out, check=check)
-    drawn = render_figures(selections, graders, samples, sections, ladder=ladder)
+    drawn = render_figures(selections, graders, samples, sections, ladder=ladder, glance=glance)
     outputs = {out: body, **{str(figures / name): svg for name, svg in drawn.items()}}
     codes = [_emit_generated(text, path, check=check) for path, text in outputs.items()]
     return max(*codes, _stale_figures(figures, drawn, check=check))

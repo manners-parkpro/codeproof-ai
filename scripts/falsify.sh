@@ -51,6 +51,8 @@ PASS=0; FAIL=0; FAILED_NAMES=()
 #   guard_X   가드. 깨끗한 트리에서 **통과**하고 깨뜨린 뒤 **실패**해야 한다.
 
 SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict convention docs-tree docs-results-prose selection-headline selection-table selection-repeats fp-counts-floor pair-table pair-sentence pair-block generated figures-generated figures-beside stale-figure out-dash pairs-ladder-label pair-ladder-note agents-points landing-page landing-css landing-blob landing-numbers mutants-unknown
+           readme-scoreboard readme-scoreboard-lenient scoreboard-primary misses-complement
+           example-rule-slack scoreboard-interval
            agent-contract span-match llm-symbol import-format import-manifest import-rejected
            signed-runner pack-first-runs bundle-separators pair-difference model-pin
            docstring-neutral signed-docstrings resume-docstrings runner-docstrings compare-one-axis
@@ -274,6 +276,38 @@ guard_landing-numbers() { uv run pytest tests/docs/test_consistency.py -q -k quo
 claim_mutants-unknown() { echo "decoy mutants 는 없는 쌍 접두사를 거절한다 — 맞는 쌍 0개로 공허하게 통과하지 않게"; }
 break_mutants-unknown() { perl -0pi -e 's/if unknown := \[p for p in prefixes if p not in names\]:/if unknown := []:/' src/codeproof_ai/cli.py; }
 guard_mutants-unknown() { uv run pytest tests/cli/test_commands.py -q -k matches_no_pair; }
+
+# ── 점수판 · 예시 (eval/glance.py) - README 첫 화면의 숫자와 그 숫자를 고른 규칙 ──
+
+claim_readme-scoreboard() { echo "README 첫 화면의 점수판 숫자는 생성물 「점수판」과 같다 — 손으로 옮긴 숫자는 다시 재면 낡는다 (F5b)"; }
+break_readme-scoreboard() { perl -0pi -e 's/Claude 64\.7% · Codex 46\.9%/Claude 64.8% · Codex 46.9%/' README.md; }
+guard_readme-scoreboard() { uv run pytest tests/docs/test_consistency.py -q -k scoreboard_numbers_match; }
+
+claim_readme-scoreboard-lenient() { echo "넓힌 허용 오차 뒤의 숫자는 사다리 끝 값과 견준다 — 선언한 매칭의 숫자를 옮겨 써도 운다 (A2a)"; }
+break_readme-scoreboard-lenient() { perl -0pi -e 's/Claude 88\.4% ·/Claude 69.6% ·/' README.md; }
+guard_readme-scoreboard-lenient() { uv run pytest tests/docs/test_consistency.py -q -k scoreboard_numbers_match; }
+
+claim_scoreboard-primary() { echo "점수판의 주 지표 줄은 「에이전트 비교」의 주 지표와 같은 계산이다 — 한쪽만 채점을 바꾸면 운다"; }
+break_scoreboard-primary() {
+  perl -0pi -e 's/verdicts_by_run\(b\.outcomes, samples, ProvableSafetyGrader\(overlap_slack=s\)\)/verdicts_by_run(b.outcomes, samples, ProvableSafetyGrader(overlap_slack=s + 1))/' \
+    src/codeproof_ai/eval/glance.py && uv run codeproof report > /dev/null
+}
+guard_scoreboard-primary() { uv run pytest tests/docs/test_consistency.py -q -k repeats_the_primary; }
+
+claim_misses-complement() { echo "점수판의 「놓쳤다」는 「짚었다」의 여집합이다 — 판정 묶음이 어긋나면 운다"; }
+break_misses-complement() {
+  perl -0pi -e 's/\(PairVerdict\.UNDER_FLAG, PairVerdict\.REVERSED\)\)/(PairVerdict.UNDER_FLAG, PairVerdict.REVERSED, PairVerdict.OVER_FLAG))/' \
+    src/codeproof_ai/eval/glance.py && uv run codeproof report > /dev/null
+}
+guard_misses-complement() { uv run pytest tests/docs/test_consistency.py -q -k complement_of_catches; }
+
+claim_example-rule-slack() { echo "예시 짝은 모든 slack · 모든 회차에서 판정이 같은 짝만 고른다 — slack 0 만 보면 매칭 정책의 산물(D140)이 예시가 된다"; }
+break_example-rule-slack() { perl -0pi -e 's/for pair in ladder\.values\(\) for run/for pair in list(ladder.values())[:1] for run/' src/codeproof_ai/eval/glance.py; }
+guard_example-rule-slack() { uv run pytest tests/eval/test_glance.py -q; }
+
+claim_scoreboard-interval() { echo "점수판은 리뷰어마다의 구간을 싣지 않는다 — 구간은 같은 짝 위의 차이에만 있다 (F6)"; }
+break_scoreboard-interval() { perl -0pi -e 's/f"\{_pct\(share\.strict\)\}%"\)/f"{_pct(share.strict)}% [0, 1]")/' src/codeproof_ai/eval/figures.py; }
+guard_scoreboard-interval() { uv run pytest tests/eval/test_figures.py -q -k only_the_difference; }
 
 # ── 에이전트 층 (A2b · DESIGN §7.10) - 첫 전체 실행에서 조용히 틀렸던 자리들 ──
 

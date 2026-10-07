@@ -44,7 +44,7 @@
 <body>
 <main>
   <h1>CodeProof AI</h1>
-  <p class="lede">코드리뷰 품질 측정 실험 — 리뷰어를 비교하는 대신, 측정 방식이 결과를 얼마나 만드는지를 잰다.</p>
+  <p class="lede">코드리뷰 품질 측정 실험 — AI 리뷰어를 같은 코드로 채점하고, 그 숫자 중 얼마가 측정 방식의 것인지도 같이 잰다.</p>
   <p class="links">
     <a href="https://github.com/manners-parkpro/codeproof-ai">GitHub 저장소</a>
     <a href="https://github.com/manners-parkpro/codeproof-ai/blob/main/docs/RESULTS.md">결과 · 근거 · 한계</a>
@@ -54,30 +54,30 @@
 
   <p>실무 Spring 백엔드에서 Codex 와 Claude 를 매일 쓰다가 질문이 생겼다.</p>
   <p class="question">AI 리뷰어가 내는 품질 숫자 중 얼마가 모델의 것이고, 얼마가 측정 선택의 것인가?</p>
-  <p>증명 가능하게 안전한 코드와 가드만 지운 짝을 쌍으로 만들고, 리뷰어의 지적은 그대로 둔 채 채점 정의 · 매칭 허용
-    오차만 바꿔 다시 채점했다. 리뷰어 설정(룰 선택)도 바꿔 봤다. 아래 그림은 모두 <code>uv run codeproof report</code> 가
-    만드는 생성물이다.</p>
+  <p>Claude Code 와 Codex CLI 에게 증명 가능하게 안전한 코드와 가드만 지운 짝을 리뷰시키고, 같은 지적을 채점 정의 ·
+    매칭 허용 오차만 바꿔 다시 채점했다. 아래 그림은 모두 <code>uv run codeproof report</code> 가 만드는 생성물이다.</p>
 
-  <h2>정답 정의를 바꾸면</h2>
+  <h2>무엇을 리뷰했나</h2>
+  <figure>
+    <img src="figures/examples.svg" alt="규칙으로 고른 예시 짝 — 안전한 판과 가드를 지운 판, 두 리뷰어의 판정">
+    <figcaption>리뷰어는 파일을 하나씩 받는다 — 안전한 판에는 경고하지 않고 가드를 지운 판만 짚어야 맞다. 예시는 손으로
+      고르지 않고 그림에 적힌 규칙으로 골랐다 (방향마다 하나).</figcaption>
+  </figure>
+
+  <h2>점수판</h2>
+  <figure>
+    <img src="figures/scoreboard.svg" alt="Claude Code 와 Codex CLI 의 점수판 — 짚음 · 놓침 · 헛경고 · 정확히 갈랐다">
+    <figcaption>한 번 돌렸을 때 기대하는 비율이다. 굵은 막대는 결함 줄과 겹친 지적만 인정한 값이고, 가는 선은 허용 오차를
+      사다리 끝까지 넓힌 값이다 — 같은 리뷰도 매칭 규칙에 따라 숫자가 크게 움직인다. 비교는 같은 짝 위의 차이와 구간으로 내고,
+      허용 오차를 바꿔도 판정이 같은지 함께 본다. 쌍은 Claude 가 썼다 — 그래서 Codex 가 쓴 쌍으로 다시 재는 중이다.</figcaption>
+  </figure>
+
+  <h2>숫자 중 얼마가 측정 선택인가</h2>
   <figure>
     <img src="figures/spread.svg" alt="같은 지적을 두 정답 정의로 채점한 FP — 룰 선택별">
-    <figcaption>같은 지적인데 정답 정의만 바꿔도 FP 가 갈린다. 오른쪽 끝의 배수가 룰 선택마다 다르다 — 편차도 설정의 함수다.</figcaption>
-  </figure>
-
-  <h2>짝으로 보면</h2>
-  <figure>
-    <img src="figures/pairs.svg" alt="같은 Ruff 실행의 짝 판정 — 채점 정의별">
-    <figcaption>같은 실행이 한 정의에서는 「거의 다 놓쳤다」, 다른 정의에서는 「거꾸로 찾았다」가 된다. 그 「거꾸로」는
-      정확한 줄 일치에서만이다 — 매칭 허용 오차를 넓히면 「둘 다 지적했다」로 바뀐다 (오른쪽 열).</figcaption>
-  </figure>
-
-  <h2>에이전트를 비교하면</h2>
-  <figure>
-    <img src="figures/agents.svg" alt="Claude Code 와 Codex CLI — 같은 짝 위의 차이와 95% 구간">
-    <figcaption>점은 한 번 돌렸을 때 안전한 쪽은 넘기고 터지는 쪽만 짚은 짝의 비율(구별 성공)이다 — neutral 은 모듈
-      docstring 의 기전을 지운 판. 두 구간을 눈으로 겹쳐 보지 않고 같은 짝 위의 차이로 내고, 매칭 허용 오차 사다리 전체에서
-      판정이 같은지 함께 본다. 같은 프롬프트 하나 · Claude 가 쓴 쌍 · effort low 이고, 차이에는 모델과 제품(도구 · 권한)이
-      함께 들어 있다.</figcaption>
+    <figcaption>정적분석기(Ruff)의 같은 지적을 정답 정의만 바꿔 채점해도 FP 가 갈린다. 오른쪽 끝의 배수가 룰 선택마다
+      다르다 — 편차도 설정의 함수다. 짝 판정 · 에이전트 비교의 사다리는
+      <a href="https://github.com/manners-parkpro/codeproof-ai/blob/main/docs/RESULTS.md">결과 문서</a>에 있다.</figcaption>
   </figure>
 
   <h2>AI 에이전트와 만든 방식</h2>

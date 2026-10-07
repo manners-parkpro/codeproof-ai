@@ -12,12 +12,23 @@ import pytest
 
 from codeproof_ai.eval.figures import (
     BANNER,
+    CODE_LINES,
     Estimate,
+    Example,
+    ExampleSide,
     PairCounts,
     PairRung,
+    Scoreboard,
+    ScoreRow,
+    Share,
     Spread,
+    _clip,
+    _units,
+    _wrap,
     agents_svg,
+    examples_svg,
     pairs_svg,
+    scoreboard_svg,
     spread_svg,
 )
 
@@ -37,10 +48,44 @@ RUNGS = [
 RATES = [("claude-code-neutral", 0.647), ("codex-cli-neutral", 0.469)]
 LADDER = [(0, Estimate("slack 0", 0.178, 0.111, 0.249)),
           (10, Estimate("slack 10", 0.120, 0.049, 0.191))]
+BOARD = Scoreboard(
+    names=("Claude Code", "Codex CLI"),
+    pairs=150,
+    runs=(3, 3),
+    slacks=(0, 2, 5, 10),
+    rows=(
+        ScoreRow("버그를 짚었다", "가드를 지운 판의 결함 자리를 짚었다", ("P-C", "P-V"),
+                 Share(0.696, 0.884), Share(0.476, 0.700),
+                 Estimate("slack 0", 0.220, 0.156, 0.287), stable=True),
+        ScoreRow("안전한 코드에 헛경고", "증명된 안전한 판에 결함을 주장했다", ("P-V", "P-R"),
+                 Share(0.071, 0.100), Share(0.020, 0.036),
+                 Estimate("slack 0", 0.051, -0.011, 0.093), stable=False),
+        ScoreRow("정확히 갈랐다", "가드를 지운 판만 짚었다", ("P-C",),
+                 Share(0.647, 0.784), Share(0.469, 0.664),
+                 Estimate("slack 0", 0.178, 0.111, 0.249), stable=True, primary=True),
+    ),
+    conditions="effort low · 같은 프롬프트 · docstring neutral",
+)
+EXAMPLES = (
+    Example(
+        "D117-page-size", "bounded_input", 10, ("limit = min(limit, _MAX_PAGE)",), (),
+        "limit 을 상한으로 줄이는 줄이 없다.",
+        ExampleSide("Claude Code", "P-C", 3, quote="상한이 적용되지 않는다."),
+        ExampleSide("Codex CLI", "P-B", 3, silent=True),
+    ),
+    Example(
+        "D069-retry", "idempotent_retry", 20, ("_ledger[delivery_id] = row",),
+        ('_ledger[f"row-{len(_ledger)}"] = row',), "적립 행의 키를 매번 새로 만든다.",
+        ExampleSide("Codex CLI", "P-C", 3, quote="Each retry inserts another credit record."),
+        ExampleSide("Claude Code", "P-V", 3, quote="실패한 시도의 행이 장부에 남는다. " * 8),
+    ),
+)
 FIGURES: dict[str, Callable[[], str]] = {
     "spread": lambda: spread_svg(SPREADS, 150),
     "pairs": lambda: pairs_svg(RUNGS),
     "agents": lambda: agents_svg(RATES, LADDER, pairs=150, runs=(3, 3)),
+    "scoreboard": lambda: scoreboard_svg(BOARD),
+    "examples": lambda: examples_svg(EXAMPLES, pairs=150, kinds=14),
 }
 
 
@@ -147,3 +192,81 @@ class TestAgents:
         texts = _texts(agents_svg(RATES, LADDER, pairs=150, runs=(3, 3)))
         assert any("slack 0" in t and "150쌍" in t and "샘플당 3회" in t for t in texts)
         assert any("구별 성공(P-C)" in t for t in texts)  # 무엇의 비율인지 그림만 봐도 안다
+
+
+class TestScoreboard:
+    def test_values_are_the_declared_matching_and_the_ladder_end_is_labelled(self) -> None:
+        texts = _texts(scoreboard_svg(BOARD))
+        for want in ("69.6%", "47.6%", "10줄 88.4%", "10줄 70.0%", "64.7%", "46.9%"):
+            assert want in texts
+
+    def test_only_the_difference_carries_an_interval(self) -> None:
+        """🔴 리뷰어마다의 구간을 싣지 않는다 - 두 구간을 겹쳐 보는 읽기를 권하게 된다 (F6)."""
+        svg = scoreboard_svg(BOARD)
+        bracketed = [t for t in _texts(svg) if "[" in t]
+        assert bracketed == [
+            "+22.0%p [+15.6, +28.7]", "+5.1%p [-1.1, +9.3]", "+17.8%p [+11.1, +24.9]"
+        ]
+        lines = ET.fromstring(svg).iter(f"{SVG}line")
+        assert not [ln for ln in lines if ln.get("class") == "whisker"]
+
+    def test_the_verdict_follows_the_interval_and_the_ladder(self) -> None:
+        """구간이 0 을 품으면 「구별되지 않는다」, 사다리에서 판정이 바뀌면 흔들린다 (A2a)."""
+        texts = _texts(scoreboard_svg(BOARD))
+        assert texts.count("구별된다") == 2
+        assert "구별되지 않는다 · slack 에 흔들린다" in texts
+        assert any("판정이 흔들린다: 안전한 코드에 헛경고" in t for t in texts)
+
+    def test_it_names_the_primary_metric_the_grader_and_the_conditions(self) -> None:
+        texts = _texts(scoreboard_svg(BOARD))
+        assert "정확히 갈랐다 — 주 지표" in texts
+        assert any("provable_safety" in t and "150쌍" in t for t in texts)  # F5 - 어느 정의인지
+        assert any(t.startswith("조건: effort low") for t in texts)
+
+    def test_no_line_runs_past_the_frame(self) -> None:
+        """SVG 글은 줄을 바꾸지 않는다 - 긴 주석은 나눠서 싣는다."""
+        assert max(_units(t) for t in _texts(scoreboard_svg(BOARD))) <= 130
+
+
+class TestExamples:
+    def test_each_card_shows_the_change_and_both_verdicts(self) -> None:
+        texts = _texts(examples_svg(EXAMPLES, pairs=150, kinds=14))
+        for want in (
+            "D117-page-size",
+            "bounded_input · decoy 10줄",
+            "- limit = min(limit, _MAX_PAGE)",
+            "+ (지운 줄)",
+            "✓ Claude Code — 3회 모두 가드를 지운 판만 짚었다",
+            "✗ Codex CLI — 3회 모두 아무것도 지적하지 않았다",
+            "✗ Claude Code — 3회 모두 안전한 판에도 경고했다",
+        ):
+            assert want in texts
+        assert any("규칙으로 골랐다" in t for t in texts)  # 손으로 고르지 않았다고 그림이 말한다
+
+    def test_a_long_quote_is_clipped_to_the_frame(self) -> None:
+        texts = _texts(examples_svg(EXAMPLES, pairs=150, kinds=14))
+        quotes = [t for t in texts if t.startswith("“")]
+        assert len(quotes) == 3
+        assert any(t.endswith("…”") for t in quotes)
+
+    def test_many_changed_lines_are_cut(self) -> None:
+        many = tuple(f"x{i} = {i}" for i in range(CODE_LINES + 2))
+        ex = Example("D1", "k", 30, many, ("y = 0",), "결함.",
+                     ExampleSide("A", "P-C", 3), ExampleSide("B", "P-B", 3))
+        texts = _texts(examples_svg([ex], pairs=1, kinds=1))
+        assert [t for t in texts if t.startswith("- ")] == [
+            *(f"- x{i} = {i}" for i in range(CODE_LINES - 1)), "- …"
+        ]
+
+
+class TestTextFitting:
+    @pytest.mark.parametrize(
+        ("text", "units", "want"),
+        [("abcdef", 6, "abcdef"), ("abcdefg", 6, "abcde…"), ("가나다라", 5, "가나…")],
+    )
+    def test_clip_counts_wide_characters_twice(self, text: str, units: int, want: str) -> None:
+        assert _clip(text, units) == want
+
+    def test_wrap_breaks_only_at_spaces(self) -> None:
+        assert _wrap("가나 다라 마바", 5) == ["가나", "다라", "마바"]
+        assert _wrap("ab cd", 10) == ["ab cd"]

@@ -1,0 +1,86 @@
+<!-- 생성물 - `uv run codeproof report` 가 만든다. 손으로 고치지 않는다. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="374" viewBox="0 0 760 374" role="img" aria-label="Claude Code 와 Codex CLI — 같은 코드를 리뷰했다">
+<style>
+text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+       "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; fill: #1f2328; font-size: 12px; }
+.bg { fill: #ffffff; } .muted { fill: #59636e; } .title { font-size: 16px; font-weight: 600; }
+.strong { font-weight: 600; } .grid { stroke: #d1d9e0; stroke-width: 1; }
+.safe { fill: #0969da; } .inj { fill: #bc4c00; }
+.claude { fill: #8250df; } .codex { fill: #1a7f37; }
+.pc { fill: #1a7f37; } .pv { fill: #bf8700; } .pb { fill: #8c959f; } .pr { fill: #cf222e; }
+.whisker { stroke: #59636e; stroke-width: 2; } .zero { stroke: #cf222e; stroke-dasharray: 4 3; }
+.loose { fill-opacity: 0.3; } .card { fill: #f6f8fa; stroke: #d1d9e0; }
+.code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+text.guard { fill: #0969da; } text.bug { fill: #cf222e; } text.small { font-size: 11px; }
+@media (prefers-color-scheme: dark) {
+  text { fill: #e6edf3; } .bg { fill: #0d1117; } .muted { fill: #9198a1; }
+  .grid { stroke: #3d444d; } .safe { fill: #4493f8; } .inj { fill: #f0883e; }
+  .claude { fill: #ab7df8; } .codex { fill: #3fb950; }
+  .pc { fill: #3fb950; } .pv { fill: #d29922; } .pb { fill: #656c76; } .pr { fill: #f85149; }
+  .whisker { stroke: #9198a1; } .card { fill: #161b22; stroke: #3d444d; }
+  text.muted { fill: #9198a1; } text.guard { fill: #4493f8; } text.bug { fill: #f85149; }
+}
+</style>
+<rect class="bg" width="760" height="374" rx="8"/>
+<text x="20" y="30" class="title" text-anchor="start">Claude Code 와 Codex CLI — 같은 코드를 리뷰했다</text>
+<text x="20" y="50" class="muted" text-anchor="start">안전한 판과 가드만 지운 판 150쌍 · 샘플당 3회 · 한 번 돌렸을 때의 기대 비율 · 채점 provable_safety — 결함 줄과 겹친 지적만 인정</text>
+<rect class="claude" x="20" y="66" width="12" height="11" rx="2"/>
+<text x="38" y="76" text-anchor="start">Claude Code</text>
+<rect class="codex" x="140" y="66" width="12" height="11" rx="2"/>
+<text x="158" y="76" text-anchor="start">Codex CLI</text>
+<rect class="pb loose" x="250" y="70" width="24" height="3" rx="2"/>
+<text x="280" y="76" class="muted" text-anchor="start">가는 선 — 결함 줄에서 10줄 안까지 인정하면</text>
+<text x="740" y="76" class="muted small" text-anchor="end">차이 (Claude Code - Codex CLI) · 95%</text>
+<text x="20" y="105" class="strong" text-anchor="start">버그를 짚었다</text>
+<text x="20" y="122" class="muted small" text-anchor="start">가드를 지운 판의 결함 자리를 짚었다</text>
+<rect class="claude" x="230" y="93" width="160" height="11" rx="2"/>
+<rect class="claude loose" x="230" y="105" width="203.4" height="3" rx="2"/>
+<text x="470" y="103" text-anchor="start">69.6%</text>
+<text x="512" y="103" class="muted small" text-anchor="start">10줄 88.4%</text>
+<rect class="codex" x="230" y="111" width="109.4" height="11" rx="2"/>
+<rect class="codex loose" x="230" y="123" width="161" height="3" rx="2"/>
+<text x="470" y="121" text-anchor="start">47.6%</text>
+<text x="512" y="121" class="muted small" text-anchor="start">10줄 70.0%</text>
+<text x="740" y="105" text-anchor="end">+22.0%p [+15.6, +28.7]</text>
+<text x="740" y="122" class="muted" text-anchor="end">구별된다</text>
+<text x="20" y="155" class="strong" text-anchor="start">버그를 놓쳤다</text>
+<text x="20" y="172" class="muted small" text-anchor="start">결함 자리를 짚지 못했다</text>
+<rect class="claude" x="230" y="143" width="70" height="11" rx="2"/>
+<rect class="claude loose" x="230" y="155" width="26.6" height="3" rx="2"/>
+<text x="470" y="153" text-anchor="start">30.4%</text>
+<text x="512" y="153" class="muted small" text-anchor="start">10줄 11.6%</text>
+<rect class="codex" x="230" y="161" width="120.6" height="11" rx="2"/>
+<rect class="codex loose" x="230" y="173" width="69" height="3" rx="2"/>
+<text x="470" y="171" text-anchor="start">52.4%</text>
+<text x="512" y="171" class="muted small" text-anchor="start">10줄 30.0%</text>
+<text x="740" y="155" text-anchor="end">-22.0%p [-28.7, -15.6]</text>
+<text x="740" y="172" class="muted" text-anchor="end">구별된다</text>
+<text x="20" y="205" class="strong" text-anchor="start">안전한 코드에 헛경고</text>
+<text x="20" y="222" class="muted small" text-anchor="start">증명된 안전한 판에 결함을 주장했다</text>
+<rect class="claude" x="230" y="193" width="16.4" height="11" rx="2"/>
+<rect class="claude loose" x="230" y="205" width="23" height="3" rx="2"/>
+<text x="470" y="203" text-anchor="start">7.1%</text>
+<text x="512" y="203" class="muted small" text-anchor="start">10줄 10.0%</text>
+<rect class="codex" x="230" y="211" width="4.6" height="11" rx="2"/>
+<rect class="codex loose" x="230" y="223" width="8.2" height="3" rx="2"/>
+<text x="470" y="221" text-anchor="start">2.0%</text>
+<text x="512" y="221" class="muted small" text-anchor="start">10줄 3.6%</text>
+<text x="740" y="205" text-anchor="end">+5.1%p [+1.1, +9.3]</text>
+<text x="740" y="222" class="muted" text-anchor="end">구별된다</text>
+<text x="20" y="255" class="strong" text-anchor="start">정확히 갈랐다 — 주 지표</text>
+<text x="20" y="272" class="muted small" text-anchor="start">가드를 지운 판만 짚었다</text>
+<rect class="claude" x="230" y="243" width="148.7" height="11" rx="2"/>
+<rect class="claude loose" x="230" y="255" width="180.4" height="3" rx="2"/>
+<text x="470" y="253" text-anchor="start">64.7%</text>
+<text x="512" y="253" class="muted small" text-anchor="start">10줄 78.4%</text>
+<rect class="codex" x="230" y="261" width="107.8" height="11" rx="2"/>
+<rect class="codex loose" x="230" y="273" width="152.8" height="3" rx="2"/>
+<text x="470" y="271" text-anchor="start">46.9%</text>
+<text x="512" y="271" class="muted small" text-anchor="start">10줄 66.4%</text>
+<text x="740" y="255" class="strong" text-anchor="end">+17.8%p [+11.1, +24.9]</text>
+<text x="740" y="272" class="muted" text-anchor="end">구별된다</text>
+<text x="20" y="298" class="muted" text-anchor="start">차이의 판정은 허용 오차 0·2·5·10줄에서 모두 같다. 주 지표는 수집 전에 선언했고, 나머지 셋은 같은 짝 판정을 다시 묶은 보조다.</text>
+<text x="20" y="316" class="muted" text-anchor="start">차이의 구간은 같은 짝을 함께 복원추출한 부트스트랩이다.</text>
+<text x="20" y="334" class="muted" text-anchor="start">조건: 모델 claude-fable-5-1 · gpt-6-astra · effort low · 같은 프롬프트 · docstring neutral — 차이에는 모델과 제품(도구 · 권한)이</text>
+<text x="20" y="352" class="muted" text-anchor="start">함께 들어 있다</text>
+</svg>

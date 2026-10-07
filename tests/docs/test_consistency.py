@@ -52,6 +52,25 @@ def _all_docs() -> str:
     return "\n".join(p.read_text(encoding="utf-8") for p in DOCS.values())
 
 
+_SCORE_ROW = (
+    r"^\|\s*(?P<label>[^|`]+?)(?P<primary> \(주\))?\s*\|[^|]*\|\s*(?P<a>\d+\.\d)%\s*\|"
+    r"\s*(?P<b>\d+\.\d)%\s*\|\s*(?P<d>[+-]\d+\.\d)%p\s*\|"
+    r"\s*\[(?P<lo>[+-]\d+\.\d), (?P<hi>[+-]\d+\.\d)\]%p\s*\|[^|]*\|"
+    r"\s*(?P<a0>\d+\.\d)%→(?P<a1>\d+\.\d)% · (?P<b0>\d+\.\d)%→(?P<b1>\d+\.\d)%\s*\|"
+)
+
+
+def _scoreboard() -> tuple[int, dict[str, dict[str, str | None]]]:
+    """생성물 「점수판」 - (사다리 끝 slack, 지표 이름 → 칸)."""
+    text = MEASUREMENTS.read_text(encoding="utf-8")
+    section = text.split("## 점수판", 1)[-1].split("\n## ", 1)[0]
+    loose = re.search(r"\| slack 0→(\d+) \|", section)
+    assert loose, "생성물에서 점수판을 읽지 못했다"
+    rows = {m["label"]: m.groupdict() for m in re.finditer(_SCORE_ROW, section, re.M)}
+    assert len(rows) >= 4, f"점수판의 지표를 다 읽지 못했다: {sorted(rows)}"
+    return int(loose[1]), rows
+
+
 class TestReferencedFilesExist:
     """🔴 문서가 가리키는 파일이 사라지면 독자가 헛걸음한다."""
 
@@ -306,6 +325,82 @@ class TestProseDoesNotContradictTheGeneratedFile:
         assert not wrong, (
             "산문의 짝 판정 수가 생성물과 다르다 - "
             "`uv run codeproof report` 를 보고 고친다:\n  " + "\n  ".join(wrong)
+        )
+
+    def test_scoreboard_numbers_match_the_generated_file(self) -> None:
+        """🔴 산문의 점수판 숫자(두 리뷰어 · 차이와 구간)가 생성물 「점수판」과 같아야 한다.
+
+        README 첫 화면의 숫자다 - 손으로 옮긴 숫자는 묶음을 다시 재면 조용히 낡는다.
+        「N줄 안의 지적까지 인정하면」 뒤의 숫자는 사다리 끝 값과 견준다 (A2a).
+        """
+        loose, rows = _scoreboard()
+        labels = "|".join(map(re.escape, rows))
+        pair = re.compile(
+            rf"(?P<label>{labels})[^\n]{{0,40}}?"
+            r"Claude (?P<a>\d+\.\d)% ·\s+Codex (?P<b>\d+\.\d)%"
+        )
+        diff = re.compile(
+            r"차이 (?P<d>[+-]\d+\.\d)%p \[(?P<lo>[+-]\d+\.\d), (?P<hi>[+-]\d+\.\d)\]"
+        )
+        quoted = 0
+        wrong: list[str] = []
+        for name in PROSE:
+            text = _text(name).replace("**", "")
+            for m in pair.finditer(text):
+                quoted += 1
+                row = rows[m["label"]]
+                lenient = f"{loose}줄" in text[max(0, m.start() - 80) : m.start()]
+                want = (row["a1"], row["b1"]) if lenient else (row["a"], row["b"])
+                if (m["a"], m["b"]) != want:
+                    wrong.append(f"{name}: {m[0]!r} vs 생성물 {want}")
+            for m in diff.finditer(text):
+                quoted += 1
+                before = text[max(0, m.start() - 200) : m.start()]
+                near = max(rows, key=before.rfind)
+                truth = (rows[near]["d"], rows[near]["lo"], rows[near]["hi"])
+                if near not in before or (m["d"], m["lo"], m["hi"]) != truth:
+                    wrong.append(f"{name}: {m[0]!r} vs 생성물 {near} {truth}")
+        # 🔴 산문 쪽 형식이 바뀌면 읽는 행이 0 이 되어 공허하게 통과한다
+        assert quoted >= 4, f"대조한 인용이 {quoted}곳뿐이다 - 대조가 공허하다"
+        assert not wrong, (
+            "산문의 점수판 숫자가 생성물과 다르다 - "
+            "`uv run codeproof report` 를 보고 고친다:\n  " + "\n  ".join(wrong)
+        )
+
+    def test_the_scoreboard_repeats_the_primary_comparison(self) -> None:
+        """점수판의 주 지표 줄은 「에이전트 비교」의 주 지표와 같은 계산이다 - 숫자가 같아야 한다.
+
+        두 절은 다른 함수가 낸다 (`glance` · `_comparison_section`). 한쪽만 채점 정의나 slack 이
+        바뀌면 같은 문서가 두 숫자를 말한다.
+        """
+        text = MEASUREMENTS.read_text(encoding="utf-8")
+        head = re.search(r"^## 점수판 — `([^`]+)` vs `([^`]+)`", text, re.M)
+        assert head, "생성물에 점수판이 없다"
+        comparison = text.split(f"## 에이전트 비교 — `{head[1]}` vs `{head[2]}`", 1)[-1]
+        main = re.search(
+            r"^\|\s*`provable_safety` \(주\)\s*\|\s*(\d+\.\d)%\s*\|\s*(\d+\.\d)%\s*\|"
+            r"\s*([+-]\d+\.\d)%p\s*\|\s*\[([+-]\d+\.\d), ([+-]\d+\.\d)\]%p",
+            comparison.split("\n## ", 1)[0],
+            re.M,
+        )
+        assert main, "「에이전트 비교」에서 주 지표 줄을 읽지 못했다"
+        _, rows = _scoreboard()
+        primary = [r for r in rows.values() if r["primary"]]
+        assert len(primary) == 1, f"점수판의 주 지표 줄이 하나가 아니다: {len(primary)}"
+        (row,) = primary
+        assert (row["a"], row["b"], row["d"], row["lo"], row["hi"]) == main.groups()
+
+    def test_misses_are_the_complement_of_catches(self) -> None:
+        """「놓쳤다」는 「짚었다」의 여집합이다 - 판정 묶음이 어긋나면 둘의 합이 100% 가 아니다."""
+        _, rows = _scoreboard()
+        caught, missed = rows["버그를 짚었다"], rows["버그를 놓쳤다"]
+        for key in ("a", "b", "a1", "b1"):
+            total = float(str(caught[key])) + float(str(missed[key]))
+            assert abs(total - 100) <= 0.1 + 1e-9, f"{key}: {caught[key]} + {missed[key]}"
+        flip = {"+": "-", "-": "+"}
+        mirrored = {k: flip[str(caught[k])[0]] + str(caught[k])[1:] for k in ("d", "lo", "hi")}
+        assert (missed["d"], missed["lo"], missed["hi"]) == (
+            mirrored["d"], mirrored["hi"], mirrored["lo"]
         )
 
     def test_prose_does_not_quote_a_bare_discrimination_rate(self) -> None:
