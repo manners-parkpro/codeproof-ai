@@ -102,6 +102,16 @@ class TestTheBox:
         assert not {"--sandbox", "-s"} & set(args)
         assert args[args.index('default_permissions="box"') - 1] == "-c"
 
+    def test_only_the_audit_adds_a_schema(self, tmp_path: Path) -> None:
+        """감사 exec 은 저자 exec 에 스키마 하나만 더한다 - 감사도 그 인자 그대로 카나리를 돈다."""
+        last, schema = tmp_path / "last.txt", tmp_path / "schema.json"
+        author = xa.exec_args(BOX, VENV, "p", last, ephemeral=True)
+        audit = xa.exec_args(BOX, VENV, "p", last, ephemeral=True, schema=schema)
+        assert "--output-schema" not in author
+        assert audit[audit.index("--output-schema") + 1] == str(schema)
+        assert [a for a in audit if a not in ("--output-schema", str(schema))] == author
+        assert audit[-1] == "p"
+
 
 class TestProbes:
     def test_it_checks_both_directions(self) -> None:
@@ -315,6 +325,8 @@ class TestNothingOfClaudePairsInTheBox:
         readable = [
             *(REPO / "src" / "codeproof_ai").rglob("*.py"),
             *(p for p in (REPO / "corpus" / "decoys" / "_TEMPLATE").rglob("*") if p.is_file()),
+            REPO / "results" / "xauthor" / "author_prompt.md",  # 저자 상자에 고정 문서로 들어간다
+            REPO / "results" / "xauthor" / "audit_head.md",
         ]
         found = {
             str(p.relative_to(REPO)): hits

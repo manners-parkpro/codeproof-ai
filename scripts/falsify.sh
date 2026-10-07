@@ -68,7 +68,9 @@ SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict conv
            gate-directions gate-survivor gate-neutral gate-prose gate-docstring gate-twin-docstring gate-plan
            xauthor-login-shell xauthor-silent-probe xauthor-unrun xauthor-probe-collision xauthor-vacuous-loop
            xauthor-input-roles xauthor-var-tmp xauthor-verbatim xauthor-sandbox-flag
-           xauthor-inventory-ids xauthor-builtin-instructions xauthor-pair-leak)
+           xauthor-inventory-ids xauthor-builtin-instructions xauthor-pair-leak
+           xauthor-run-credit xauthor-run-repro xauthor-run-kind xauthor-run-budget xauthor-run-frozen
+           xauthor-run-restore xauthor-audit-schema)
 
 claim_layering() { echo "런타임(analysis)은 정답 라벨(eval)을 볼 수 없다 — A1"; }
 break_layering() {
@@ -609,6 +611,7 @@ break_gate-plan() { perl -0pi -e 's/    if shape in cells:/    if True:  # falsi
 guard_gate-plan() { uv run pytest tests/eval/test_gate.py -q -k test_plan; }
 
 _XA=scripts/xauthor.py
+_XR=scripts/xauthor_run.py
 
 claim_xauthor-login-shell() { echo "저자 exec 는 로그인 셸을 끈다 — path_helper 가 venv 를 /usr/bin 뒤로 밀어 python3 가 시스템 판이 된다 (§7.10d 수집 전 수정 ⑤)"; }
 break_xauthor-login-shell() { perl -0pi -e 's/        "-c", "allow_login_shell=false",\n//' "$_XA"; }
@@ -657,6 +660,34 @@ guard_xauthor-builtin-instructions() { uv run pytest tests/scripts/test_xauthor.
 claim_xauthor-pair-leak() { echo "저자가 상자에서 읽는 하네스 소스에 claude 쌍 번호 · 이름이 없다 — venv 는 읽기 허용이다 (§7.10d 「쓰는 입력」)"; }
 break_xauthor-pair-leak() { perl -0pi -e 's/\[실측\] 두 단계 건너 부르는 가드가/[실측] D051 처럼 두 단계 건너 부르는 가드가/' src/codeproof_ai/corpus/shape.py; }
 guard_xauthor-pair-leak() { uv run pytest tests/scripts/test_xauthor.py -q -k claude_pair; }
+
+claim_xauthor-run-credit() { echo "크레딧으로 끊긴 세션은 시도로 세지 않는다 — 못 보면 끊긴 시도가 쌍을 버리게 한다 (§7.10d 「시도 · 렌즈」)"; }
+break_xauthor-run-credit() { perl -0pi -e 's/CREDITS = "out of credits"/CREDITS = "credits exhausted"/' "$_XR"; }
+guard_xauthor-run-credit() { uv run pytest tests/scripts/test_xauthor_run.py -q -k credit_cut; }
+
+claim_xauthor-run-repro() { echo "재현은 마지막 줄이 정확히 REPRODUCED 일 때만 — NOT REPRODUCED 를 세면 맞는 쌍을 버린다 (§7.10d)"; }
+break_xauthor-run-repro() { perl -0pi -e 's/lines\[-1\] == "REPRODUCED"/lines[-1].endswith("REPRODUCED")/' "$_XR"; }
+guard_xauthor-run-repro() { uv run pytest tests/scripts/test_xauthor_run.py -q -k exact_last_line; }
+
+claim_xauthor-run-kind() { echo "하네스는 맡긴 분류인지 본다 — 안 보면 저자가 다른 분류로 칸을 채운다 (§7.10d)"; }
+break_xauthor-run-kind() { perl -0pi -e 's/if meta\.get\("trap_kind"\) != kind:/if False:/' "$_XR"; }
+guard_xauthor-run-kind() { uv run pytest tests/scripts/test_xauthor_run.py -q -k different_kind; }
+
+claim_xauthor-run-budget() { echo "1단계는 크레딧 창 여섯 개를 넘게 쓰면 멈춘다 (§7.10d 「1단계 · 타당성」)"; }
+break_xauthor-run-budget() { perl -0pi -e 's/return windows_used\(out\) > MAX_WINDOWS/return windows_used(out) > MAX_WINDOWS + 1/' "$_XR"; }
+guard_xauthor-run-budget() { uv run pytest tests/scripts/test_xauthor_run.py -q -k seventh; }
+
+claim_xauthor-run-frozen() { echo "저자 프롬프트는 커밋한 판에서 바꾸지 않는다 (§7.10d 「쓰는 입력」)"; }
+break_xauthor-run-frozen() { perl -0pi -e 's/\z/\n- 하나 더.\n/' results/xauthor/author_prompt.md; }
+guard_xauthor-run-frozen() { uv run pytest tests/scripts/test_xauthor_run.py -q -k committed_ones; }
+
+claim_xauthor-run-restore() { echo "끊긴 세션은 그 세션 전의 상자로 되돌린다 — 안 되돌리면 「처음부터 다시」가 아니다 (§7.10d)"; }
+break_xauthor-run-restore() { perl -0pi -e 's/        shutil\.rmtree\(box, ignore_errors=True\)\n        shutil\.copytree\(snap, box, symlinks=True\)\n/        pass\n/' "$_XR"; }
+guard_xauthor-run-restore() { uv run pytest tests/scripts/test_xauthor_run.py -q -k box_restored; }
+
+claim_xauthor-audit-schema() { echo "감사 exec 은 저자 exec 에 스키마 하나만 더한다 — 감사 카나리가 감사 인자 그대로를 본다 (§7.10d 상자)"; }
+break_xauthor-audit-schema() { perl -0pi -e 's/        args \+= \["--output-schema", str\(schema\)\]\n/        args += ["--output-schema", str(schema), "--skip-git-repo-check"]\n/' "$_XA"; }
+guard_xauthor-audit-schema() { uv run pytest tests/scripts/test_xauthor.py -q -k only_the_audit; }
 
 # ── 하네스 ─────────────────────────────────────────────────────────────────
 
