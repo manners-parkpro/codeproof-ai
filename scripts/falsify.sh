@@ -38,6 +38,12 @@ set -uo pipefail
 
 cd "$(dirname "$0")/.." || exit 2
 
+# 🔴 깨진 소스의 바이트코드를 남기지 않는다. 같은 크기로 깨고(`> 1` → `> 9`) 같은 초 안에 되돌리면, 깨진 소스로
+#    쓴 .pyc 의 「수정 시각(초) · 크기」가 되돌린 소스와 같아 파이썬이 그것을 그대로 쓴다 - 다음 시나리오가 깨끗한
+#    트리에서 거짓으로 실패했다 (pair-ladder-note · 두 번). [실측] 그 조건을 만들면 2/2 실패, 이 설정이면 2/2 통과,
+#    초가 다르면 통과 (DESIGN 교훈 #66).
+export PYTHONDONTWRITEBYTECODE=1
+
 RED=$'\033[31m'; GREEN=$'\033[32m'; DIM=$'\033[2m'; BOLD=$'\033[1m'; OFF=$'\033[0m'
 [[ -t 1 ]] || { RED=""; GREEN=""; DIM=""; BOLD=""; OFF=""; }
 
@@ -300,7 +306,7 @@ guard_scoreboard-primary() { uv run pytest tests/docs/test_consistency.py -q -k 
 
 claim_misses-complement() { echo "점수판의 「놓쳤다」는 「짚었다」의 여집합이다 — 판정 묶음이 어긋나면 운다"; }
 break_misses-complement() {
-  perl -0pi -e 's/\(PairVerdict\.UNDER_FLAG, PairVerdict\.REVERSED\)\)/(PairVerdict.UNDER_FLAG, PairVerdict.REVERSED, PairVerdict.OVER_FLAG))/' \
+  perl -0pi -e 's/^MISSED = \(PairVerdict\.UNDER_FLAG, PairVerdict\.REVERSED\)$/MISSED = (PairVerdict.UNDER_FLAG, PairVerdict.REVERSED, PairVerdict.OVER_FLAG)/m' \
     src/codeproof_ai/eval/glance.py && uv run codeproof report > /dev/null
 }
 guard_misses-complement() { uv run pytest tests/docs/test_consistency.py -q -k complement_of_catches; }
