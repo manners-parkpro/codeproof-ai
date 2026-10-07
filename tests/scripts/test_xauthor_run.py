@@ -121,6 +121,54 @@ class TestKindDone:
         assert xr.kind_done(outcomes) is done
 
 
+class TestStage2Inputs:
+    """2단계가 이어받는 것 - 분류 · 앞서 받아들인 쌍의 요약 (선언 「쓰는 입력」 · ⑩ (e))."""
+
+    @staticmethod
+    def _pair(out: Path, pid: str, kind: str, outcome: str, lure: str = "미끼") -> Path:
+        d = out / pid
+        meta = d / "final" / f"{pid}-x" / "meta.toml"
+        meta.parent.mkdir(parents=True)
+        meta.write_text(
+            f'trap_kind = "{kind}"\n[bait]\napparent_defect = """\n{lure}\n  둘째 줄\n"""\n'
+            '[safety]\nclaim = "주장"\nguard_symbol = "guard"\n',
+            encoding="utf-8",
+        )
+        (d / "pair.json").write_text(json.dumps({"kind": kind}), encoding="utf-8")
+        (d / "outcome.json").write_text(json.dumps({"outcome": outcome}), encoding="utf-8")
+        return d
+
+    def test_a_brief_is_the_authors_lure_and_guard_on_one_line(self, tmp_path: Path) -> None:
+        d = self._pair(tmp_path, "XC001", "bounded_input", "accepted", lure="큰 할당")
+        assert xr.brief_of(d) == "미끼: 큰 할당 둘째 줄 · 가드: `guard` — 주장"
+
+    def test_only_accepted_pairs_of_the_kind_are_given(self, tmp_path: Path) -> None:
+        dirs = [
+            self._pair(tmp_path, "XC003", "bounded_input", "accepted", lure="셋"),
+            self._pair(tmp_path, "XC001", "bounded_input", "accepted", lure="하나"),
+            self._pair(tmp_path, "XC002", "bounded_input", "failed", lure="버림"),
+            self._pair(tmp_path, "XC004", "defensive_copy", "accepted", lure="다른 분류"),
+        ]
+        briefs = xr.accepted_briefs("bounded_input", dirs)
+        assert [b.split(" · ")[0] for b in briefs] == ["미끼: 하나 둘째 줄", "미끼: 셋 둘째 줄"]
+
+    def test_the_kinds_carried_on_skip_refused_and_unfilled_ones(self, tmp_path: Path) -> None:
+        self._pair(tmp_path, "XC001", "bounded_input", "accepted")
+        self._pair(tmp_path, "XC002", "misleading_name", "refused")
+        self._pair(tmp_path, "XC003", "defensive_copy", "failed")
+        assert xr.stage2_kinds(tmp_path) == ["bounded_input"]
+
+    @pytest.mark.parametrize("attempt", [1, 2])
+    def test_every_attempt_carries_the_briefs(self, attempt: int) -> None:
+        """시도마다 새 세션이다 - 재시도 과제에도 앞 쌍 요약이 있어야 한다."""
+        task = xr.task_write("XC015", "bounded_input", attempt, "관문 실패", ("미끼: a",))
+        assert "다른 기전으로 쓴다" in task
+        assert "- 미끼: a\n" in task
+
+    def test_no_briefs_no_block(self) -> None:
+        assert "다른 기전" not in xr.task_write("XC001", "bounded_input", 1, None)
+
+
 class TestHarnessProblems:
     @staticmethod
     def _box(tmp_path: Path, pairs: dict[str, str]) -> Path:
@@ -636,6 +684,94 @@ class TestFlowWithAFakeCodex:
         assert outcomes == ["failed"] * xr.FAILED_PER_KIND
         summary = json.loads((pair.out / "summary.json").read_text(encoding="utf-8"))
         assert summary["kinds_filled"] == 0
+
+    # ── 2단계 - 1단계를 이어 바퀴 2~8 ─────────────────────────────────────────
+
+    @staticmethod
+    def _stage1(root: Path, *outcomes: str) -> Path:
+        """1단계 출력 - 관문 시험 쌍을 받아들인 쌍으로 둔다 (final/ 의 메타가 요약의 출처)."""
+        after = root / "stage1"
+        for n, outcome in enumerate(outcomes, 1):
+            d = after / f"XC{n:03d}"
+            (d / "final").mkdir(parents=True)
+            shutil.copytree(GATE_PAIR, d / "final" / f"XC{n:03d}-fake",
+                            ignore=shutil.ignore_patterns("__pycache__"))
+            (d / "pair.json").write_text(json.dumps({"kind": GATE_KIND}), encoding="utf-8")
+            (d / "outcome.json").write_text(json.dumps({"outcome": outcome}), encoding="utf-8")
+        (after / "RUN.json").write_text(json.dumps(xr.signed_fields()), encoding="utf-8")
+        return after
+
+    @staticmethod
+    def _stage2(p: Any, monkeypatch: pytest.MonkeyPatch, *, rounds: int = 2) -> Path:
+        out: Path = p.out.parent / "stage2"
+        venv: Path = p.venv
+
+        def fake_preflight(o: Path, _stage2: object = None) -> Path:
+            o.mkdir(parents=True, exist_ok=True)
+            if not (o / "RUN.json").exists():
+                (o / "RUN.json").write_text(json.dumps({"rounds": {}}), encoding="utf-8")
+            return venv
+
+        monkeypatch.setattr(xr, "preflight", fake_preflight)
+        monkeypatch.setattr(xr, "check_catalog", lambda: "note")
+        monkeypatch.setattr(xr, "KINDS", [GATE_KIND])
+        monkeypatch.setattr(xr, "ROUNDS", rounds)
+        monkeypatch.setattr(xr, "MIN_KINDS", 1)
+        return out
+
+    def test_stage2_writes_each_round_with_the_accepted_pairs_so_far(
+        self, pair: Any, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """바퀴마다 분류마다 한 쌍 · 앞서 받아들인 쌍의 요약이 쌓인다 · 쌍 번호는 1단계에 잇는다."""
+        after = self._stage1(pair.out.parent, "accepted")
+        out = self._stage2(pair, monkeypatch)
+        self._configure(pair, audits=[[], []])
+        assert xr.run_stage2(out, after) == xr.DONE
+        assert [(d.name, xr.pair_round(d), xr.outcome_of(d)) for d in xr.pair_dirs(out)] == [
+            ("XC002", 2, "accepted"), ("XC003", 3, "accepted"),
+        ]
+        briefs = [
+            [ln for ln in (out / pid / "write-1.prompt.txt").read_text(encoding="utf-8").split("\n")
+             if ln.startswith("- 미끼: ")]
+            for pid in ("XC002", "XC003")
+        ]
+        assert [len(b) for b in briefs] == [1, 2]
+        run = json.loads((out / "RUN.json").read_text(encoding="utf-8"))
+        assert sorted(run["rounds"]) == ["2", "3"]
+
+    def test_a_kind_that_misses_a_round_is_dropped_and_the_stage_is_incomplete(
+        self, pair: Any, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """🔴 바퀴 하나를 못 채운 분류는 8쌍이 못 된다 - 이후 바퀴는 안 쓴다 (10 미만은 미완)."""
+        after = self._stage1(pair.out.parent, "accepted")
+        out = self._stage2(pair, monkeypatch)
+        self._configure(pair, no_pair=True)
+        assert xr.run_stage2(out, after) == xr.STOP
+        rows = [(xr.pair_round(d), xr.outcome_of(d)) for d in xr.pair_dirs(out)]
+        assert rows == [(2, "failed")] * xr.FAILED_PER_KIND
+        assert "미완" in xr.events_of(out)[-1]["why"]
+
+    def test_stage2_stops_past_its_window_budget(
+        self, pair: Any, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        after = self._stage1(pair.out.parent, "accepted")
+        out = self._stage2(pair, monkeypatch)
+        out.mkdir()
+        cut = json.dumps({"event": "credit_cut"}) + "\n"
+        (out / "events.jsonl").write_text(cut * xr.STAGE2_MAX_WINDOWS, encoding="utf-8")
+        self._configure(pair)
+        assert xr.run_stage2(out, after) == xr.STOP
+        assert xr.pair_dirs(out) == []
+
+    def test_stage2_refuses_settings_that_differ_from_stage1(
+        self, pair: Any, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        after = self._stage1(pair.out.parent, "accepted")
+        record = json.loads((after / "RUN.json").read_text(encoding="utf-8"))
+        (after / "RUN.json").write_text(json.dumps({**record, "effort": "low"}), encoding="utf-8")
+        out = self._stage2(pair, monkeypatch)
+        self._configure(pair)
+        assert xr.run_stage2(out, after) == xr.HUMAN
 
     def test_a_wrong_kind_fails_the_gate_three_times(self, pair: Any) -> None:
         self._configure(pair, wrong_kind=True)

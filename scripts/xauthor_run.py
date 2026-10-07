@@ -1,6 +1,7 @@
 """codex 가 쌍을 쓰는 실행기 - DESIGN §7.10d 「시도 · 렌즈」 · 「1단계 · 타당성」.
 
     uv run python scripts/xauthor_run.py <출력>              🔴 유료 (codex 크레딧) - 첫 바퀴
+    uv run python scripts/xauthor_run.py <출력> --after <1단계 출력>   🔴 유료 - 2단계 (바퀴 2~8)
     uv run python scripts/xauthor_run.py <출력> --summary    지금까지의 요약 (codex 없이)
 
 첫 바퀴는 분류 이름순으로 한 쌍씩 쓴다. 출력 디렉터리의 파일이 상태다 -
@@ -9,13 +10,17 @@
     3  크레딧이 끊겼다 - 그 세션은 세지 않고 상자를 되돌렸다. 충전 뒤 다시 부른다
     4  사람이 봐야 한다 - 설정이 RUN.json 과 다르다 · 카탈로그 설명이 바뀌었다 ·
        감사 결과를 읽지 못했다 · 상자가 없다
-    5  멈춤 규칙 - 크레딧 창을 여섯 개 넘게 쓴다 (선언 「1단계 · 타당성」)
+    5  멈춤 규칙 - 1단계: 크레딧 창을 여섯 개 넘게 쓴다 (선언 「1단계 · 타당성」) ·
+       2단계: 창을 스무 개 넘게 쓴다 · 남은 분류가 10 미만이다 (「미완」)
 
 🔴 claude 는 쌍 내용에 관여하지 않는다 - 이 파일은 codex 를 부르고, 관문 · 재현 스크립트를
    권한 프로필 아래서 돌리고, 끝난 쌍을 복사만 한다. 프로필 · 환경 · 플래그는 xauthor.py 한 곳.
 🔴 시도마다 새 세션이고 상자는 시도 사이에 남는다 - 다음 시도는 관문 출력만 받고
    앞 시도의 파일을 고친다. 크레딧으로 끊기거나 하네스가 중단한 세션은 세지 않고,
    그 세션 전의 상자로 되돌려 처음부터 다시 돈다.
+🔴 2단계(--after)는 1단계를 이어 바퀴 2~8 을 돈다 - 바퀴마다 1단계와 같은 규칙이고, 한 바퀴를
+   못 채운 분류는 이후 바퀴에서 뺀다. 앞서 받아들인 쌍의 요약(미끼 · 가드 한 줄)을 쓰기 과제에
+   싣는다 (DESIGN §7.10d 「2단계 시작 전 보정」).
 🔴 안전 필터가 거절한 세션은 센다 - 그 쌍은 「refused」로 끝내고 그 분류도 닫는다.
    같은 분류의 새 쌍은 쌍 번호만 다른 같은 쓰기 요청을 보낸다 - 문구를 바꾸거나
    같은 요청을 되풀이해 필터를 넘기지 않는다 (수집 중 보정 2026-10-07 · DESIGN §7.10d).
@@ -62,6 +67,9 @@ KINDS = sorted(k.value for k in TrapKind)
 ATTEMPTS = 3          # 쌍마다 시도 (선언 「시도 · 렌즈」)
 FAILED_PER_KIND = 4   # 분류마다 버리는 쌍
 MAX_WINDOWS = 6       # 1단계 크레딧 창 (선언 「1단계 · 타당성」)
+ROUNDS = 7            # 2단계 바퀴 - 2~8 (선언 「2단계」 - 일곱 바퀴)
+MIN_KINDS = 10        # 2단계에서 남은 분류가 이보다 적으면 「미완」 (선언 「2단계」)
+STAGE2_MAX_WINDOWS = 20  # 2단계 창 상한 - 승인한 추정(13~15)을 넘기면 묻는다 (2단계 시작 전 보정)
 GATE_TIMEOUT_S = 30 * 60
 REPRO_TIMEOUT_S = 90  # 교차 패밀리 감사의 재현과 같다 (scripts/cross_family_repro.py)
 CREDITS = "out of credits"
@@ -111,6 +119,8 @@ class Pair:
     kind: str
     pid: str
     venv: Path
+    prior: tuple[str, ...] = ()
+    """같은 분류에서 앞서 받아들여진 쌍의 요약 - 쓰기 과제에 싣는다 (2단계)."""
 
     @property
     def d(self) -> Path:
@@ -251,6 +261,32 @@ def outcome_of(d: Path) -> str | None:
     return str(json.loads(path.read_text(encoding="utf-8"))["outcome"]) if path.exists() else None
 
 
+def pair_round(d: Path) -> int:
+    return int(json.loads((d / "pair.json").read_text(encoding="utf-8")).get("round", 1))
+
+
+def brief_of(d: Path) -> str | None:
+    """받아들여진 쌍의 요약 한 줄 - codex 가 쓴 메타에서 기계로 뽑는다 (미끼 · 가드).
+
+    🔴 claude 는 쌍 내용에 관여하지 않는다 - 공백만 접고, 고치거나 자르지 않는다.
+    """
+    meta = next(iter(sorted((d / "final").glob("*/meta.toml"))), None)
+    if meta is None:
+        return None
+    m = tomllib.loads(meta.read_text(encoding="utf-8"))
+    bait, safety = m.get("bait", {}), m.get("safety", {})
+    lure = " ".join(str(bait.get("apparent_defect", "")).split())
+    claim = " ".join(str(safety.get("claim", "")).split())
+    return f"미끼: {lure} · 가드: `{safety.get('guard_symbol', '')}` — {claim}"
+
+
+def accepted_briefs(kind: str, dirs: list[Path]) -> tuple[str, ...]:
+    """그 분류에서 받아들여진 쌍만, 쌍 번호 순 - 버린 쌍은 주지 않는다 (선언 ⑩ (e))."""
+    mine = sorted((d for d in dirs if pair_kind(d) == kind), key=lambda d: d.name)
+    found = (brief_of(d) for d in mine if outcome_of(d) == "accepted")
+    return tuple(b for b in found if b)
+
+
 # ── 프롬프트 ──────────────────────────────────────────────────────────────────
 
 
@@ -261,16 +297,31 @@ def _task_head(pid: str, kind: str) -> str:
     )
 
 
-def task_write(pid: str, kind: str, attempt: int, gate_out: str | None) -> str:
+def _prior_block(prior: tuple[str, ...]) -> str:
+    """같은 분류에서 앞서 받아들여진 쌍 - 다른 기전으로 쓰게 한다 (선언 「쓰는 입력」).
+
+    시도마다 새 세션이라 재시도 과제에도 싣는다.
+    """
+    if not prior:
+        return ""
+    lines = "".join(f"- {b}\n" for b in prior)
+    return f"\n이 분류에서 앞서 받아들여진 쌍이다 — 이것들과 다른 기전으로 쓴다.\n\n{lines}"
+
+
+def task_write(
+    pid: str, kind: str, attempt: int, gate_out: str | None, prior: tuple[str, ...] = (),
+) -> str:
     if attempt == 1 or gate_out is None:
         return (
             f"## 이번 과제\n\n{_task_head(pid, kind)}\n"
             "이 분류의 쌍 하나를 처음부터 끝까지 쓰고 관문을 넘긴다.\n"
+            f"{_prior_block(prior)}"
         )
     return (
         f"## 이번 과제 — 시도 {attempt}/{ATTEMPTS}\n\n{_task_head(pid, kind)}\n"
         "앞 시도에서 쓴 파일이 상자에 그대로 있다. "
-        "하네스가 돌린 관문이 아래처럼 실패했다 — 고쳐서 관문을 넘긴다.\n\n"
+        "하네스가 돌린 관문이 아래처럼 실패했다 — 고쳐서 관문을 넘긴다.\n"
+        f"{_prior_block(prior)}\n"
         f"```text\n{gate_out.rstrip()}\n```\n"
     )
 
@@ -560,7 +611,7 @@ def _run_pair(p: Pair) -> None:
     for a in range(1, ATTEMPTS + 1):
         if not (p.d / f"gate-{a}.json").exists():
             gate_out = (p.d / f"gate-{a - 1}.txt").read_text(encoding="utf-8") if a > 1 else None
-            prompt = author(task_write(p.pid, p.kind, a, gate_out))
+            prompt = author(task_write(p.pid, p.kind, a, gate_out, p.prior))
             session(p, f"write-{a}", prompt, box=p.box, snap=p.snap)
         if gate(p, f"gate-{a}"):
             passed = True
@@ -645,8 +696,11 @@ def _first_start() -> dict[str, str]:
     return {"wheel_sha256": wheel_sha, "model_note": check_catalog()}
 
 
-def preflight(out: Path) -> Path:
-    """판 · 고정 문서 · RUN.json · venv · 카탈로그 - 하나라도 어긋나면 시작하지 않는다."""
+def preflight(out: Path, stage2: dict[str, Any] | None = None) -> Path:
+    """판 · 고정 문서 · RUN.json · venv · 카탈로그 - 하나라도 어긋나면 시작하지 않는다.
+
+    `stage2` 는 2단계 첫 시작에 RUN.json 에 싣는 것이다 - 이어받은 1단계 · 분류 · 상한.
+    """
     if (found := xa._codex_version()) != xa.CODEX_VERSION:
         raise Stop(HUMAN, f"codex 판이 다르다: {found!r} (선언 {xa.CODEX_VERSION})")
     if (_sha256(PROMPT), _sha256(AUDIT_HEAD)) != (PROMPT_SHA256, AUDIT_HEAD_SHA256):
@@ -671,6 +725,16 @@ def preflight(out: Path) -> Path:
             },
             "invocations": [],
         }
+        if stage2 is not None:
+            rec |= {
+                "what": "DESIGN §7.10d 2단계 - 1단계를 이어 바퀴 2~8 (바퀴마다 분류마다 한 쌍씩)",
+                "rounds": {}, **stage2,
+                "caps": {
+                    "attempts": ATTEMPTS, "failed_pairs_per_kind_per_round": FAILED_PER_KIND,
+                    "max_windows": STAGE2_MAX_WINDOWS, "rounds": ROUNDS, "min_kinds": MIN_KINDS,
+                    "session_s": xa.EXEC_TIMEOUT_S,
+                },
+            }
     rec["invocations"].append({
         "at": _now(), "commit": _git("rev-parse", "HEAD"),
         "runner_sha256": _sha256(Path(__file__)),
@@ -701,7 +765,8 @@ def summarize(out: Path) -> dict[str, Any]:
             step = q.name.split("-", 1)[1].removesuffix(".reason")
             totals["write" if step.startswith("write-") else step]["cut_sessions"] += 1
         rows.append({
-            "pair": d.name, "kind": pair_kind(d), "outcome": outcome_of(d) or "진행 중",
+            "pair": d.name, "kind": pair_kind(d), "round": pair_round(d),
+            "outcome": outcome_of(d) or "진행 중",
             "attempts": sum(r["category"] == "write" for r in records), "sessions": len(records),
             "not_counted": [q.read_text(encoding="utf-8").strip() for q in reasons],
         })
@@ -763,6 +828,100 @@ def run(out: Path) -> int:
     return DONE
 
 
+def stage2_kinds(after: Path) -> list[str]:
+    """2단계가 이어 쓸 분류 - 1단계에서 받아들인 쌍이 있고 거절로 닫히지 않은 것."""
+    prior = pair_dirs(after)
+    closed = {pair_kind(d) for d in prior if outcome_of(d) == "refused"}
+    filled = {pair_kind(d) for d in prior if outcome_of(d) == "accepted"}
+    return [k for k in KINDS if k in filled and k not in closed]
+
+
+def alive(kind: str, rnd: int, out: Path) -> bool:
+    """그 바퀴를 쓸 수 있는가 - 앞 바퀴(2 ~ rnd-1)마다 받아들인 쌍이 있다.
+
+    🔴 한 바퀴를 못 채운 분류는 8쌍이 될 수 없다 - 이후 바퀴에서 쓰지 않는다 (선언 「2단계」 ·
+       통째로 뺀다). 쓴 쌍은 기록으로 남는다.
+    """
+    mine = [d for d in pair_dirs(out) if pair_kind(d) == kind]
+    return all(
+        any(pair_round(d) == r and outcome_of(d) == "accepted" for d in mine)
+        for r in range(2, rnd)
+    )
+
+
+def _same_as(after: Path) -> None:
+    """2단계는 1단계와 같은 방식이다 - 실행을 가르는 항목이 1단계 RUN.json 과 같아야 한다."""
+    prior = _load(after / "RUN.json")
+    fields = signed_fields()
+    if diffs := [k for k in SIGNED if prior.get(k) != fields[k]]:
+        raise Stop(HUMAN, f"1단계 RUN.json 과 설정이 다르다: {diffs} - 같은 방식이 아니다")
+
+
+def _round_start(out: Path, rnd: int) -> None:
+    """바퀴마다 카탈로그 설명을 대조해 RUN.json 에 적는다 (선언 「저자」 행)."""
+    run_json = out / "RUN.json"
+    rec = _load(run_json)
+    if str(rnd) not in rec["rounds"]:
+        rec["rounds"][str(rnd)] = {"started": _now(), "model_note": check_catalog()}
+        _json(run_json, rec)
+
+
+def run_stage2(out: Path, after: Path) -> int:
+    """2단계 - 1단계의 받아들인 쌍을 이어받아 바퀴 2~8 을 분류 이름순으로 돈다 (선언 「2단계」)."""
+    out.mkdir(parents=True, exist_ok=True)
+    lock = (out / ".lock").open("w")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        print("rc=4 · 이 출력 디렉터리에서 다른 실행기가 돌고 있다", file=sys.stderr)
+        return HUMAN
+    try:
+        _same_as(after)
+        kinds = stage2_kinds(after)
+        prior = pair_dirs(after)
+        venv = preflight(out, {
+            "after": {"dir": after.name, "accepted": [d.name for d in prior
+                                                      if outcome_of(d) == "accepted"]},
+            "kinds": kinds,
+        })
+        if windows_used(out) > STAGE2_MAX_WINDOWS:
+            why = f"크레딧 창 {STAGE2_MAX_WINDOWS}개를 넘게 쓴다 ({windows_used(out)}번째) - 묻는다"
+            raise Stop(STOP, why)
+        _event(out, "start", window=windows_used(out))
+        for rnd in range(2, 2 + ROUNDS):
+            live = [k for k in kinds if alive(k, rnd, out)]
+            if len(live) < MIN_KINDS:
+                why = f"바퀴 {rnd} 에 남은 분류가 {len(live)}개다 - 10 미만이라 「미완」"
+                raise Stop(STOP, why)
+            _round_start(out, rnd)
+            for kind in live:
+                while True:
+                    mine = [d for d in pair_dirs(out)
+                            if pair_kind(d) == kind and pair_round(d) == rnd]
+                    outcomes = [outcome_of(d) for d in mine]
+                    if kind_done(outcomes):
+                        break
+                    d = next((m for m, o in zip(mine, outcomes, strict=True) if o is None), None)
+                    if d is None:
+                        d = out / f"XC{len(prior) + len(pair_dirs(out)) + 1:03d}"
+                        d.mkdir()
+                        _json(d / "pair.json", {"kind": kind, "round": rnd, "created": _now()})
+                    earlier = [*prior, *(m for m in pair_dirs(out) if pair_round(m) < rnd)]
+                    run_pair(Pair(out=out, kind=kind, pid=d.name, venv=venv,
+                                  prior=accepted_briefs(kind, earlier)))
+        complete = [k for k in kinds if alive(k, 2 + ROUNDS, out)]
+        if len(complete) < MIN_KINDS:
+            raise Stop(STOP, f"8쌍을 채운 분류가 {len(complete)}개다 - 10 미만이라 「미완」")
+    except Stop as stop:
+        _event(out, "stop", rc=stop.rc, why=str(stop))
+        print(f"rc={stop.rc} · {stop}", file=sys.stderr)
+        return stop.rc
+    summary = summarize(out)
+    _json(out / "summary.json", summary)
+    print(f"8쌍을 채운 분류 {len(complete)}/{len(kinds)} · 크레딧 창 {summary['windows_used']}")
+    return DONE
+
+
 def main(argv: list[str]) -> int:
     match argv:
         case [out, "--summary"]:
@@ -772,6 +931,9 @@ def main(argv: list[str]) -> int:
             # 구동기가 멈추면 SIGTERM 이 온다 - 예외로 바꿔 run_group 이 codex 그룹까지 끝내게 한다
             signal.signal(signal.SIGTERM, lambda *_: sys.exit(128 + signal.SIGTERM))
             return run(Path(out).resolve())
+        case [out, "--after", after]:
+            signal.signal(signal.SIGTERM, lambda *_: sys.exit(128 + signal.SIGTERM))
+            return run_stage2(Path(out).resolve(), Path(after).resolve())
         case _:
             print(__doc__, file=sys.stderr)
             return 2
