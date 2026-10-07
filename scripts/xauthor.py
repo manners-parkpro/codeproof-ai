@@ -23,7 +23,12 @@ from pathlib import Path
 from typing import Any
 
 REPO = Path(__file__).resolve().parents[1]
-CODEX = REPO / "runs" / "tools" / "codex-0.158.0" / "node_modules" / ".bin" / "codex"
+CODEX = Path("/Users/Shared/xauthor-tools/codex-0.158.0/node_modules/.bin/codex")
+"""저장소 밖에 둔다 (수집 전 수정 ⑦).
+
+codex 는 자기 번들 zsh 경로를 읽기 허용에 더해 모델에게 보여 준다 - 저장소 안이면 그 경로로
+저장소 이름이 모델 입력에 실린다 [실측 · 카나리]. 측정에 쓴 runs/tools 판의 사본이다 (sha256 같음).
+"""
 CODEX_VERSION = "codex-cli 0.158.0"
 MODEL = "gpt-6-astra"
 EFFORT = "high"
@@ -135,7 +140,7 @@ def _remove_outside(before: set[Path]) -> None:
 
 
 def _codex_version() -> str:
-    return _run([str(CODEX), "--version"]).stdout.strip()
+    return _run([str(CODEX), "--version"]).stdout.strip() if CODEX.exists() else ""
 
 
 def _user_tmpdir() -> Path:
@@ -150,21 +155,29 @@ def _user_tmpdir() -> Path:
 # ── 점검표 - 점검(모델 없이)과 카나리(첫 exec)가 같은 표를 쓴다 ─────────────────
 
 
-def probes(box: Path, venv: Path) -> list[tuple[str, str, bool]]:
-    """(이름, 셸 조각, 되어야 하는가).
+def probes(
+    box: Path,
+    venv: Path,
+    *,
+    repo: Path = REPO,
+    home: Path | None = None,
+    user_tmp: Path | None = None,
+) -> list[tuple[str, str, bool]]:
+    """(이름, 셸 조각, 되어야 하는가). 저장소 · 홈 · 사용자 임시 폴더는 시험에서 바꿔 넣는다.
 
     따옴표와 `$` 를 쓰지 않는다 - 카나리는 「시킨 명령이 보고된 명령에 그대로 있는가」로
     판정하는데, codex 는 명령을 홑따옴표로 감싸 보고하고 홑따옴표가 든 명령만 겹따옴표로
     감싼다 [실측 · 원본 426건]. `$` · 겹따옴표가 든 명령의 보고 모양은 본 적이 없다.
     """
-    home, user_tmp = Path.home(), _user_tmpdir()
-    paths = (REPO, home, user_tmp, box, venv, *OUTSIDE)
+    home = home or Path.home()
+    user_tmp = user_tmp or _user_tmpdir()
+    paths = (repo, home, user_tmp, box, venv, *OUTSIDE)
     if odd := [str(p) for p in paths if re.search(r"[\s'\"$\\]", str(p))]:
         msg = f"공백 · 따옴표 · $ 가 든 경로는 점검표에 쓸 수 없다: {odd}"
         raise ValueError(msg)
     var_tmp, shared = OUTSIDE
     return [
-        ("REPO", f"cat {REPO / 'README.md'}", False),
+        ("REPO", f"cat {repo / 'README.md'}", False),
         ("USER-HOME", f"ls {home}", False),
         ("CODEX-HOME", f"ls {home / '.codex'}", False),
         ("SLASH-TMP", "ls /private/tmp", False),
@@ -313,8 +326,8 @@ def _rollout(nonce: str, since: float) -> Path | None:
     return None
 
 
-def _inputs(rollout: Path) -> list[tuple[str, str]]:
-    """모델이 받은 입력 - (종류, 내용). session_meta · turn_context · developer/user/system 메시지.
+def _inputs(rollout: Path) -> list[tuple[str, dict[str, Any]]]:
+    """모델이 받은 입력 - (종류, payload). session_meta · turn_context · 지시 메시지.
 
     도구 출력은 우리 명령의 결과라 뺀다 (막힌 경로를 적은 오류문에 저장소 이름이 들어간다).
     """
@@ -330,36 +343,69 @@ def _inputs(rollout: Path) -> list[tuple[str, str]]:
         payload = rec.get("payload") if isinstance(rec.get("payload"), dict) else {}
         role = payload.get("role")
         if kind in ("session_meta", "turn_context"):
-            found.append((str(kind), json.dumps(payload, ensure_ascii=False)))
+            found.append((str(kind), payload))
         elif (
             kind == "response_item"
             and payload.get("type") == "message"
             and role in ("developer", "user", "system")
         ):
-            found.append((str(role), json.dumps(payload, ensure_ascii=False)))
+            found.append((str(role), payload))
     return found
 
 
+def _entries(node: object) -> list[str]:
+    """권한 목록의 (접근, 경로) - 모델에게 보여 준 파일 시스템 정책."""
+    if isinstance(node, list):
+        return [e for item in node for e in _entries(item)]
+    if not isinstance(node, dict):
+        return []
+    if "access" in node and isinstance(node.get("path"), dict):
+        where = node["path"].get("path") or json.dumps(node["path"], ensure_ascii=False)
+        return [f"{node['access']} {where}"]
+    return [e for value in node.values() for e in _entries(value)]
+
+
 def input_inventory(rollout: Path, nonce: str, hide: dict[str, str]) -> list[str]:
-    """카나리 지시 밖의 입력마다 한 줄 - 경로를 가려 공개 요약에 싣는다 (선언 「상자」 행)."""
+    """카나리 지시 밖의 입력마다 한 줄 - 경로를 가려 공개 요약에 싣는다 (선언 「상자」 행).
+
+    session_meta 는 키만 싣는다 - 계정 식별자(creator_*_id)가 든다 [실측 · 카나리].
+    turn_context 는 키와 권한 목록을 싣는다.
+    """
     lines = []
-    for kind, text in _inputs(rollout):
+    for kind, payload in _inputs(rollout):
+        text = json.dumps(payload, ensure_ascii=False)
         if nonce in text:
             continue
-        shown = text
+        if kind in ("session_meta", "turn_context"):
+            line = f"{kind} ({len(text)}자): 키 {', '.join(sorted(payload))}"
+            if kind == "turn_context":
+                line += f" · 권한 {sorted(set(_entries(payload.get('permission_profile'))))}"
+        else:
+            content = payload.get("content")
+            first = content[0] if isinstance(content, list) and content else content
+            head = first.get("text", "") if isinstance(first, dict) else str(first)
+            line = f"{kind} ({len(text)}자): {head[:120]}"
         for real, mask in hide.items():
-            shown = shown.replace(real, mask)
-        lines.append(f"{kind} ({len(shown)}자): {shown[:160]}")
+            line = line.replace(real, mask)
+        lines.append(line)
     return lines
 
 
 def model_input_traces(rollout: Path, nonce: str) -> dict[str, int]:
-    """모델이 받은 입력 중 우리 지시(표지가 든 메시지) 밖에 이 저장소의 흔적이 몇 번 있는가."""
+    """모델이 받은 입력 중 우리 지시(표지가 든 메시지) 밖에 이 저장소의 흔적이 몇 번 있는가.
+
+    codex 내장 지시(session_meta.base_instructions)만 뺀다 - 그 안의 일반 문장에
+    'memory' 가 있다 [실측 · 카나리].
+    """
     words = ("codeproof", "decoy", "twin", "memor")
     counts = dict.fromkeys(words, 0)
-    for _kind, text in _inputs(rollout):
+    for kind, payload in _inputs(rollout):
+        text = json.dumps(payload, ensure_ascii=False)
         if nonce in text:
             continue
+        if kind == "session_meta":
+            rest = {k: v for k, v in payload.items() if k != "base_instructions"}
+            text = json.dumps(rest, ensure_ascii=False)
         for w in words:
             counts[w] += text.lower().count(w)
     return counts

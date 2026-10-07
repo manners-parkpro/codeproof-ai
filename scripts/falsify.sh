@@ -67,7 +67,8 @@ SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict conv
            pair-discovery mutant-alias template-kinds lint-exclude
            gate-directions gate-survivor gate-neutral gate-prose gate-docstring gate-twin-docstring gate-plan
            xauthor-login-shell xauthor-silent-probe xauthor-unrun xauthor-probe-collision xauthor-vacuous-loop
-           xauthor-input-roles xauthor-var-tmp xauthor-verbatim xauthor-sandbox-flag)
+           xauthor-input-roles xauthor-var-tmp xauthor-verbatim xauthor-sandbox-flag
+           xauthor-inventory-ids xauthor-builtin-instructions)
 
 claim_layering() { echo "런타임(analysis)은 정답 라벨(eval)을 볼 수 없다 — A1"; }
 break_layering() {
@@ -639,6 +640,14 @@ guard_xauthor-verbatim() { uv run pytest tests/scripts/test_xauthor.py -q -k no_
 claim_xauthor-sandbox-flag() { echo "저자 exec 에 --sandbox 를 주지 않는다 — 주면 프로필 대신 옛 workspace-write 가 조용히 걸린다 (§7.10d 수집 전 수정 ⑥)"; }
 break_xauthor-sandbox-flag() { perl -0pi -e 's/        "--color", "never", "-C", str\(box\),/        "--sandbox", "workspace-write", "--color", "never", "-C", str(box),/' "$_XA"; }
 guard_xauthor-sandbox-flag() { uv run pytest tests/scripts/test_xauthor.py -q -k sandbox_flag; }
+
+claim_xauthor-inventory-ids() { echo "카나리 공개 요약의 session_meta 는 키만 싣는다 — 계정 식별자가 든다 (§7.10d 수집 전 수정 ⑦)"; }
+break_xauthor-inventory-ids() { perl -0pi -e 's/line = f"\{kind\} \(\{len\(text\)\}자\): 키 \{\x27, \x27\.join\(sorted\(payload\)\)\}"/line = f"{kind} ({len(text)}자): {text[:160]}"/' "$_XA"; }
+guard_xauthor-inventory-ids() { uv run pytest tests/scripts/test_xauthor.py -q -k account_ids; }
+
+claim_xauthor-builtin-instructions() { echo "카나리 흔적 집계는 codex 내장 지시만 뺀다 — session_meta 를 통째로 빼면 그 밖의 흔적을 놓친다 (§7.10d 수집 전 수정 ⑦)"; }
+break_xauthor-builtin-instructions() { perl -0pi -e 's/rest = \{k: v for k, v in payload\.items\(\) if k != "base_instructions"\}/rest = {}/' "$_XA"; }
+guard_xauthor-builtin-instructions() { uv run pytest tests/scripts/test_xauthor.py -q -k builtin_instructions; }
 
 # ── 하네스 ─────────────────────────────────────────────────────────────────
 

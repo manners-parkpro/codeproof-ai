@@ -34,7 +34,9 @@ Row = tuple[str, str, bool]
 
 
 def _table() -> list[Row]:
-    table: list[Row] = xa.probes(BOX, VENV)
+    """실제 클론 · 홈 경로를 쓰지 않는다 - 받은 사람의 경로에 공백이 있어도 시험은 같아야 한다."""
+    fake = Path("/Users/someone")
+    table: list[Row] = xa.probes(BOX, VENV, repo=fake / "repo", home=fake, user_tmp=fake / "tmp")
     return table
 
 
@@ -223,19 +225,37 @@ class TestModelInputTraces:
         assert not any(xa.model_input_traces(rollout, nonce).values())
 
     def test_the_inventory_lists_input_outside_our_prompt(self, tmp_path: Path) -> None:
-        """선언 「상자」 행 - 카나리 지시 밖의 입력을 경로를 가려 한 줄씩 싣는다."""
+        """선언 「상자」 행 - 카나리 지시 밖의 입력을 한 줄씩, 권한 목록은 경로를 가려 싣는다."""
         nonce = "xauthor-canary-1"
+        entry = {"path": {"type": "path", "path": str(BOX)}, "access": "write"}
         rollout = self._rollout(tmp_path / "r.jsonl", [
-            {"type": "turn_context", "payload": {"cwd": "/Users/Shared/xauthor-box-test"}},
+            {"type": "turn_context", "payload": {"permission_profile": {"entries": [entry]}}},
             self._message("developer", "sandbox notes"),
             self._message("user", f"{nonce} commands"),
             self._message("assistant", "DONE"),
         ])
         lines = xa.input_inventory(rollout, nonce, {str(BOX): "<box>"})
         assert len(lines) == 2
-        assert lines[0].startswith("turn_context") and "<box>" in lines[0]
+        assert lines[0].startswith("turn_context") and "write <box>" in lines[0]
         assert str(BOX) not in lines[0]
-        assert lines[1].startswith("developer")
+        assert lines[1].startswith("developer") and "sandbox notes" in lines[1]
+
+    def test_the_inventory_hides_account_ids(self, tmp_path: Path) -> None:
+        """🔴 공개 요약에 싣는다 - session_meta 는 키만 (계정 식별자가 든다 [실측 · 카나리])."""
+        meta = {"creator_user_id": "user-SECRET", "creator_account_id": "acct-SECRET"}
+        rollout = self._rollout(tmp_path / "r.jsonl", [{"type": "session_meta", "payload": meta}])
+        (line,) = xa.input_inventory(rollout, "xauthor-canary-1", {})
+        assert "creator_user_id" in line
+        assert "SECRET" not in line
+
+    def test_builtin_instructions_are_not_counted(self, tmp_path: Path) -> None:
+        """codex 내장 지시만 빼고 센다 - 그 밖의 session_meta 필드는 센다 (대조)."""
+        meta = {"base_instructions": "a SKILL.md, AGENTS.md, memory, or approval block",
+                "cwd": "/x/codeproof-ai"}
+        rollout = self._rollout(tmp_path / "r.jsonl", [{"type": "session_meta", "payload": meta}])
+        traces = xa.model_input_traces(rollout, "xauthor-canary-1")
+        assert traces["memor"] == 0
+        assert traces["codeproof"] == 1
 
     def test_a_trace_in_developer_input_counts(self, tmp_path: Path) -> None:
         rollout = self._rollout(tmp_path / "r.jsonl", [
