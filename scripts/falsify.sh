@@ -543,11 +543,12 @@ break_convention() {
     src/codeproof_ai/domain/finding.py
 }
 guard_convention() {
-  # 고친 상태의 FP 는 한 자릿수다. 회귀를 넣으면 수십 건으로 뛴다.
+  # 고친 상태의 FP 는 20 이하다 [실측 · 150쌍 · 17]. 회귀를 넣으면 수백 건으로 뛴다 [실측 · 150쌍 · 258].
+  # 착수 조건: 쌍이 늘어 고친 상태가 20 을 넘으면 깨끗한 트리에서 울어 「가드 고장」으로 보고된다 - 그때 상대 비교로 바꾼다.
   local fp
   fp=$(uv run codeproof measure --analyzers ruff --ruff-select ALL --store none 2>/dev/null \
        | awk '/^ *provable_safety/ {print $3; exit}')
-  echo "회귀 상태의 provable_safety FP: ${fp}건 (고친 상태는 한 자릿수다)"
+  echo "회귀 상태의 provable_safety FP: ${fp}건 (고친 상태의 값은 docs/MEASUREMENTS.md · 문턱 20)"
   [[ -n "$fp" && "$fp" -le 20 ]]   # 20 이하로 남아 있으면 회귀가 재현되지 않은 것 → 가드 침묵
 }
 
