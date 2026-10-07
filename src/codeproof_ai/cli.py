@@ -39,7 +39,14 @@ from codeproof_ai.eval.pairing import (
     pair_summary,
     score_pairs,
 )
-from codeproof_ai.eval.report import SETUP_KEYS, AgentSection, render_measurements
+from codeproof_ai.eval.report import (
+    RULE_SELECTIONS,
+    SETUP_KEYS,
+    AgentSection,
+    render_figures,
+    render_measurements,
+    spread_of,
+)
 from codeproof_ai.eval.runner import (
     ReviewerRun,
     run_reviewer,
@@ -277,6 +284,11 @@ def _add_report_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser])
         "--agents",
         default="results/agent",
         help="에이전트 묶음(<이름>/RUN.json + findings.jsonl) 디렉터리. 없으면 정적분석기만",
+    )
+    rep.add_argument(
+        "--figures",
+        default="docs/figures",
+        help="생성 그림(SVG) 디렉터리 - 측정값 문서와 같은 계산에서 그린다 (--out - 이면 없음)",
     )
 
 
@@ -1295,7 +1307,8 @@ def _cmd_pack(corpus: Path, src: Path, out: Path, *, runs: int | None = None) ->
 
 
 def _cmd_report(
-    corpus: Path, analyzer: str, ruff_select: str, out: str, *, check: bool, agents: Path
+    corpus: Path, analyzer: str, ruff_select: str, out: str, *, check: bool, agents: Path,
+    figures: Path,
 ) -> int:
     """🔴 측정값을 **생성**한다 - 문서가 숫자를 베끼면 반드시 낡는다."""
     samples = load_decoy_samples(corpus)
@@ -1313,15 +1326,31 @@ def _cmd_report(
         return 2
 
     graders = _graders_for(analyzer, 0, samples)
-    run = run_reviewer(AnalyzerReviewer(an), samples, graders)
+    # 룰 선택 손잡이 - 그림과 측정값 문서의 「룰 선택」 표가 같은 실행을 쓴다 (결과 6)
+    selections = (
+        {
+            sel: run_reviewer(
+                AnalyzerReviewer(create_analyzer("ruff", select=tuple(sel.split(",")))),
+                samples, graders,
+            )
+            for sel in RULE_SELECTIONS
+        }
+        if analyzer == "ruff"
+        else {}
+    )
+    run = selections.get(ruff_select) or run_reviewer(AnalyzerReviewer(an), samples, graders)
     sections = _agent_sections(agents, samples)
     if sections is None:
         return 2
     # 보조 ③ - twin 정답 구간을 넓힌 라벨. 에이전트 비교에서만 쓴다 (DESIGN §7.10c).
     widened = load_decoy_samples(corpus, widen_twin=True) if sections else []
-    return _emit_generated(
-        render_measurements(run, samples, graders, sections, widened), out, check=check
-    )
+    spreads = [spread_of(sel, r, graders) for sel, r in selections.items()]
+    body = render_measurements(run, samples, graders, sections, widened, selections=spreads)
+    if out == "-" or not selections:
+        return _emit_generated(body, out, check=check)
+    drawn = render_figures(selections, graders, samples, sections)
+    outputs = {out: body, **{str(figures / name): svg for name, svg in drawn.items()}}
+    return max(_emit_generated(text, path, check=check) for path, text in outputs.items())
 
 
 def _emit_generated(body: str, out: str, *, check: bool) -> int:
@@ -1412,7 +1441,8 @@ _COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
         store_path=a.store,
     ),
     "report": lambda a: _cmd_report(
-        Path(a.corpus), a.analyzer, a.ruff_select, a.out, check=a.check, agents=Path(a.agents)
+        Path(a.corpus), a.analyzer, a.ruff_select, a.out, check=a.check, agents=Path(a.agents),
+        figures=Path(a.figures),
     ),
     "export": lambda a: _cmd_export(Path(a.corpus), Path(a.out), a.prompt, a.docstrings),
     "pack": lambda a: _cmd_pack(Path(a.corpus), Path(a.src), Path(a.out), runs=a.runs),

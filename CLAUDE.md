@@ -22,7 +22,7 @@ uv run mypy                      # files 설정은 pyproject 에
 uv run codeproof doctor          # 자격증명·도구 준비 상태
 uv run codeproof measure         # 정적분석기로 채점 기준 편차 측정 (API 불필요)
 uv run codeproof history         # 저장된 실행 · 재현성 확인
-uv run codeproof report          # docs/MEASUREMENTS.md 생성 (--check 로 최신 확인)
+uv run codeproof report          # docs/MEASUREMENTS.md · docs/figures/*.svg 생성 (--check 로 최신 확인)
 uv run codeproof pack --from <실행기 출력> --out results/agent/<이름> [--runs N]  # 에이전트 묶음 (N = 수집 전에 선언한 회차 수)
 uv run codeproof decoy validate  # decoy 규격 검사
 uv run codeproof decoy new <id>  # 템플릿에서 새 decoy
@@ -468,7 +468,7 @@ D층 집계 FPR 은 「도구의 오탐률」이 아니라 **「내가 고른 �
 ### F5b. 변동하는 측정값을 산문에 베끼지 않는다 🔴
 
 ```bash
-uv run codeproof report            # docs/MEASUREMENTS.md 생성
+uv run codeproof report            # docs/MEASUREMENTS.md · docs/figures/*.svg 생성
 uv run codeproof report --check    # 낡았으면 exit 1
 ```
 

@@ -1,0 +1,56 @@
+<!-- 생성물 - `uv run codeproof report` 가 만든다. 손으로 고치지 않는다. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="332" viewBox="0 0 760 332" role="img" aria-label="에이전트 비교 — 같은 짝 위의 차이로 낸다">
+<style>
+text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+       "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; fill: #1f2328; font-size: 12px; }
+.bg { fill: #ffffff; } .muted { fill: #59636e; } .title { font-size: 16px; font-weight: 600; }
+.strong { font-weight: 600; } .grid { stroke: #d1d9e0; stroke-width: 1; }
+.safe { fill: #0969da; } .inj { fill: #bc4c00; }
+.claude { fill: #8250df; } .codex { fill: #1a7f37; }
+.pc { fill: #1a7f37; } .pv { fill: #bf8700; } .pb { fill: #8c959f; } .pr { fill: #cf222e; }
+.whisker { stroke: #59636e; stroke-width: 2; } .zero { stroke: #cf222e; stroke-dasharray: 4 3; }
+@media (prefers-color-scheme: dark) {
+  text { fill: #e6edf3; } .bg { fill: #0d1117; } .muted { fill: #9198a1; }
+  .grid { stroke: #3d444d; } .safe { fill: #4493f8; } .inj { fill: #f0883e; }
+  .claude { fill: #ab7df8; } .codex { fill: #3fb950; }
+  .pc { fill: #3fb950; } .pv { fill: #d29922; } .pb { fill: #656c76; } .pr { fill: #f85149; }
+  .whisker { stroke: #9198a1; }
+}
+</style>
+<rect class="bg" width="760" height="332" rx="8"/>
+<text x="20" y="30" class="title" text-anchor="start">에이전트 비교 — 같은 짝 위의 차이로 낸다</text>
+<text x="20" y="50" class="muted" text-anchor="start">provable_safety · 단일 실행 기대값 · 짝 부트스트랩 95% 구간</text>
+<line class="grid" x1="200" y1="68" x2="200" y2="128"/>
+<text x="200" y="142" class="muted" text-anchor="middle">0%</text>
+<line class="grid" x1="400" y1="68" x2="400" y2="128"/>
+<text x="400" y="142" class="muted" text-anchor="middle">50%</text>
+<line class="grid" x1="600" y1="68" x2="600" y2="128"/>
+<text x="600" y="142" class="muted" text-anchor="middle">100%</text>
+<text x="20" y="88" text-anchor="start">claude-code-neutral</text>
+<line class="whisker" x1="430.2" y1="84" x2="488" y2="84"/>
+<circle class="claude" cx="458.7" cy="84" r="6"/>
+<text x="740" y="88" text-anchor="end">64.7% [57.6, 72.0]</text>
+<text x="20" y="116" text-anchor="start">codex-cli-neutral</text>
+<line class="whisker" x1="355.6" y1="112" x2="418.7" y2="112"/>
+<circle class="codex" cx="387.6" cy="112" r="6"/>
+<text x="740" y="116" text-anchor="end">46.9% [38.9, 54.7]</text>
+<text x="20" y="180" class="strong" text-anchor="start">차이 (claude-code-neutral - codex-cli-neutral) · slack 사다리</text>
+<text x="20" y="206" text-anchor="start">slack 0</text>
+<line class="whisker" x1="368.9" y1="202" x2="479.1" y2="202"/>
+<circle class="claude" cx="422.2" cy="202" r="5"/>
+<text x="740" y="206" text-anchor="end">+17.8%p [+11.1, +24.9]</text>
+<text x="20" y="232" text-anchor="start">slack 2</text>
+<line class="whisker" x1="336.9" y1="228" x2="445.3" y2="228"/>
+<circle class="claude" cx="390.2" cy="228" r="5"/>
+<text x="740" y="232" text-anchor="end">+13.8%p [+7.1, +20.7]</text>
+<text x="20" y="258" text-anchor="start">slack 5</text>
+<line class="whisker" x1="319.1" y1="254" x2="429.3" y2="254"/>
+<circle class="claude" cx="372.4" cy="254" r="5"/>
+<text x="740" y="258" text-anchor="end">+11.6%p [+4.9, +18.7]</text>
+<text x="20" y="284" text-anchor="start">slack 10</text>
+<line class="whisker" x1="319.1" y1="280" x2="432.9" y2="280"/>
+<circle class="claude" cx="376" cy="280" r="5"/>
+<text x="740" y="284" text-anchor="end">+12.0%p [+4.9, +19.1]</text>
+<line class="zero" x1="280" y1="192" x2="280" y2="296"/>
+<text x="280" y="312" class="muted" text-anchor="middle">0 — 구간이 0 을 품으면 구별되지 않는다</text>
+</svg>

@@ -922,6 +922,7 @@ src/codeproof_ai/
 │   ├── metrics.py           #   Wilson CI
 │   ├── provenance.py        #   하네스 git SHA — 짐작하지 않는다
 │   ├── report.py            #   측정값 생성 — 산문에 베끼지 않는다
+│   ├── figures.py           #   생성 그림 (SVG) — report 와 같은 계산 · 받은 값만 그린다
 │   ├── export.py            #   코퍼스 → 에이전트 입력 (§7.10)
 │   ├── gate.py              #   codex 가 쓴 쌍의 관문 — 기계로 보는 것만 (§7.10d)
 │   └── runner.py            #   🔴 run_reviewer **하나뿐** (§4.1b)

@@ -20,6 +20,14 @@ from dataclasses import dataclass
 from itertools import combinations
 from typing import TYPE_CHECKING
 
+from codeproof_ai.eval.figures import (
+    Estimate,
+    PairCounts,
+    Spread,
+    agents_svg,
+    pairs_svg,
+    spread_svg,
+)
 from codeproof_ai.eval.grading.safety import ProvableSafetyGrader
 from codeproof_ai.eval.metrics import credibility_warning
 from codeproof_ai.eval.mix import Axis, mix_sensitivity
@@ -43,7 +51,7 @@ from codeproof_ai.eval.sensitivity import DEFAULT_SWEEP, sweep_views
 from codeproof_ai.eval.spread import compute_spread
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Mapping, Sequence
 
     from codeproof_ai.eval.grading.base import Grader
     from codeproof_ai.eval.metrics import Proportion
@@ -56,6 +64,11 @@ BANNER = (
 )
 
 HEADLINE_GRADER = "provable_safety"
+RULE_SELECTIONS = ("F,E", "S", "ALL")
+"""룰 선택 손잡이 - 관례 주장 위주 · 보안 룰만 · 전부.
+
+편차가 (채점자 x 룰 선택)의 성질임을 보인다 (결과 6).
+"""
 
 
 @dataclass(frozen=True, slots=True)
@@ -137,6 +150,8 @@ def render_measurements(
     graders: Sequence[Grader],
     agents: Sequence[AgentSection] = (),
     widened: Sequence[LabeledSample] = (),
+    *,
+    selections: Sequence[Spread] = (),
 ) -> str:
     """측정값 문서 전체.
 
@@ -166,6 +181,7 @@ def render_measurements(
         f"코퍼스 **{negatives}쌍** · `corpus_hash` `{run.manifest.corpus_hash}`",
         "",
         _spread_section(run, graders),
+        _selection_section(selections),
         _pairs_section(run),
         _mix_section(run, samples),
         *(_agent_section(a, samples) for a in agents),
@@ -210,6 +226,99 @@ def _spread_section(run: ReviewerRun, graders: Sequence[Grader]) -> str:
         "",
     ]
     return "\n".join(lines)
+
+
+def spread_of(select: str, run: ReviewerRun, graders: Sequence[Grader]) -> Spread:
+    """룰 선택 하나의 두 정의 FP - 생성물의 편차 표와 같은 계산 (`compute_spread`)."""
+    sp = compute_spread(run.outcomes, graders, negatives_only=True)
+    fp = {c.grader: c.false_positive for c in sp.columns}
+    return Spread(select, sp.findings, fp.get(HEADLINE_GRADER, 0), fp.get("injected_defect", 0))
+
+
+def _selection_section(points: Sequence[Spread]) -> str:
+    if not points:
+        return ""
+    lines = [
+        "## 룰 선택 손잡이 — 편차도 설정의 함수다",
+        "",
+        "같은 코드 · 같은 채점자 · 같은 코퍼스에서 `--ruff-select` 만 바꿨다.",
+        "",
+        "| 룰 선택 | 음성 위 지적 | `provable_safety` FP | `injected_defect` FP | 두 정의 |",
+        "|---|---:|---:|---:|---|",
+    ]
+    lines += [
+        f"| `{p.select}` | {p.findings} | {p.safety_fp} | {p.injected_fp} | {p.verdict} |"
+        for p in points
+    ]
+    lines += [
+        "",
+        "> 보안 룰은 전부 근거 범위 안의 결함 주장이라 두 정의가 일치하고, "
+        "관례 주장은 한쪽이 판정 불가로 다른 쪽이 오답으로 센다 — "
+        "편차는 (채점자 x 룰 선택)의 성질이다.",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def pair_counts(run: ReviewerRun, grader: str) -> PairCounts | None:
+    pairs = score_pairs(run.outcomes, grader)
+    if not pairs:
+        return None
+    c = pair_summary(pairs)
+    return PairCounts(
+        grader, c[PairVerdict.CORRECT], c[PairVerdict.OVER_FLAG],
+        c[PairVerdict.UNDER_FLAG], c[PairVerdict.REVERSED],
+    )
+
+
+def _reviewer_pair(agents: Sequence[AgentSection]) -> tuple[AgentSection, AgentSection] | None:
+    """리뷰어만 다른 첫 짝 - 손잡이 비교(같은 리뷰어)는 그림에 싣지 않는다."""
+    return next(
+        ((a, b) for a, b in combinations(agents, 2) if comparable(a, b) and a.agent != b.agent),
+        None,
+    )
+
+
+def _estimate(label: str, point: float | None, interval: tuple[float, float] | None) -> Estimate:
+    lo, hi = interval if interval is not None else (0.0, 0.0)
+    return Estimate(label, point or 0.0, lo, hi)
+
+
+def render_figures(
+    selections: Mapping[str, ReviewerRun],
+    graders: Sequence[Grader],
+    samples: Sequence[LabeledSample],
+    agents: Sequence[AgentSection] = (),
+) -> dict[str, str]:
+    """그림 이름 → SVG. 생성물(측정값 문서)과 같은 실행 · 같은 계산에서 그린다."""
+    negatives = sum(1 for s in samples if s.is_proven_safe)
+    figures = {
+        "spread.svg": spread_svg(
+            [spread_of(s, selections[s], graders) for s in RULE_SELECTIONS if s in selections],
+            negatives,
+        ),
+    }
+    groups = [
+        (sel, [c for g in (HEADLINE_GRADER, "injected_defect")
+               if (c := pair_counts(selections[sel], g)) is not None])
+        for sel in ("ALL", "S") if sel in selections
+    ]
+    figures["pairs.svg"] = pairs_svg(groups)
+    if (pair := _reviewer_pair(agents)) is not None:
+        a, b = pair
+        grader = next(g for g in a.graders if g.name == HEADLINE_GRADER)
+        rates = []
+        for sec in (a, b):
+            e = expectation(sec.run.outcomes, samples, grader)
+            rates.append(_estimate(sec.run.reviewer, e.point, e.interval))
+        ladder = []
+        for slack in DEFAULT_SWEEP:
+            d = difference(
+                a.run.outcomes, b.run.outcomes, samples, ProvableSafetyGrader(overlap_slack=slack)
+            )
+            ladder.append((slack, _estimate(f"slack {slack}", d.point, d.interval)))
+        figures["agents.svg"] = agents_svg(rates, ladder)
+    return figures
 
 
 def _pairs_section(run: ReviewerRun) -> str:
