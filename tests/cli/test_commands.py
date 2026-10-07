@@ -464,6 +464,19 @@ class TestDecoyCommands:
         assert main(["decoy", "mutants", "--corpus", str(tmp_path)]) == 0
         assert "변이 4개 · 기대와 다름 0" in capsys.readouterr().out
 
+    def test_gate_exit_codes(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        """관문(DESIGN §7.10d) - 다 넘으면 0 · 하나라도 실패하면 1 · 쌍이 없거나 경쟁 0회면 2."""
+        src = next(DECOYS.glob("D115-*"))
+        pair = tmp_path / src.name
+        shutil.copytree(src, pair)
+        assert main(["decoy", "gate", "--corpus", str(tmp_path), "--race-runs", "1"]) == 0
+        assert "관문 1쌍 · 통과 1" in capsys.readouterr().out
+        with (pair / "decoy.py").open("a", encoding="utf-8") as f:
+            f.write("# 덧붙인 산문 주석\n")
+        assert main(["decoy", "gate", "--corpus", str(tmp_path), "--race-runs", "1"]) == 1
+        assert main(["decoy", "gate", "--corpus", str(tmp_path / "없음")]) == 2
+        assert main(["decoy", "gate", "--corpus", str(tmp_path), "--race-runs", "0"]) == 2
+
     def test_stats_reports_bait_coverage(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:

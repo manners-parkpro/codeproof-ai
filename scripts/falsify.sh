@@ -64,7 +64,8 @@ SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict conv
            repro-unknown repro-kind race-switch-lower race-switch-restore invisible-rule invisible-lines
            ruff-target mypy-python mutant-weakening mutant-safe mutant-stale report-digests pack-records-digests
            proof-optimize pack-measured-code runner-measured-code
-           pair-discovery mutant-alias template-kinds lint-exclude)
+           pair-discovery mutant-alias template-kinds lint-exclude
+           gate-directions gate-survivor gate-neutral gate-prose gate-docstring gate-twin-docstring gate-plan)
 
 claim_layering() { echo "런타임(analysis)은 정답 라벨(eval)을 볼 수 없다 — A1"; }
 break_layering() {
@@ -567,6 +568,37 @@ guard_template-kinds() { uv run pytest tests/docs/test_consistency.py -q -k temp
 claim_lint-exclude() { echo "코퍼스는 린트하지 않는다 — 제외에서 빠진 코퍼스는 ruff --fix 가 쌍을 고쳐 쓴다 (G2 · DESIGN §7.10d)"; }
 break_lint-exclude() { perl -0pi -e 's/"corpus\/xauthor", //' pyproject.toml; }
 guard_lint-exclude() { uv run pytest tests/corpus/test_not_linted.py -q; }
+
+# ── codex 가 쓴 쌍의 관문 (DESIGN §7.10d) - 규칙마다 한 줄을 무력화하면 그 규칙의 시험이 운다 ──
+_GATE=src/codeproof_ai/eval/gate.py
+
+claim_gate-directions() { echo "관문은 약화와 안전한 변형을 하나 이상씩 요구한다 — 약화만 있으면 증명이 주장 대신 구현을 묻는지 못 본다 (§3.5)"; }
+break_gate-directions() { perl -0pi -e 's/if not any\(m\.expect_broken for m in mutants\) or all\(m\.expect_broken for m in mutants\):/if not mutants:  # falsify.sh/' "$_GATE"; }
+guard_gate-directions() { uv run pytest tests/eval/test_gate.py -q -k both_directions; }
+
+claim_gate-survivor() { echo "관문은 증명이 놓친 약화를 실패로 센다 — 경쟁 약화는 race_runs 번 모두 깨져야 한다 (§7.10d)"; }
+break_gate-survivor() { perl -0pi -e 's/        if broke != \(runs if mutant\.expect_broken else 0\):/        if False:  # falsify.sh/' "$_GATE"; }
+guard_gate-survivor() { uv run pytest tests/eval/test_gate.py -q -k weakening_that_survives; }
+
+claim_gate-neutral() { echo "관문은 neutral 내보내기가 모듈 docstring 한 줄만 바꾸는지 본다 — 줄 번호가 정답 구간이다 (§7.10c)"; }
+break_gate-neutral() { perl -0pi -e 's/        if problem:\n            problems\.append/        if False:  # falsify.sh\n            problems.append/' "$_GATE"; }
+guard_gate-neutral() { uv run pytest tests/eval/test_gate.py -q -k "test_neutral and not problem"; }
+
+claim_gate-prose() { echo "관문은 산문 주석을 단서로 거부한다 — 도구 지시만 받는다 (§7.10d 단서)"; }
+break_gate-prose() { perl -0pi -e 's/if tok\.type == tokenize\.COMMENT and not _DIRECTIVE\.match\(tok\.string\)/if False  # falsify.sh/' "$_GATE"; }
+guard_gate-prose() { uv run pytest tests/eval/test_gate.py -q -k "cues_prose_comment or test_prose_comments"; }
+
+claim_gate-docstring() { echo "관문은 guard_lines 밖의 함수 · 클래스 docstring 을 단서로 거부한다 (§7.10d 단서)"; }
+break_gate-docstring() { perl -0pi -e 's/    outside = \[start for start, end, _ in decoy_docs if end < guard\.start or start > guard\.end\]/    outside: list[int] = []  # falsify.sh/' "$_GATE"; }
+guard_gate-docstring() { uv run pytest tests/eval/test_gate.py -q -k docstring_outside_the_guard; }
+
+claim_gate-twin-docstring() { echo "관문은 twin 이 decoy 에 없는 docstring 을 더하면 거부한다 — 지켜지지 않는 약속이 단서다 (§7.10c)"; }
+break_gate-twin-docstring() { perl -0pi -e 's/if added := \[start for start, _, text in twin_docs if text not in known\]:/if added := []:  # falsify.sh/' "$_GATE"; }
+guard_gate-twin-docstring() { uv run pytest tests/eval/test_gate.py -q -k twin_adds_a_docstring; }
+
+claim_gate-plan() { echo "관문은 분류가 정한 칸 밖의 가드 위치를 거부한다 — 이름만 그 분류인 쌍이다 (corpus/plan.py)"; }
+break_gate-plan() { perl -0pi -e 's/    if shape in cells:/    if True:  # falsify.sh/' "$_GATE"; }
+guard_gate-plan() { uv run pytest tests/eval/test_gate.py -q -k test_plan; }
 
 # ── 하네스 ─────────────────────────────────────────────────────────────────
 
