@@ -78,7 +78,8 @@ SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict conv
            xauthor-input-roles xauthor-var-tmp xauthor-verbatim xauthor-sandbox-flag
            xauthor-inventory-ids xauthor-builtin-instructions xauthor-pair-leak xauthor-pair-leak-readme
            xauthor-run-credit xauthor-run-repro xauthor-run-kind xauthor-run-budget xauthor-run-frozen
-           xauthor-run-restore xauthor-audit-schema)
+           xauthor-run-restore xauthor-audit-schema xauthor-run-refused xauthor-run-refused-kind
+           xauthor-run-refused-resume xauthor-run-idle-cut)
 
 claim_layering() { echo "런타임(analysis)은 정답 라벨(eval)을 볼 수 없다 — A1"; }
 break_layering() {
@@ -812,6 +813,22 @@ guard_xauthor-run-frozen() { uv run pytest tests/scripts/test_xauthor_run.py -q 
 claim_xauthor-run-restore() { echo "끊긴 세션은 그 세션 전의 상자로 되돌린다 — 안 되돌리면 「처음부터 다시」가 아니다 (§7.10d)"; }
 break_xauthor-run-restore() { perl -0pi -e 's/        shutil\.rmtree\(box, ignore_errors=True\)\n        shutil\.copytree\(snap, box, symlinks=True\)\n/        pass\n/' "$_XR"; }
 guard_xauthor-run-restore() { uv run pytest tests/scripts/test_xauthor_run.py -q -k box_restored; }
+
+claim_xauthor-run-refused() { echo "안전 필터 거절은 1급 기록이다 — 못 보면 감사 결과를 못 읽어 멈추거나 거절된 쓰기를 시도로 센다 (§7.10d 수집 중 보정)"; }
+break_xauthor-run-refused() { perl -0pi -e 's/REFUSED = "content was flagged"/REFUSED = "content was blocked"/' "$_XR"; }
+guard_xauthor-run-refused() { uv run pytest tests/scripts/test_xauthor_run.py -q -k refus; }
+
+claim_xauthor-run-refused-kind() { echo "거절 하나로 그 분류를 닫는다 — 안 닫으면 같은 쓰기 요청을 다시 보낸다 (§7.10d 수집 중 보정)"; }
+break_xauthor-run-refused-kind() { perl -0pi -e 's/    refused = "refused" in outcomes\n/    refused = False\n/' "$_XR"; }
+guard_xauthor-run-refused-kind() { uv run pytest tests/scripts/test_xauthor_run.py -q -k kind_done; }
+
+claim_xauthor-run-refused-resume() { echo "끝난 세션이 거절이면 이어 돌 때도 거절로 읽는다 — 못 읽으면 거절을 모르던 기록(XC010)이 다시 멈춘다 (§7.10d 수집 중 보정)"; }
+break_xauthor-run-refused-resume() { perl -0pi -e 's/        if done\.refused:\n            _refused\(p, step, done\.refused\)\n//' "$_XR"; }
+guard_xauthor-run-refused-resume() { uv run pytest tests/scripts/test_xauthor_run.py -q -k old_runner; }
+
+claim_xauthor-run-idle-cut() { echo "충전 전 재시도의 끊김은 창으로 세지 않는다 — 세면 늦은 충전 하나가 멈춤 규칙(창 여섯 개)을 건다 (§7.10d 수집 중 보정)"; }
+break_xauthor-run-idle-cut() { perl -0pi -e 's/        idle = not window_has_sessions\(p\.out\)\n/        idle = False\n/' "$_XR"; }
+guard_xauthor-run-idle-cut() { uv run pytest tests/scripts/test_xauthor_run.py -q -k refill; }
 
 claim_xauthor-audit-schema() { echo "감사 exec 은 저자 exec 에 스키마 하나만 더한다 — 감사 카나리가 감사 인자 그대로를 본다 (§7.10d 상자)"; }
 break_xauthor-audit-schema() { perl -0pi -e 's/        args \+= \["--output-schema", str\(schema\)\]\n/        args += ["--output-schema", str(schema), "--skip-git-repo-check"]\n/' "$_XA"; }

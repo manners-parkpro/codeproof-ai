@@ -10,6 +10,7 @@ import hashlib
 import importlib.util
 import json
 import sys
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -35,6 +36,11 @@ CREDIT_MESSAGE = (
     "Your workspace is out of credits. Ask your workspace owner to refill in order to continue."
 )
 """codex 0.158.0 이 크레딧이 끊길 때 내는 문장 [실측 · runs/agent/codex-cli-neutral/raw]."""
+REFUSAL_MESSAGE = (
+    "This content was flagged for possible cybersecurity risk. If this seems wrong, try "
+    "rephrasing your request."
+)
+"""안전 필터가 세션을 거절할 때의 문장 [실측 · XC010 audit · 2026-10-07 · 뒤의 안내는 줄였다]."""
 
 
 def _jsonl(path: Path, *events: dict[str, object]) -> Path:
@@ -76,12 +82,42 @@ class TestReadSession:
         err.write_text(f"error: {CREDIT_MESSAGE}\n", encoding="utf-8")
         assert xr.read_session(tmp_path / "none.jsonl", err, 1, timed_out=False).cut
 
+    def test_a_safety_refusal_is_seen_and_is_not_a_credit_cut(self, tmp_path: Path) -> None:
+        """🔴 거절은 세는 세션이다 - 크레딧 끊김으로 읽으면 같은 요청을 되풀이한다."""
+        ev = _jsonl(
+            tmp_path / "s.jsonl",
+            {"type": "thread.started"},
+            {"type": "error", "message": REFUSAL_MESSAGE},
+            {"type": "turn.failed", "error": {"message": REFUSAL_MESSAGE}},
+        )
+        s = xr.read_session(ev, tmp_path / "none.err", 1, timed_out=False)
+        assert (s.cut, s.refused) == (False, REFUSAL_MESSAGE)
+
     def test_an_ordinary_failure_is_not_a_credit_cut(self, tmp_path: Path) -> None:
         """대조 - 다른 실패까지 세지 않으면 시간 상한 · 오류로 끊긴 시도가 공짜 재시도가 된다."""
         failed: dict[str, object] = {"type": "turn.failed", "error": {"message": "stream error"}}
         ev = _jsonl(tmp_path / "s.jsonl", failed)
         s = xr.read_session(ev, tmp_path / "none.err", 1, timed_out=True)
-        assert (s.cut, s.timed_out) == (False, True)
+        assert (s.cut, s.timed_out, s.refused) == (False, True, None)
+
+
+class TestKindDone:
+    """분류 하나를 끝내는 규칙 - 받아들인 쌍 하나 · 거절된 쌍 하나 · 실패한 쌍 넷."""
+
+    @pytest.mark.parametrize(
+        ("outcomes", "done"),
+        [
+            (["accepted"], True),
+            (["failed"] * 4, True),
+            (["refused"], True),  # 🔴 새 쌍의 첫 쓰기는 쌍 번호만 다른 같은 요청이다
+            (["failed", "refused"], True),
+            (["failed"] * 3, False),
+            (["failed", None], False),
+            ([None], False),
+        ],
+    )
+    def test_kind_done(self, outcomes: list[str | None], done: bool) -> None:
+        assert xr.kind_done(outcomes) is done
 
 
 class TestHarnessProblems:
@@ -185,6 +221,18 @@ class TestCreditWindows:
         assert not xr.over_budget(out)
         self._cuts(out, 1)
         assert xr.over_budget(out)
+
+    def test_a_window_without_a_finished_session_has_not_started(self, tmp_path: Path) -> None:
+        """🔴 충전 전의 재시도는 창을 쓰지 않는다 - 세면 늦은 충전 하나가 멈춤 규칙을 건다."""
+        out = tmp_path / "out"
+        (out / "XC001").mkdir(parents=True)
+        (out / "XC001" / "write-1.json").write_text(json.dumps({"window": 1}), encoding="utf-8")
+        assert xr.window_has_sessions(out)
+        self._cuts(out, 1)
+        assert not xr.window_has_sessions(out)
+        with (out / "events.jsonl").open("a", encoding="utf-8") as f:
+            f.write(json.dumps({"event": "credit_cut_idle"}) + "\n")
+        assert xr.windows_used(out) == 2
 
 
 class TestPrompts:
@@ -297,10 +345,18 @@ if args[:1] == ["sandbox"]:
 box, last, prompt = Path(args[args.index("-C") + 1]), Path(args[args.index("-o") + 1]), args[-1]
 n = conf["calls"]
 conf["calls"] = n + 1
-if conf.get("cut_at") == n:
+cuts = conf.get("cut_at")
+if n == cuts or (isinstance(cuts, list) and n in cuts):
     conf_path.write_text(json.dumps(conf))
     (box / "stray.txt").write_text("half-written")
     print(json.dumps({"type": "error", "message": "Your workspace is out of credits."}))
+    sys.exit(1)
+if conf.get("refuse_at") == n:
+    conf_path.write_text(json.dumps(conf))
+    said = "This content was flagged for possible cybersecurity risk."
+    print(json.dumps({"type": "thread.started"}))
+    print(json.dumps({"type": "error", "message": said}))
+    print(json.dumps({"type": "turn.failed", "error": {"message": said}}))
     sys.exit(1)
 if "--output-schema" in args:
     last.write_text(json.dumps({"findings": conf["audits"].pop(0) if conf["audits"] else []}))
@@ -389,7 +445,66 @@ class TestFlowWithAFakeCodex:
         assert s["pairs"][0]["outcome"] == "accepted"
         assert s["pairs"][0]["attempts"] == 1
         assert s["pairs"][0]["not_counted"] == ["credits"]
-        assert s["windows_used"] == 2
+        # 첫 호출부터 끊겼다 - 이 실행은 그 창을 쓰지 않았다
+        assert (s["windows_used"], s["credit_cuts"], s["idle_cuts"]) == (1, 0, 1)
+
+    def test_retries_before_the_refill_do_not_use_windows(self, pair: Any) -> None:
+        """감사에서 끊긴 뒤 (창 1 끝) 충전 전 재시도 둘이 또 끊긴다 - 창은 둘째에 머문다."""
+        self._configure(pair, cut_at=[1, 2, 3], audits=[[]])  # 0 = write-1, 1~3 = audit
+        for _ in range(3):
+            with pytest.raises(xr.Stop) as stop:
+                xr.run_pair(pair)
+            assert stop.value.rc == xr.CUT
+        xr.run_pair(pair)
+        s = xr.summarize(pair.out)
+        assert s["pairs"][0]["outcome"] == "accepted"
+        assert (s["windows_used"], s["credit_cuts"], s["idle_cuts"]) == (2, 1, 2)
+        audit = json.loads((pair.d / "audit.json").read_text(encoding="utf-8"))
+        assert audit["window"] == 2
+
+    def _calls(self, p: Any) -> int:
+        return int(json.loads((p.out.parent / "fake.json").read_text(encoding="utf-8"))["calls"])
+
+    def _refused_events(self, p: Any) -> list[tuple[str, str]]:
+        return [(e["pair"], e["step"]) for e in xr.events_of(p.out) if e["event"] == "refused"]
+
+    def test_a_refused_audit_ends_the_pair(self, pair: Any) -> None:
+        """🔴 거절은 1급 기록 - 세션 기록 · 이벤트 하나 · 「refused」로 끝난다."""
+        self._configure(pair, refuse_at=1)  # 0 = write-1, 1 = audit
+        xr.run_pair(pair)
+        outcome = json.loads((pair.d / "outcome.json").read_text(encoding="utf-8"))
+        assert (outcome["outcome"], xr.outcome_of(pair.d)) == ("refused", "refused")
+        assert "안전 필터가 거절했다" in outcome["why"]
+        record = json.loads((pair.d / "audit.json").read_text(encoding="utf-8"))
+        assert record["refused"] == "This content was flagged for possible cybersecurity risk."
+        assert self._refused_events(pair) == [("XC001", "audit")]
+        assert xr.summarize(pair.out)["refused"] == 1
+        assert self._calls(pair) == 2
+        assert not pair.box.exists()
+
+    def test_what_the_old_runner_left_is_refused_on_resume(
+        self, pair: Any, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """XC010 - 거절을 모르던 실행기는 감사 결과를 못 읽어 rc 4 로 멈췄다 (refused 칸 없음).
+
+        🔴 이어 돌면 남은 이벤트로 거절을 읽고 끝낸다 - 감사를 다시 보내지 않는다.
+        """
+        self._configure(pair, refuse_at=1)
+        real = xr.read_session
+        with monkeypatch.context() as m:
+            m.setattr(xr, "read_session", lambda *a, **k: replace(real(*a, **k), refused=None))
+            with pytest.raises(xr.Stop) as stop:
+                xr.run_pair(pair)
+        assert stop.value.rc == xr.HUMAN
+        assert "스키마 모양으로 읽지 못했다" in str(stop.value)
+        record = json.loads((pair.d / "audit.json").read_text(encoding="utf-8"))
+        del record["refused"]
+        (pair.d / "audit.json").write_text(json.dumps(record), encoding="utf-8")
+        sent = self._calls(pair)
+        xr.run_pair(pair)
+        assert xr.outcome_of(pair.d) == "refused"
+        assert self._calls(pair) == sent == 2
+        assert self._refused_events(pair) == [("XC001", "audit")]
 
     def test_a_wrong_kind_fails_the_gate_three_times(self, pair: Any) -> None:
         self._configure(pair, wrong_kind=True)

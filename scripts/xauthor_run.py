@@ -16,6 +16,9 @@
 🔴 시도마다 새 세션이고 상자는 시도 사이에 남는다 - 다음 시도는 관문 출력만 받고
    앞 시도의 파일을 고친다. 크레딧으로 끊기거나 하네스가 중단한 세션은 세지 않고,
    그 세션 전의 상자로 되돌려 처음부터 다시 돈다.
+🔴 안전 필터가 거절한 세션은 센다 - 그 쌍은 「refused」로 끝내고 그 분류도 닫는다.
+   같은 분류의 새 쌍은 쌍 번호만 다른 같은 쓰기 요청을 보낸다 - 문구를 바꾸거나
+   같은 요청을 되풀이해 필터를 넘기지 않는다 (수집 중 보정 2026-10-07 · DESIGN §7.10d).
 """
 
 from __future__ import annotations
@@ -62,6 +65,9 @@ MAX_WINDOWS = 6       # 1단계 크레딧 창 (선언 「1단계 · 타당성」
 GATE_TIMEOUT_S = 30 * 60
 REPRO_TIMEOUT_S = 90  # 교차 패밀리 감사의 재현과 같다 (scripts/cross_family_repro.py)
 CREDITS = "out of credits"
+REFUSED = "content was flagged"
+"""안전 필터의 거절 문구 [실측 · XC010 audit · 2026-10-07: "This content was flagged for possible
+cybersecurity risk. …" · turn.failed · 0턴]."""
 PAIR_FILES = ("meta.toml", "decoy.py", "twin.py", "proof.py", "mutants.py")
 USAGE_KEYS = (
     "input_tokens", "cached_input_tokens", "cache_write_input_tokens",
@@ -78,6 +84,10 @@ class Stop(Exception):  # noqa: N818 - 실패가 아니라 끝 rc 다
         self.rc = rc
 
 
+class Refused(Exception):  # noqa: N818 - 실패가 아니라 그 쌍의 끝이다
+    """안전 필터가 세션을 거절했다 - 그 쌍은 「refused」로 끝난다."""
+
+
 @dataclass(frozen=True, slots=True)
 class Session:
     rc: int
@@ -85,6 +95,8 @@ class Session:
     cut: bool
     turns: int
     usage: dict[str, int]
+    refused: str | None = None
+    """안전 필터의 거절 문구 - 없으면 None."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,9 +125,10 @@ class Pair:
 
 
 def read_session(events: Path, err: Path, rc: int, *, timed_out: bool) -> Session:
-    """세션 이벤트에서 쓴 양과 크레딧 끊김을 읽는다 - 끊김은 이벤트와 stderr 둘 다 본다."""
+    """세션 이벤트에서 쓴 양 · 크레딧 끊김 · 안전 필터 거절을 읽는다 - 끊김은 stderr 도 본다."""
     usage = dict.fromkeys(USAGE_KEYS, 0)
     turns, cut = 0, False
+    refused: str | None = None
     text = events.read_text(encoding="utf-8", errors="replace") if events.exists() else ""
     for raw in text.split("\n"):
         try:
@@ -129,11 +142,17 @@ def read_session(events: Path, err: Path, rc: int, *, timed_out: bool) -> Sessio
             got = ev.get("usage") if isinstance(ev.get("usage"), dict) else {}
             for k in USAGE_KEYS:
                 usage[k] += int(got.get(k) or 0)
-        elif ev.get("type") in ("error", "turn.failed") and CREDITS in json.dumps(ev):
-            cut = True
+        elif ev.get("type") in ("error", "turn.failed"):
+            said = json.dumps(ev, ensure_ascii=False)
+            if CREDITS in said:
+                cut = True
+            elif REFUSED in said and refused is None:
+                inner = ev.get("error")
+                refused = str(ev.get("message") or (inner.get("message") if isinstance(inner, dict)
+                                                     else None) or said)
     if err.exists() and CREDITS in err.read_text(encoding="utf-8", errors="replace"):
         cut = True
-    return Session(rc, timed_out, cut, turns, usage)
+    return Session(rc, timed_out, cut, turns, usage, None if cut else refused)
 
 
 def harness_problems(box: Path, pid: str, kind: str) -> tuple[Path | None, list[str]]:
@@ -184,8 +203,20 @@ def events_of(out: Path) -> list[dict[str, Any]]:
 
 
 def windows_used(out: Path) -> int:
-    """지금까지 쓴 크레딧 창 - 끊길 때마다 창 하나가 끝난다 (하네스 중단은 세지 않는다)."""
+    """지금까지 쓴 크레딧 창 - 끊길 때마다 창 하나가 끝난다 (하네스 중단은 세지 않는다).
+
+    충전 전의 재시도가 끊긴 것(`credit_cut_idle`)은 세지 않는다 - 그 창은 앞의 끊김에서 이미 끝났다.
+    """
     return 1 + sum(e.get("event") == "credit_cut" for e in events_of(out))
+
+
+def window_has_sessions(out: Path) -> bool:
+    """지금 창에서 끝난 세션이 있는가 - 없이 끊겼으면 충전 전의 재시도다."""
+    now = windows_used(out)
+    return any(
+        _load(q).get("window") == now
+        for d in pair_dirs(out) for q in d.iterdir() if SESSION_RECORD.match(q.name)
+    )
 
 
 def over_budget(out: Path) -> bool:
@@ -339,6 +370,10 @@ def session(
     """codex 세션 한 번 - 끝났으면 건너뛰고, 하네스가 중단한 흔적이 있으면 세지 않고 다시 돈다."""
     d = p.d
     if (d / f"{step}.json").exists():
+        # 끝난 세션이 거절이면 같은 요청을 다시 보내지 않는다 - 거절을 알기 전의 기록도 읽는다
+        done = read_session(d / f"{step}.jsonl", d / f"{step}.err", 0, timed_out=False)
+        if done.refused:
+            _refused(p, step, done.refused)
         return
     if (d / f"{step}.jsonl").exists():
         abandon(d, step, "interrupted", box, snap)
@@ -355,15 +390,31 @@ def session(
         )
     s = read_session(d / f"{step}.jsonl", d / f"{step}.err", rc, timed_out=timed_out)
     if s.cut:
+        # 🔴 끝난 세션 없이 끊긴 것은 창을 끝내지 않는다 - 구동기는 충전 전에도 다시 부른다
+        idle = not window_has_sessions(p.out)
         abandon(d, step, "credits", box, snap)
-        _event(p.out, "credit_cut", pair=p.pid, step=step)
+        _event(p.out, "credit_cut_idle" if idle else "credit_cut", pair=p.pid, step=step)
         raise Stop(CUT, f"{p.pid} {step} 에서 크레딧이 끊겼다 - 세지 않고 되돌렸다")
     _json(d / f"{step}.json", {
         "step": step, "category": "write" if step.startswith("write-") else step,
         "rc": rc, "timed_out": timed_out, "turns": s.turns, "usage": s.usage,
         "started": time.strftime("%Y-%m-%dT%H:%M:%S%z", time.localtime(started)),
         "seconds": round(time.time() - started), "window": windows_used(p.out),
+        "refused": s.refused,
     })
+    if s.refused:
+        _refused(p, step, s.refused)
+
+
+def _refused(p: Pair, step: str, said: str) -> None:
+    """🔴 거절은 1급 기록이다 - 이벤트로 한 번 남기고 그 쌍을 끝낸다 (되풀이하지 않는다)."""
+    seen = any(
+        e.get("event") == "refused" and e.get("pair") == p.pid and e.get("step") == step
+        for e in events_of(p.out)
+    )
+    if not seen:
+        _event(p.out, "refused", pair=p.pid, step=step, message=said)
+    raise Refused(f"{p.pid} {step} 를 안전 필터가 거절했다 - {said}")
 
 
 def gate(p: Pair, step: str) -> bool:
@@ -463,6 +514,14 @@ def make_box(box: Path) -> None:
 
 
 def run_pair(p: Pair) -> None:
+    """쌍 하나 - 안전 필터가 어느 세션이든 거절하면 그 쌍은 「refused」로 끝난다."""
+    try:
+        _run_pair(p)
+    except Refused as r:
+        finish(p, "refused", str(r))
+
+
+def _run_pair(p: Pair) -> None:
     """쓰기 (시도 3번 · 시도마다 관문) → 감사 → 고침 → 관문 → 재확인 (선언 「시도 · 렌즈」)."""
     if not p.box.exists():
         if any(p.d.glob("write-*")):
@@ -619,9 +678,21 @@ def summarize(out: Path) -> dict[str, Any]:
     return {
         "kinds_filled": len(filled), "kinds": filled, "windows_used": windows_used(out),
         "credit_cuts": sum(e.get("event") == "credit_cut" for e in events),
+        "idle_cuts": sum(e.get("event") == "credit_cut_idle" for e in events),
+        "refused": sum(e.get("event") == "refused" for e in events),
         "interrupted": sum(e.get("event") == "interrupted" for e in events),
         "totals": totals, "pairs": rows,
     }
+
+
+def kind_done(outcomes: list[str | None]) -> bool:
+    """분류 하나가 끝났는가 - 받아들인 쌍이 있거나, 거절된 쌍이 있거나, 실패한 쌍이 한도에 닿았다.
+
+    🔴 거절 하나로 닫는다 - 새 쌍의 첫 쓰기는 쌍 번호만 다른 같은 요청이고, 필터를 넘긴 쌍만
+       남기면 그 분류가 필터로 골라진다.
+    """
+    refused = "refused" in outcomes
+    return "accepted" in outcomes or refused or outcomes.count("failed") >= FAILED_PER_KIND
 
 
 def run(out: Path) -> int:
@@ -642,7 +713,7 @@ def run(out: Path) -> int:
             while True:
                 mine = [d for d in pair_dirs(out) if pair_kind(d) == kind]
                 outcomes = [outcome_of(d) for d in mine]
-                if "accepted" in outcomes or outcomes.count("failed") >= FAILED_PER_KIND:
+                if kind_done(outcomes):
                     break
                 d = next((m for m, o in zip(mine, outcomes, strict=True) if o is None), None)
                 if d is None:
