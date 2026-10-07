@@ -705,18 +705,28 @@ class CorpusReport:
         return self.error_count == 0
 
 
+def pair_dirs(root: Path) -> list[Path]:
+    """코퍼스의 쌍 디렉터리 - `_` 로 시작하지 않는 디렉터리 전부다 (`_TEMPLATE` 은 빠진다).
+
+    없는 경로는 빈 목록이다 - 호출부가 「샘플이 없다」로 다룬다.
+
+    🔴 쌍을 찾는 규칙은 여기 하나다. [실측] 검증기 · 로더는 이 규칙을, 변이 CLI 와 반증 ·
+       변이 테스트는 `glob("D*")` 를 따로 써서, 접두사가 다른 코퍼스에서는 변이 0개로
+       공허하게 통과할 자리였다. 그 전에도 경쟁 회귀 스크립트의 glob 이 D102 를 조용히
+       빠뜨렸다 (tests/corpus/test_mutants.py 머리말).
+    """
+    if not root.is_dir():
+        return []
+    return sorted(p for p in root.iterdir() if p.is_dir() and not p.name.startswith("_"))
+
+
 def validate_corpus(root: Path) -> CorpusReport:
-    """corpus/decoys/ 전체를 검증한다. `_` 로 시작하는 디렉터리는 건너뛴다."""
+    """코퍼스 전체를 검증한다 - 쌍은 `pair_dirs` 가 찾는다."""
     load_errors: list[tuple[str, str]] = []
     violations: list[tuple[str, Violation]] = []
     checked = 0
 
-    if not root.is_dir():
-        return CorpusReport(checked=0, load_errors=(), violations=())
-
-    for d in sorted(p for p in root.iterdir() if p.is_dir()):
-        if d.name.startswith("_"):
-            continue
+    for d in pair_dirs(root):
         checked += 1
         try:
             rec = load_decoy(d)

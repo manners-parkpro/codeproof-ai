@@ -19,7 +19,7 @@ from typing import ClassVar
 import pytest
 
 from codeproof_ai.cli import _COMMANDS, build_parser, main
-from codeproof_ai.corpus.decoy import TrapKind
+from codeproof_ai.corpus.decoy import TrapKind, pair_dirs
 from codeproof_ai.corpus.plan import PLAN
 from codeproof_ai.corpus.shape import GuardShape
 
@@ -239,11 +239,7 @@ class TestCorpusCountIsCurrent:
     """decoy 수는 자주 바뀐다 - 문서가 따라가는지 본다."""
 
     def _actual(self) -> int:
-        return sum(
-            1
-            for d in DECOYS.iterdir()
-            if d.is_dir() and not d.name.startswith("_")
-        )
+        return len(pair_dirs(DECOYS))
 
     def test_claimed_pair_count_matches(self) -> None:
         actual = self._actual()
@@ -293,11 +289,23 @@ class TestTrapTaxonomyIsCovered:
     def test_every_trap_kind_has_a_decoy(self) -> None:
         used = {
             tomllib.loads((d / "meta.toml").read_text(encoding="utf-8"))["trap_kind"]
-            for d in DECOYS.iterdir()
-            if d.is_dir() and not d.name.startswith("_")
+            for d in pair_dirs(DECOYS)
         }
         unused = {t.value for t in TrapKind} - used
         assert not unused, f"decoy 가 없는 분류: {sorted(unused)}"
+
+    def test_template_lists_every_kind(self) -> None:
+        """🔴 [실측] 템플릿이 14종 중 10종만 적고 있었다.
+
+        템플릿을 보고 쓰는 저자는 빠진 넷을 모른다 -
+        codex 가 쓰는 쌍(DESIGN §7.10d)은 템플릿에서 시작한다.
+        """
+        text = (DECOYS / "_TEMPLATE" / "meta.toml").read_text(encoding="utf-8")
+        listed = set(re.findall(r"^#\s+([a-z_]+)\s{2,}\S", text, re.MULTILINE))
+        kinds = {t.value for t in TrapKind}
+        assert listed == kinds, (
+            f"빠진 분류 {sorted(kinds - listed)} · 없는 분류 {sorted(listed - kinds)}"
+        )
 
     def test_documented_count_matches_enum(self) -> None:
         claims = {int(m) for m in re.findall(r"분류(?:표)?\s*(\d+)종", _all_docs())}

@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 import codeproof_ai.domain as domain_pkg
+from codeproof_ai.corpus.decoy import pair_dirs
 from codeproof_ai.domain.location import Location, Position, Span
 from codeproof_ai.domain.target import ReviewTarget, SourceFile
 from codeproof_ai.eval.loader import load_decoy_samples
@@ -113,11 +114,7 @@ class TestDecoyToSamples:
     def test_one_decoy_becomes_a_pair(self) -> None:
         """decoy 1건 → (음성, 양성) 2건. 개수를 하드코딩하지 않는다 -
         코퍼스가 자라면 깨지는 단언은 구조를 검사하는 게 아니다."""
-        valid = sum(
-            1
-            for d in DECOYS.iterdir()
-            if d.is_dir() and not d.name.startswith("_")
-        )
+        valid = len(pair_dirs(DECOYS))
         samples = load_decoy_samples(DECOYS)
         assert valid > 0, "코퍼스가 비어 있다"
         assert len(samples) == valid * 2

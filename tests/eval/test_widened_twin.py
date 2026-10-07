@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from codeproof_ai.corpus.decoy import decoy_lines_in_twin, load_decoy
+from codeproof_ai.corpus.decoy import decoy_lines_in_twin, load_decoy, pair_dirs
 from codeproof_ai.eval.loader import decoy_to_samples, load_decoy_samples
 
 if TYPE_CHECKING:
@@ -24,7 +24,7 @@ def _lines(span: Span) -> tuple[int, int]:
 
 
 def _decoy_dirs() -> list[Path]:
-    return sorted(p for p in DECOYS.iterdir() if p.is_dir() and not p.name.startswith("_"))
+    return pair_dirs(DECOYS)
 
 
 class TestDecoyLinesInTwin:

@@ -103,12 +103,22 @@ def apply(source: str, mutant: Mutant) -> str:
     return code
 
 
+def mutant_alias(pair_dir: Path, *serial: int) -> str:
+    """`breaks` 에 넘길 별칭 - 쌍 이름 전체에 변이 · 회차 번호를 붙인다.
+
+    🔴 쌍 이름을 앞 몇 글자로 자르지 않는다. 앞 4글자로 자르던 때는 `XC001`~`XC009` 가
+       한 별칭(`XC00`)을 나눠 쓸 자리였다 - 변이 CLI 는 임시 폴더 하나를 모든 쌍이 같이
+       써서, 다른 쌍이 같은 경로에 쓴 파일을 다시 읽게 된다.
+    """
+    return "_".join(["_mut", pair_dir.name.replace("-", "_"), *map(str, serial)])
+
+
 def breaks(pair_dir: Path, mutant: Mutant, workdir: Path, alias: str) -> bool:
     """변이를 workdir 에 쓰고 그 쌍의 증명을 돌린다.
 
     규칙은 실행기와 같다 - 선언한 시도 횟수 · 예외는 깨짐.
 
-    alias 는 호출마다 달라야 한다 - 같은 이름이면 앞서 읽은 모듈을 다시 쓸 수 있다.
+    alias 는 호출마다 달라야 한다 (`mutant_alias`) - 같은 이름이면 앞서 읽은 모듈을 다시 쓸 수 있다.
     """
     attack, attempts = load_attack(pair_dir)
     source = (pair_dir / "decoy.py").read_text(encoding="utf-8")

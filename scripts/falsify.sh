@@ -63,7 +63,8 @@ SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict conv
            pack-stray-samples sarif-end sarif-category sarif-other-tool bandit-range twin-convention twin-convention-paired
            repro-unknown repro-kind race-switch-lower race-switch-restore invisible-rule invisible-lines
            ruff-target mypy-python mutant-weakening mutant-safe mutant-stale report-digests pack-records-digests
-           proof-optimize pack-measured-code runner-measured-code)
+           proof-optimize pack-measured-code runner-measured-code
+           pair-discovery mutant-alias template-kinds lint-exclude)
 
 claim_layering() { echo "런타임(analysis)은 정답 라벨(eval)을 볼 수 없다 — A1"; }
 break_layering() {
@@ -545,6 +546,27 @@ guard_convention() {
   echo "회귀 상태의 provable_safety FP: ${fp}건 (고친 상태는 한 자릿수다)"
   [[ -n "$fp" && "$fp" -le 20 ]]   # 20 이하로 남아 있으면 회귀가 재현되지 않은 것 → 가드 침묵
 }
+
+# ── 코퍼스가 둘이 된 뒤 (DESIGN §7.10d) - 접두사 · 목록이 다른 코퍼스를 조용히 건너뛰는 자리 ──
+
+claim_pair-discovery() { echo "쌍은 접두사가 아니라 폴더 구조로 찾는다 — D* 만 찾으면 codex 코퍼스(XC…)에서 변이 0개로 공허하게 통과한다 (DESIGN §7.10d)"; }
+break_pair-discovery() {
+  perl -0pi -e 's/if p\.is_dir\(\) and not p\.name\.startswith\("_"\)\)/if p.is_dir() and p.name.startswith("D"))  # falsify.sh/' \
+    src/codeproof_ai/corpus/decoy.py
+}
+guard_pair-discovery() { uv run pytest tests/corpus/test_decoy_validator.py tests/cli/test_commands.py -q -k structure_not_prefix; }
+
+claim_mutant-alias() { echo "변이 별칭은 쌍 이름 전체로 만든다 — 앞 4글자로 자르면 XC001~XC009 가 한 별칭을 나눠 쓴다 (DESIGN §7.10d)"; }
+break_mutant-alias() { perl -0pi -e 's/pair_dir\.name\.replace\("-", "_"\), \*map/pair_dir.name[:4], *map/' src/codeproof_ai/corpus/mutants.py; }
+guard_mutant-alias() { uv run pytest tests/corpus/test_mutants.py -q -k whole_pair_name; }
+
+claim_template-kinds() { echo "템플릿은 분류를 전부 적는다 — 템플릿을 보고 쓰는 저자는 빠진 분류를 모른다 (DESIGN §7.10d)"; }
+break_template-kinds() { perl -0pi -e 's/^#   frozen_after_init .*\n//m' corpus/decoys/_TEMPLATE/meta.toml; }
+guard_template-kinds() { uv run pytest tests/docs/test_consistency.py -q -k template_lists_every_kind; }
+
+claim_lint-exclude() { echo "코퍼스는 린트하지 않는다 — 제외에서 빠진 코퍼스는 ruff --fix 가 쌍을 고쳐 쓴다 (G2 · DESIGN §7.10d)"; }
+break_lint-exclude() { perl -0pi -e 's/"corpus\/xauthor", //' pyproject.toml; }
+guard_lint-exclude() { uv run pytest tests/corpus/test_not_linted.py -q; }
 
 # ── 하네스 ─────────────────────────────────────────────────────────────────
 

@@ -627,9 +627,11 @@ Anthropic 에 `seed` 가 없고 `temperature` 도 못 쓴다 → 출력은 환�
 
 ### G2. 코퍼스는 코드가 아니라 **표본**이다
 
-`corpus/decoys` 는 프로젝트 린트 대상에서 제외돼 있다(`extend-exclude`).
+`corpus/decoys` · `corpus/xauthor` 는 프로젝트 린트 대상에서 제외돼 있다(`extend-exclude`).
 린트를 만족시키려고 고치면 표본이 파괴된다 — D005 twin 의 미사용 인자는
 **가드가 제거됐다는 증거**다. 분석기는 `--isolated` 로 돌아 영향받지 않는다.
+코퍼스를 더하면 `extend-exclude` 와 `tests/corpora.py` 에 같이 더한다 — 쌍마다 도는 테스트(검증기 · 반증 ·
+변이 · docstring 형식 · 린트 제외)가 그 목록을 돌고, 쌍은 `pair_dirs` 하나가 찾는다 (접두사로 찾지 않는다).
 
 ### G3. decoy 규격
 

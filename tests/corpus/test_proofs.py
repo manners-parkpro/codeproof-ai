@@ -13,14 +13,18 @@
 from __future__ import annotations
 
 import sys
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
+from codeproof_ai.corpus.decoy import pair_dirs
 from codeproof_ai.corpus.proof import MAX_ATTEMPTS, ProofError, race_window, run_proof
+from tests.corpora import CORPORA, DECOYS
 
-DECOYS = Path(__file__).resolve().parents[2] / "corpus" / "decoys"
-PAIRS = sorted(p for p in DECOYS.glob("D*") if p.is_dir())
+if TYPE_CHECKING:
+    from pathlib import Path
+
+PAIRS = [p for root in CORPORA for p in pair_dirs(root)]
 
 
 def _ids(paths: list[Path]) -> list[str]:
@@ -29,7 +33,7 @@ def _ids(paths: list[Path]) -> list[str]:
 
 class TestEveryPairHasAnExecutableProof:
     def test_corpus_is_not_empty(self) -> None:
-        assert PAIRS, "decoy 쌍이 하나도 없다 - 경로가 틀렸을 것이다"
+        assert pair_dirs(DECOYS), "decoy 쌍이 하나도 없다 - 경로가 틀렸을 것이다"
 
     @pytest.mark.parametrize("pair", PAIRS, ids=_ids(PAIRS))
     def test_proof_file_exists(self, pair: Path) -> None:

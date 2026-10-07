@@ -442,6 +442,28 @@ class TestDecoyCommands:
         assert main(["decoy", "mutants", "--corpus", str(tmp_path)]) == 1
         assert "기대와 다름 1" in capsys.readouterr().out
 
+    def test_mutants_finds_pairs_by_structure_not_prefix(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """🔴 `D*` 만 찾으면 codex 가 쓴 코퍼스(XC…)에서 변이 0개로 공허하게 통과한다.
+
+        DESIGN §7.10d 「수집 전에 준비할 것」 ①.
+        """
+        for name in ("XC001-fake", "XC002-fake"):
+            pair = tmp_path / name
+            pair.mkdir()
+            (pair / "decoy.py").write_text("VALUE = 1\nOTHER = 0\n", encoding="utf-8")
+            (pair / "proof.py").write_text(
+                "def attack(mod: object) -> bool:\n    return mod.VALUE != 1\n", encoding="utf-8"
+            )
+            (pair / "mutants.py").write_text(
+                'WEAKENED = {"값을 바꿈": [("VALUE = 1\\n", "VALUE = 2\\n")]}\n'
+                'SAFE = {"옆 값만 바꿈": [("OTHER = 0\\n", "OTHER = 5\\n")]}\n',
+                encoding="utf-8",
+            )
+        assert main(["decoy", "mutants", "--corpus", str(tmp_path)]) == 0
+        assert "변이 4개 · 기대와 다름 0" in capsys.readouterr().out
+
     def test_stats_reports_bait_coverage(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
