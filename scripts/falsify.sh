@@ -50,7 +50,7 @@ PASS=0; FAIL=0; FAILED_NAMES=()
 #   break_X   그 불변식을 깨는 최소 변경
 #   guard_X   가드. 깨끗한 트리에서 **통과**하고 깨뜨린 뒤 **실패**해야 한다.
 
-SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict convention docs-tree generated
+SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict convention docs-tree docs-results-prose generated
            agent-contract span-match llm-symbol import-format import-manifest import-rejected
            signed-runner pack-first-runs bundle-separators pair-difference model-pin
            docstring-neutral signed-docstrings resume-docstrings runner-docstrings compare-one-axis
@@ -188,6 +188,10 @@ guard_corpus-strict() { uv run pytest tests/corpus/test_decoy_validator.py -q -k
 claim_docs-tree() { echo "DESIGN 의 패키지 트리가 실제 모듈을 전부 싣는다 — F5b"; }
 break_docs-tree() { perl -0pi -e 's/^.*mix\.py.*\n//m' docs/DESIGN.md; }
 guard_docs-tree() { uv run pytest tests/docs/test_consistency.py -q -k package_tree; }
+
+claim_docs-results-prose() { echo "결과를 옮겨 적은 문서(RESULTS · AI-WORKFLOW)도 README 와 같은 대조를 받는다 — 구별 성공률 옆에 채점자를 적는다 (F5)"; }
+break_docs-results-prose() { perl -0pi -e 's/`provable_safety` 의 「구별 성공 11\/60」/「구별 성공 11\/60」/' docs/AI-WORKFLOW.md; }
+guard_docs-results-prose() { uv run pytest tests/docs/test_consistency.py -q -k bare_discrimination; }
 
 claim_generated() { echo "생성물을 손으로 고치면 --check 가 잡는다 — F5b"; }
 break_generated() { perl -0pi -e 's/코퍼스 \*\*(\d+)쌍\*\*/코퍼스 **999쌍**/' docs/MEASUREMENTS.md; }
