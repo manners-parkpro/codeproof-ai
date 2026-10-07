@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from html import escape
 from itertools import combinations
 from typing import TYPE_CHECKING
 
@@ -33,7 +34,7 @@ from codeproof_ai.eval.figures import (
     scoreboard_svg,
     spread_svg,
 )
-from codeproof_ai.eval.glance import glance
+from codeproof_ai.eval.glance import ALARM, NearMiss, glance
 from codeproof_ai.eval.grading.injected import InjectedDefectGrader
 from codeproof_ai.eval.grading.safety import ProvableSafetyGrader
 from codeproof_ai.eval.metrics import credibility_warning
@@ -365,6 +366,8 @@ class Glance:
     reviewers: tuple[str, str]
     board: Scoreboard
     examples: tuple[Example, ...]
+    near: NearMiss | None
+    """결함 근처를 가리켰는데 slack 0 에서는 「놓침」인 짝 (`glance.near_miss`)."""
     kinds: int
     """잰 짝의 함정 분류 수."""
 
@@ -377,7 +380,10 @@ def at_a_glance(
         return None
     a, b = pair
     names = (DISPLAY.get(a.agent, a.run.reviewer), DISPLAY.get(b.agent, b.run.reviewer))
-    found = glance(a.run, b.run, samples, names=names, conditions=_conditions(a, b))
+    models = (dict(a.setup).get("model", "?"), dict(b.setup).get("model", "?"))
+    found = glance(
+        a.run, b.run, samples, names=names, models=models, conditions=_conditions(a, b)
+    )
     if found is None:
         return None
     measured = _measured(a)
@@ -389,19 +395,19 @@ def at_a_glance(
     return Glance((a.run.reviewer, b.run.reviewer), *found, kinds=len(kinds))
 
 
+DOCSTRINGS = {"neutral": "주석 속 힌트를 지운 코드", "keep": "주석 그대로인 코드"}
+"""docstring 손잡이를 누구나 읽는 말로 - 모르는 값은 손잡이 이름 그대로 적는다."""
+
+
 def _conditions(a: AgentSection, b: AgentSection) -> str:
-    """점수판의 조건 줄 - 실행 기록에서 읽는다. 두 실행이 다르면 둘 다 적는다."""
+    """점수판의 짧은 조건 - 실행 기록에서 읽는다. 두 실행이 다르면 둘 다 적는다."""
     sa, sb = dict(a.setup), dict(b.setup)
-
-    def both(key: str) -> str:
-        va, vb = sa.get(key, "?"), sb.get(key, "?")
-        return va if va == vb else f"{va} · {vb}"
-
+    ea, eb = sa.get("effort", "?"), sb.get("effort", "?")
     same = sa.get("prompt_hash") == sb.get("prompt_hash")
+    notes = DOCSTRINGS.get(a.docstrings, f"docstring {a.docstrings or '?'}")
     return (
-        f"모델 {sa.get('model', '?')} · {sb.get('model', '?')} · effort {both('effort')} · "
-        f"{'같은 프롬프트' if same else '프롬프트가 다르다'} · docstring {a.docstrings or '?'} — "
-        "차이에는 모델과 제품(도구 · 권한)이 함께 들어 있다"
+        f"추론 강도(effort) {ea if ea == eb else f'{ea} · {eb}'} · "
+        f"{'같은 프롬프트' if same else '프롬프트가 다르다'} · {notes}"
     )
 
 
@@ -435,17 +441,27 @@ def _glance_section(found: Glance | None) -> str:
         )
     moved = [row.label for row in board.rows if not row.stable]
     ladder = "·".join(map(str, board.slacks))
+    primary = next(row.label for row in board.rows if row.primary)
     lines += [
         "",
-        "- 주 지표는 「정확히 갈랐다」(P-C) 다 — 수집 전에 선언했다 (DESIGN §7.10b). "
+        f"- 주 지표는 「{primary}」(P-C) 다 — 수집 전에 선언했다 (DESIGN §7.10b). "
         "나머지 셋은 같은 짝 판정을 다시 묶은 **사후 보조**이고, 그 「구별된다」는 다중 비교를 "
         "보정하지 않은 값이다 — 주장은 주 지표로만 한다.",
         f"- 🔴 slack {ladder} 에서 차이의 방향이나 판정이 흔들린다: " + " · ".join(moved)
         if moved
         else f"- o slack {ladder} 에서 네 지표 모두 차이의 방향과 판정이 같다.",
-        f"- 조건: {board.conditions}",
-        "",
+        f"- 조건: 모델 {board.models[0]} · {board.models[1]} · {board.conditions} — "
+        "차이에는 모델과 제품(도구 · 권한)이 함께 들어 있다",
     ]
+    if found.near is not None:
+        n = found.near
+        lines.append(
+            f"- 근처 지적: `{n.pair_id}` 에서 `{found.reviewers[n.side]}` 는 slack 0 에서 "
+            f"모든 회차 「놓침」(P-B · P-R)이고 slack {n.slack} 에서 모든 회차 「짚음」"
+            "(P-C · P-V)이다 — 위치를 세는 규칙 하나가 판정을 바꾼다 (A2a). 그런 짝 중 decoy 가 "
+            "가장 짧은 것이고, 「짚음」이 사다리에서 더 크게 움직이는 리뷰어에서 찾았다."
+        )
+    lines.append("")
     if found.examples:
         lines += [
             "### 예시 — 규칙으로 고른 짝",
@@ -465,6 +481,84 @@ def _glance_section(found: Glance | None) -> str:
             )
         lines.append("")
     return "\n".join(lines)
+
+
+LANDING = "index.html"
+"""랜딩 페이지 - 측정값 문서 옆에 둔다 (`--out` 의 디렉터리)."""
+
+HIGHLIGHTS = (
+    "<!-- 생성물: 핵심 발견 - `uv run codeproof report` 가 채운다. 손으로 고치지 않는다. -->",
+    "<!-- /생성물: 핵심 발견 -->",
+)
+"""손으로 쓰는 랜딩 페이지 안의 생성 구간 표시 - report 는 그 사이만 바꾼다 (F5b)."""
+
+
+def render_highlights(spread: Spread | None, found: Glance | None) -> str:
+    """랜딩 페이지 첫 화면의 핵심 발견 카드 - 숫자는 생성물과 같은 계산에서 온다 (F5b).
+
+    🔴 문장도 값에서 만든다 - 「더 많았다」 같은 방향 말을 손으로 쓰면 다시 잰 뒤 방향이 바뀌어도
+       문장이 남는다.
+    """
+    cards: list[tuple[str, str]] = []
+    if spread is not None:
+        big = (
+            spread.verdict if spread.verdict.endswith("배")
+            else f"{spread.safety_fp} 대 {spread.injected_fp}"
+        )
+        cards.append((
+            big,
+            "같은 Ruff 경고를 채점 규칙만 바꿔 셌더니, 안전한 코드에서 헛경고로 센 수가 "
+            f"<b>{spread.safety_fp}건</b>과 <b>{spread.injected_fp}건</b>으로 갈렸다.",
+        ))
+    if found is not None:
+        cards += _agent_cards(found)
+    lines = ['  <div class="cards">']
+    for big, text in cards:
+        lines += [
+            '    <div class="card">',
+            f'      <p class="big">{escape(big)}</p>',
+            f"      <p>{text}</p>",
+            "    </div>",
+        ]
+    lines.append("  </div>")
+    return "\n".join(lines) + "\n"
+
+
+def _agent_cards(found: Glance) -> list[tuple[str, str]]:
+    board = found.board
+    a, b = (escape(n) for n in board.names)
+    primary = next(r for r in board.rows if r.primary)
+    alarm = next(r for r in board.rows if r.verdicts == tuple(v.value for v in ALARM))
+    caught = board.rows[0]
+    leader = a if primary.a.strict >= primary.b.strict else b
+    more = a if alarm.a.strict > alarm.b.strict else b
+    pair = f"{alarm.a.strict:.1%} 대 {alarm.b.strict:.1%}"
+    if alarm.a.strict == alarm.b.strict:
+        trade = f"안전한 코드에 헛경고는 같았다 ({alarm.a.strict:.1%})."
+    elif more == leader:
+        trade = f"대신 안전한 코드에 헛경고는 {leader} 가 더 많았다 ({pair})."
+    else:
+        trade = f"안전한 코드에 헛경고도 {leader} 가 더 적었다 ({pair})."
+    cards = [(
+        f"{primary.a.strict:.1%} 대 {primary.b.strict:.1%}",
+        f"안전한 코드는 통과시키고 버그만 정확히 짚은 비율 — {a} 대 {b}. {trade}",
+    )]
+    side = found.near.side if found.near is not None else (
+        0 if caught.a.loose - caught.a.strict >= caught.b.loose - caught.b.strict else 1
+    )
+    share, name = (caught.a, caught.b)[side], (a, b)[side]
+    text = (
+        f"{name} 가 버그를 짚은 비율 — 결함 줄과 정확히 겹친 지적만 세면 앞, 근처 "
+        f"{board.slacks[-1]}줄까지 세면 뒤. 같은 리뷰를 세는 규칙만 바꿨다."
+    )
+    if found.near is not None:
+        short = escape(found.near.pair_id.split("-", 1)[0])
+        text += (
+            f" 예: {short} 에서는 {board.runs[side]}회 모두 결함 근처를 가리켰지만 「놓침」으로 "
+            f"셌다 — {found.near.slack}줄만 넓혀도 「짚음」이다."
+        )
+    cards.append((f"{share.strict:.1%} → {share.loose:.1%}", text))
+    return cards
 
 
 def _estimate(

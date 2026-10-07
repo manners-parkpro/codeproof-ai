@@ -21,6 +21,7 @@ from codeproof_ai.cli import main
 from codeproof_ai.eval.export import sample_digest
 from codeproof_ai.eval.figures import BANNER as FIGURE_BANNER
 from codeproof_ai.eval.loader import PRESENTED_FILENAME, load_decoy_samples
+from codeproof_ai.eval.report import HIGHLIGHTS, LANDING
 from codeproof_ai.reviewers.imported import (
     BUNDLE_FILE,
     DIGEST_SUFFIX,
@@ -975,6 +976,49 @@ class TestReport:
         assert not stale.exists()
         assert foreign.exists()
         assert main(["report", *args, "--check"]) == 0
+        capsys.readouterr()
+
+    def test_the_landing_block_is_filled_and_checked(
+        self, small_corpus: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """🔴 첫 화면의 핵심 발견은 생성물이다 - 표시 사이만 바꾸고, 낡으면 --check 가 운다 (F5b).
+
+        표시 밖의 손으로 쓴 글은 그대로 둔다.
+        """
+        out = tmp_path / "gen" / "MEASUREMENTS.md"
+        out.parent.mkdir(parents=True)
+        page = out.parent / LANDING
+        start, end = HIGHLIGHTS
+        page.write_text(
+            f"<p>손글씨</p>\n  {start}\n  옛 카드\n  {end}\n<p>끝</p>\n", encoding="utf-8"
+        )
+        empty = tmp_path / "no-agents"
+        empty.mkdir()
+        args = ["--corpus", str(small_corpus), "--agents", str(empty), "--out", str(out)]
+
+        assert main(["report", *args, "--check"]) == 1
+        assert "생성 구간이 낡았다" in capsys.readouterr().err
+        assert main(["report", *args]) == 0
+        text = page.read_text(encoding="utf-8")
+        assert "옛 카드" not in text
+        assert 'class="card"' in text
+        assert text.startswith("<p>손글씨</p>")
+        assert text.endswith("<p>끝</p>\n")
+        assert main(["report", *args, "--check"]) == 0
+        capsys.readouterr()
+
+    def test_a_page_without_the_markers_is_left_alone(
+        self, small_corpus: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        out = tmp_path / "gen" / "MEASUREMENTS.md"
+        out.parent.mkdir(parents=True)
+        page = out.parent / LANDING
+        page.write_text("<p>표시 없음</p>\n", encoding="utf-8")
+        empty = tmp_path / "no-agents"
+        empty.mkdir()
+        args = ["--corpus", str(small_corpus), "--agents", str(empty), "--out", str(out)]
+        assert main(["report", *args]) == 0
+        assert page.read_text(encoding="utf-8") == "<p>표시 없음</p>\n"
         capsys.readouterr()
 
     def test_unknown_analyzer_is_exit_2(

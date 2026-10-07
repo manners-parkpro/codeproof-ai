@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import xml.etree.ElementTree as ET
 from typing import TYPE_CHECKING
 
@@ -24,7 +25,6 @@ from codeproof_ai.eval.figures import (
     Spread,
     _clip,
     _units,
-    _wrap,
     agents_svg,
     examples_svg,
     pairs_svg,
@@ -50,6 +50,7 @@ LADDER = [(0, Estimate("slack 0", 0.178, 0.111, 0.249)),
           (10, Estimate("slack 10", 0.120, 0.049, 0.191))]
 BOARD = Scoreboard(
     names=("Claude Code", "Codex CLI"),
+    models=("claude-fable-5-1", "gpt-6-astra"),
     pairs=150,
     runs=(3, 3),
     slacks=(0, 2, 5, 10),
@@ -60,7 +61,7 @@ BOARD = Scoreboard(
         ScoreRow("안전한 코드에 헛경고", "증명된 안전한 판에 결함을 주장했다", ("P-V", "P-R"),
                  Share(0.071, 0.100), Share(0.020, 0.036),
                  Estimate("slack 0", 0.051, -0.011, 0.093), stable=False),
-        ScoreRow("정확히 갈랐다", "가드를 지운 판만 짚었다", ("P-C",),
+        ScoreRow("버그만 정확히 짚었다", "안전한 코드는 통과, 버그만 지적", ("P-C",),
                  Share(0.647, 0.784), Share(0.469, 0.664),
                  Estimate("slack 0", 0.178, 0.111, 0.249), stable=True, primary=True),
     ),
@@ -70,14 +71,14 @@ EXAMPLES = (
     Example(
         "D117-page-size", "bounded_input", 10, ("limit = min(limit, _MAX_PAGE)",), (),
         "limit 을 상한으로 줄이는 줄이 없다.",
-        ExampleSide("Claude Code", "P-C", 3, quote="상한이 적용되지 않는다."),
+        ExampleSide("Claude Code", "P-C", 3),
         ExampleSide("Codex CLI", "P-B", 3, silent=True),
     ),
     Example(
         "D069-retry", "idempotent_retry", 20, ("_ledger[delivery_id] = row",),
         ('_ledger[f"row-{len(_ledger)}"] = row',), "적립 행의 키를 매번 새로 만든다.",
-        ExampleSide("Codex CLI", "P-C", 3, quote="Each retry inserts another credit record."),
-        ExampleSide("Claude Code", "P-V", 3, quote="실패한 시도의 행이 장부에 남는다. " * 8),
+        ExampleSide("Codex CLI", "P-C", 3),
+        ExampleSide("Claude Code", "P-V", 3),
     ),
 )
 FIGURES: dict[str, Callable[[], str]] = {
@@ -118,8 +119,8 @@ class TestSpread:
         texts = _texts(spread_svg(SPREADS, 150))
         for want in ("0 대 34", "8 대 8", "17 대 777", "45.7배", "일치", "배수로 잴 수 없다"):
             assert want in texts
-        assert "--ruff-select ALL" in texts
-        assert any("slack 0" in t for t in texts)  # 어느 매칭 조건의 숫자인지 그림만 봐도 안다
+        assert "전체 규칙 (ALL)" in texts
+        assert any("위치는 정확히 겹친 것만 인정" in t for t in texts)  # 매칭 조건을 그림이 말한다
 
     @pytest.mark.parametrize(
         ("spread", "want"),
@@ -195,59 +196,63 @@ class TestAgents:
 
 
 class TestScoreboard:
-    def test_values_are_the_declared_matching_and_the_ladder_end_is_labelled(self) -> None:
+    def test_values_are_the_declared_matching(self) -> None:
         texts = _texts(scoreboard_svg(BOARD))
-        for want in ("69.6%", "47.6%", "10줄 88.4%", "10줄 70.0%", "64.7%", "46.9%"):
+        for want in ("69.6%", "47.6%", "7.1%", "2.0%", "64.7%", "46.9%"):
             assert want in texts
+        assert not [t for t in texts if "88.4" in t]  # 사다리 끝 값은 그림에 없다 - 생성물에 있다
 
-    def test_only_the_difference_carries_an_interval(self) -> None:
+    def test_only_the_primary_difference_carries_an_interval(self) -> None:
         """🔴 리뷰어마다의 구간을 싣지 않는다 - 두 구간을 겹쳐 보는 읽기를 권하게 된다 (F6)."""
         svg = scoreboard_svg(BOARD)
-        bracketed = [t for t in _texts(svg) if "[" in t]
-        assert bracketed == [
-            "+22.0%p [+15.6, +28.7]", "+5.1%p [-1.1, +9.3]", "+17.8%p [+11.1, +24.9]"
-        ]
+        assert [t for t in _texts(svg) if "[" in t] == ["95% 신뢰구간 [+11.1, +24.9]"]
+        assert "차이 +17.8%p" in _texts(svg)
         lines = ET.fromstring(svg).iter(f"{SVG}line")
         assert not [ln for ln in lines if ln.get("class") == "whisker"]
 
-    def test_the_verdict_follows_the_interval_and_the_ladder(self) -> None:
-        """구간이 0 을 품으면 「구별되지 않는다」, 사다리에서 판정이 바뀌면 흔들린다 (A2a)."""
-        texts = _texts(scoreboard_svg(BOARD))
-        assert texts.count("구별된다") == 2
-        assert "구별되지 않는다 · slack 에 흔들린다" in texts
-        assert any("판정이 흔들린다: 안전한 코드에 헛경고" in t for t in texts)
+    def test_an_interval_that_holds_zero_is_not_distinguishable(self) -> None:
+        wide = dataclasses.replace(BOARD.rows[2], diff=Estimate("slack 0", 0.02, -0.01, 0.05))
+        texts = _texts(scoreboard_svg(dataclasses.replace(BOARD, rows=(*BOARD.rows[:2], wide))))
+        assert "95% 신뢰구간 [-1.0, +5.0]" in texts
+        assert "우연일 수 있다" in texts
+        assert "우연으로 보기 어렵다" in _texts(scoreboard_svg(BOARD))
 
-    def test_it_names_the_primary_metric_the_grader_and_the_conditions(self) -> None:
+    def test_the_ladder_is_one_line(self) -> None:
+        """사다리 값은 생성물에 두고 그림에는 판정이 같은지만 적는다 (A2a)."""
         texts = _texts(scoreboard_svg(BOARD))
-        assert "정확히 갈랐다 — 주 지표" in texts
-        assert any("provable_safety" in t and "150쌍" in t for t in texts)  # F5 - 어느 정의인지
-        assert any(t.startswith("조건: effort low") for t in texts)
+        assert any("결론이 바뀐다: 안전한 코드에 헛경고" in t for t in texts)
+        steady = dataclasses.replace(
+            BOARD, rows=tuple(dataclasses.replace(r, stable=True) for r in BOARD.rows)
+        )
+        steady_texts = _texts(scoreboard_svg(steady))
+        assert any("10줄)까지 지적을 인정해도 결론은 같다" in t for t in steady_texts)
+
+    def test_it_names_the_primary_metric_the_grader_and_the_models(self) -> None:
+        texts = _texts(scoreboard_svg(BOARD))
+        assert "버그만 정확히 짚었다 (핵심)" in texts
+        assert any("provable_safety" in t and "짝마다 3회" in t for t in texts)  # F5 - 어느 정의
+        assert "Claude Code · claude-fable-5-1" in texts
+        assert any("effort low" in t for t in texts)
 
     def test_no_line_runs_past_the_frame(self) -> None:
-        """SVG 글은 줄을 바꾸지 않는다 - 긴 주석은 나눠서 싣는다."""
+        """SVG 글은 줄을 바꾸지 않는다 - 긴 주석은 잘라서 싣는다."""
         assert max(_units(t) for t in _texts(scoreboard_svg(BOARD))) <= 130
 
 
 class TestExamples:
-    def test_each_card_shows_the_change_and_both_verdicts(self) -> None:
+    def test_each_pair_shows_the_change_and_both_verdicts(self) -> None:
         texts = _texts(examples_svg(EXAMPLES, pairs=150, kinds=14))
         for want in (
-            "D117-page-size",
-            "bounded_input · decoy 10줄",
+            "버그 — limit 을 상한으로 줄이는 줄이 없다.",
+            "D117 · 코드 10줄",
             "- limit = min(limit, _MAX_PAGE)",
             "+ (지운 줄)",
-            "✓ Claude Code — 3회 모두 가드를 지운 판만 짚었다",
-            "✗ Codex CLI — 3회 모두 아무것도 지적하지 않았다",
-            "✗ Claude Code — 3회 모두 안전한 판에도 경고했다",
+            "✓ Claude Code · 3회 모두 버그만 지적",
+            "✗ Codex CLI · 3회 모두 아무 지적 없음",
+            "✗ Claude Code · 3회 모두 안전한 코드에도 경고",
         ):
             assert want in texts
         assert any("규칙으로 골랐다" in t for t in texts)  # 손으로 고르지 않았다고 그림이 말한다
-
-    def test_a_long_quote_is_clipped_to_the_frame(self) -> None:
-        texts = _texts(examples_svg(EXAMPLES, pairs=150, kinds=14))
-        quotes = [t for t in texts if t.startswith("“")]
-        assert len(quotes) == 3
-        assert any(t.endswith("…”") for t in quotes)
 
     def test_many_changed_lines_are_cut(self) -> None:
         many = tuple(f"x{i} = {i}" for i in range(CODE_LINES + 2))
@@ -266,7 +271,3 @@ class TestTextFitting:
     )
     def test_clip_counts_wide_characters_twice(self, text: str, units: int, want: str) -> None:
         assert _clip(text, units) == want
-
-    def test_wrap_breaks_only_at_spaces(self) -> None:
-        assert _wrap("가나 다라 마바", 5) == ["가나", "다라", "마바"]
-        assert _wrap("ab cd", 10) == ["ab cd"]

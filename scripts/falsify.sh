@@ -51,8 +51,8 @@ PASS=0; FAIL=0; FAILED_NAMES=()
 #   guard_X   가드. 깨끗한 트리에서 **통과**하고 깨뜨린 뒤 **실패**해야 한다.
 
 SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict convention docs-tree docs-results-prose selection-headline selection-table selection-repeats fp-counts-floor pair-table pair-sentence pair-block generated figures-generated figures-beside stale-figure out-dash pairs-ladder-label pair-ladder-note agents-points landing-page landing-css landing-blob landing-numbers mutants-unknown
-           readme-scoreboard readme-scoreboard-lenient scoreboard-primary misses-complement
-           example-rule-slack scoreboard-interval
+           readme-scoreboard scoreboard-primary misses-complement
+           example-rule-slack scoreboard-interval near-miss-rule landing-highlights landing-markers
            agent-contract span-match llm-symbol import-format import-manifest import-rejected
            signed-runner pack-first-runs bundle-separators pair-difference model-pin
            docstring-neutral signed-docstrings resume-docstrings runner-docstrings compare-one-axis
@@ -258,7 +258,7 @@ break_agents-points() { perl -0pi -e 's/f"\{_pct\(point\)\}%"/f"{_pct(point)}% [
 guard_agents-points() { uv run pytest tests/eval/test_figures.py -q -k points_and_only; }
 
 claim_landing-page() { echo "Pages 첫 페이지가 가리키는 그림은 실제로 있다 — 받은 사람이 파일로 열어도 같다"; }
-break_landing-page() { perl -0pi -e 's/src="figures\/pairs\.svg"/src="figures\/nope.svg"/' docs/index.html; }
+break_landing-page() { perl -0pi -e 's/src="figures\/spread\.svg"/src="figures\/nope.svg"/' docs/index.html; }
 guard_landing-page() { uv run pytest tests/docs/test_consistency.py -q -k its_relative; }
 
 claim_landing-css() { echo "첫 페이지는 CSS 로도 바깥 자원을 부르지 않는다 — 받은 사람이 파일로 열어도 같다"; }
@@ -270,8 +270,16 @@ break_landing-blob() { perl -0pi -e 's/blob\/main\/docs\/VERIFY\.md/blob\/main\/
 guard_landing-blob() { uv run pytest tests/docs/test_consistency.py -q -k repository_links; }
 
 claim_landing-numbers() { echo "첫 페이지의 손으로 쓴 문장에는 숫자가 없다 — 숫자는 생성 그림이 든다 (F5b)"; }
-break_landing-numbers() { perl -0pi -e 's/편차도 설정의 함수다\./편차도 설정의 함수다 (45.7배)./' docs/index.html; }
+break_landing-numbers() { perl -0pi -e 's/보안 규칙만 고르면 같아진다\./보안 규칙만 고르면 같아진다 (45.7배)./' docs/index.html; }
 guard_landing-numbers() { uv run pytest tests/docs/test_consistency.py -q -k quotes_no_numbers; }
+
+claim_landing-highlights() { echo "첫 화면의 핵심 발견 카드는 생성물이다 — 손으로 숫자를 고치면 report --check 가 운다 (F5b)"; }
+break_landing-highlights() { perl -0pi -e 's/<p class="big">45\.7배<\/p>/<p class="big">45.8배<\/p>/' docs/index.html; }
+guard_landing-highlights() { uv run codeproof report --check; }
+
+claim_landing-markers() { echo "첫 화면의 생성 구간 표시는 있어야 한다 — 표시가 사라지면 report 가 조용히 채우기를 멈춘다"; }
+break_landing-markers() { perl -0pi -e 's/<!-- \/생성물: 핵심 발견 -->//' docs/index.html; }
+guard_landing-markers() { uv run pytest tests/docs/test_consistency.py -q -k highlights_are_generated; }
 
 claim_mutants-unknown() { echo "decoy mutants 는 없는 쌍 접두사를 거절한다 — 맞는 쌍 0개로 공허하게 통과하지 않게"; }
 break_mutants-unknown() { perl -0pi -e 's/if unknown := \[p for p in prefixes if p not in names\]:/if unknown := []:/' src/codeproof_ai/cli.py; }
@@ -282,10 +290,6 @@ guard_mutants-unknown() { uv run pytest tests/cli/test_commands.py -q -k matches
 claim_readme-scoreboard() { echo "README 첫 화면의 점수판 숫자는 생성물 「점수판」과 같다 — 손으로 옮긴 숫자는 다시 재면 낡는다 (F5b)"; }
 break_readme-scoreboard() { perl -0pi -e 's/Claude 64\.7% · Codex 46\.9%/Claude 64.8% · Codex 46.9%/' README.md; }
 guard_readme-scoreboard() { uv run pytest tests/docs/test_consistency.py -q -k scoreboard_numbers_match; }
-
-claim_readme-scoreboard-lenient() { echo "넓힌 허용 오차 뒤의 숫자는 사다리 끝 값과 견준다 — 선언한 매칭의 숫자를 옮겨 써도 운다 (A2a)"; }
-break_readme-scoreboard-lenient() { perl -0pi -e 's/Claude 88\.4% ·/Claude 69.6% ·/' README.md; }
-guard_readme-scoreboard-lenient() { uv run pytest tests/docs/test_consistency.py -q -k scoreboard_numbers_match; }
 
 claim_scoreboard-primary() { echo "점수판의 주 지표 줄은 「에이전트 비교」의 주 지표와 같은 계산이다 — 한쪽만 채점을 바꾸면 운다"; }
 break_scoreboard-primary() {
@@ -305,9 +309,13 @@ claim_example-rule-slack() { echo "예시 짝은 모든 slack · 모든 회차�
 break_example-rule-slack() { perl -0pi -e 's/for pair in ladder\.values\(\) for run/for pair in list(ladder.values())[:1] for run/' src/codeproof_ai/eval/glance.py; }
 guard_example-rule-slack() { uv run pytest tests/eval/test_glance.py -q; }
 
-claim_scoreboard-interval() { echo "점수판은 리뷰어마다의 구간을 싣지 않는다 — 구간은 같은 짝 위의 차이에만 있다 (F6)"; }
+claim_near-miss-rule() { echo "첫 화면의 「놓침」 사례는 모든 회차가 한 칸 넓힌 매칭에서 「짚음」으로 옮겨 간 짝이다 — 그 조건을 빼면 운다"; }
+break_near-miss-rule() { perl -0pi -e 's/        and all\(run\[p\] in CAUGHT for run in ladder\[step\]\[side\]\)\n//' src/codeproof_ai/eval/glance.py; }
+guard_near-miss-rule() { uv run pytest tests/eval/test_glance.py -q -k NearMiss; }
+
+claim_scoreboard-interval() { echo "점수판은 리뷰어마다의 구간을 싣지 않는다 — 구간은 주 지표의 같은 짝 위 차이에만 있다 (F6)"; }
 break_scoreboard-interval() { perl -0pi -e 's/f"\{_pct\(share\.strict\)\}%"\)/f"{_pct(share.strict)}% [0, 1]")/' src/codeproof_ai/eval/figures.py; }
-guard_scoreboard-interval() { uv run pytest tests/eval/test_figures.py -q -k only_the_difference; }
+guard_scoreboard-interval() { uv run pytest tests/eval/test_figures.py -q -k only_the_primary_difference; }
 
 # ── 에이전트 층 (A2b · DESIGN §7.10) - 첫 전체 실행에서 조용히 틀렸던 자리들 ──
 

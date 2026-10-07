@@ -1,7 +1,7 @@
 """한눈에 - 점수판과 예시 짝 (생성물 「점수판」 · 그림 scoreboard · examples).
 
 🔴 새 측정이 아니다. 에이전트 비교와 같은 묶음 · 같은 채점(`provable_safety`)의 짝 판정을
-   다시 묶는다 - 짚음(P-C · P-V) · 놓침(P-B · P-R) · 헛경고(P-V · P-R) · 정확히 갈랐다(P-C).
+   다시 묶는다 - 짚음(P-C · P-V) · 놓침(P-B · P-R) · 헛경고(P-V · P-R) · 정확히 짚음(P-C).
    주 지표는 마지막 하나이고 수집 전에 선언했다 (DESIGN §7.10b). 나머지 셋은 사후 보조다.
 
 🔴 허용 오차(slack)를 하나로 고르지 않는다 - 값은 선언한 매칭(slack 0)이고, 사다리 끝 값과
@@ -11,44 +11,57 @@
    모든 slack 에서 같은 오답인 짝 가운데 decoy 가 가장 짧은 것 (같으면 식별자 순) · 방향마다 하나.
    [실측 · 150쌍] slack 0 하나로만 고르면 Codex 가 결함 바로 옆 줄에 낸 맞는 지적이 「놓침」으로
    세어진 짝이 뽑혔다 - 매칭 정책의 산물이 예시가 된다 (DESIGN 교훈 #65).
+
+그 짝 자체도 규칙으로 찾아 싣는다 (`near_miss`) - 한 리뷰어가 slack 0 에서는 모든 회차 「놓침」이고
+사다리 다음 칸에서는 모든 회차 「짚음」인 짝. 위치를 세는 규칙 하나가 판정을 바꾸는 사례다.
 """
 
 from __future__ import annotations
 
 import difflib
 import re
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from codeproof_ai.eval.figures import Estimate, Example, ExampleSide, Scoreboard, ScoreRow, Share
-from codeproof_ai.eval.grading.base import Outcome
 from codeproof_ai.eval.grading.safety import ProvableSafetyGrader
 from codeproof_ai.eval.multirun import difference_of, mean_share, verdicts_by_run
 from codeproof_ai.eval.pairing import PairVerdict
-from codeproof_ai.eval.runner import regrade_view
 from codeproof_ai.eval.sensitivity import DEFAULT_SWEEP
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
     from codeproof_ai.eval.multirun import Difference
-    from codeproof_ai.eval.runner import ReviewerRun, SampleOutcome
+    from codeproof_ai.eval.runner import ReviewerRun
     from codeproof_ai.eval.sample import LabeledSample
 
     Verdicts = list[dict[str, PairVerdict]]
 
-ROWS: tuple[tuple[str, str, tuple[PairVerdict, ...]], ...] = (
-    ("버그를 짚었다", "가드를 지운 판의 결함 자리를 짚었다",
-     (PairVerdict.CORRECT, PairVerdict.OVER_FLAG)),
-    ("버그를 놓쳤다", "결함 자리를 짚지 못했다", (PairVerdict.UNDER_FLAG, PairVerdict.REVERSED)),
-    ("안전한 코드에 헛경고", "증명된 안전한 판에 결함을 주장했다",
-     (PairVerdict.OVER_FLAG, PairVerdict.REVERSED)),
-    ("정확히 갈랐다", "가드를 지운 판만 짚었다", (PairVerdict.CORRECT,)),
-)
-"""점수판의 지표 - 첫 줄이 「짚음」이다 (그림의 허용 오차 줄이 그 줄을 읽는다)."""
-
+CAUGHT = (PairVerdict.CORRECT, PairVerdict.OVER_FLAG)
+MISSED = (PairVerdict.UNDER_FLAG, PairVerdict.REVERSED)
+ALARM = (PairVerdict.OVER_FLAG, PairVerdict.REVERSED)
 PRIMARY = (PairVerdict.CORRECT,)
 """수집 전에 선언한 주 지표 - 구별 성공(P-C) (DESIGN §7.10b)."""
 
+ROWS: tuple[tuple[str, str, tuple[PairVerdict, ...]], ...] = (
+    ("버그를 짚었다", "버그 코드의 결함을 지적", CAUGHT),
+    ("버그를 놓쳤다", "결함을 지적하지 못함", MISSED),
+    ("안전한 코드에 헛경고", "안전한 코드에 결함이 있다고 함", ALARM),
+    ("버그만 정확히 짚었다", "안전한 코드는 통과, 버그만 지적", PRIMARY),
+)
+"""점수판의 지표 - 누구나 읽는 말로 쓴다. 판정 묶음은 생성물 「점수판」 표에 같이 싣는다."""
+
+
+@dataclass(frozen=True, slots=True)
+class NearMiss:
+    """결함 근처를 가리켰는데 slack 0 에서는 「놓침」인 짝 - 한 리뷰어가 모든 회차에서."""
+
+    pair_id: str
+    side: int
+    """두 리뷰어 가운데 어느 쪽인가 (0 · 1)."""
+    slack: int
+    """이 slack 에서는 모든 회차가 「짚음」이다."""
 
 def glance(
     a: ReviewerRun,
@@ -56,9 +69,14 @@ def glance(
     samples: Sequence[LabeledSample],
     *,
     names: tuple[str, str],
+    models: tuple[str, str],
     conditions: str = "",
-) -> tuple[Scoreboard, tuple[Example, ...]] | None:
-    """두 리뷰어의 점수판과 예시. 값이 하나라도 없으면 None - 0 으로 그리지 않는다."""
+) -> tuple[Scoreboard, tuple[Example, ...], NearMiss | None] | None:
+    """두 리뷰어의 점수판 · 예시 · 근처 지적 사례. 값이 없으면 None (0 으로 그리지 않는다).
+
+    근처 지적 사례는 「짚음」이 사다리에서 더 크게 움직이는 리뷰어에서 찾는다 - 첫 화면이 그
+    리뷰어의 두 값을 함께 싣는다.
+    """
     ladder = {
         s: (
             verdicts_by_run(a.outcomes, samples, ProvableSafetyGrader(overlap_slack=s)),
@@ -89,13 +107,37 @@ def glance(
         )
     board = Scoreboard(
         names,
+        models,
         pairs=len(strict[0][0]),
         runs=(a.manifest.sample_n, b.manifest.sample_n),
         slacks=DEFAULT_SWEEP,
         rows=tuple(rows),
         conditions=conditions,
     )
-    return board, _examples((a, b), samples, ladder, names)
+    caught = rows[0]
+    side = 0 if caught.a.loose - caught.a.strict >= caught.b.loose - caught.b.strict else 1
+    by_id = {s.sample_id: s for s in samples}
+    lengths = {p: _length(by_id[p]) for p in strict[0][0]}
+    near = near_miss(ladder, lengths, side)
+    found = NearMiss(near, side, DEFAULT_SWEEP[1]) if near is not None else None
+    return board, _examples((a, b), samples, ladder, names), found
+
+
+def near_miss(
+    ladder: Mapping[int, tuple[Verdicts, Verdicts]], lengths: Mapping[str, int], side: int
+) -> str | None:
+    """slack 0 에서는 모든 회차 「놓침」, 다음 칸에서는 모든 회차 「짚음」인 짝 중 가장 짧은 것.
+
+    🔴 두 칸 모두 **모든 회차**다 - 한 회차만 옮겨 가는 짝은 실행 변동과 매칭 정책이 섞인다.
+    """
+    low, step = DEFAULT_SWEEP[0], DEFAULT_SWEEP[1]
+    found = [
+        (lengths[p], p)
+        for p in sorted(lengths)
+        if all(run[p] in MISSED for run in ladder[low][side])
+        and all(run[p] in CAUGHT for run in ladder[step][side])
+    ]
+    return min(found)[1] if found else None
 
 
 def _share(strict: Verdicts, loose: Verdicts, hits: frozenset[PairVerdict]) -> Share | None:
@@ -147,7 +189,7 @@ def _examples(
     ladder: Mapping[int, tuple[Verdicts, Verdicts]],
     names: tuple[str, str],
 ) -> tuple[Example, ...]:
-    """고른 짝(`pick_examples`)에 바뀐 줄 · 결함 · 1회차 문구를 붙인다."""
+    """고른 짝(`pick_examples`)에 바뀐 줄과 결함을 붙인다."""
     by_id = {s.sample_id: s for s in samples}
     measured = ladder[DEFAULT_SWEEP[0]][0][0]
     lengths = {p: _length(by_id[p]) for p in measured}
@@ -157,9 +199,6 @@ def _examples(
         decoy = by_id[pid]
         twin = by_id[decoy.paired_with or ""]
         removed, added = _changed(_source(decoy), _source(twin))
-        winner = _first_run(runs[win], (decoy, twin))
-        loser = _first_run(runs[lose], (decoy, twin))
-        alarm = lost in (PairVerdict.OVER_FLAG, PairVerdict.REVERSED)
         out.append(
             Example(
                 pair_id=pid,
@@ -169,12 +208,10 @@ def _examples(
                 added=added,
                 defect=_sentence(twin.defects[0].description) if twin.defects else "",
                 winner=ExampleSide(
-                    names[win], PairVerdict.CORRECT.value, runs[win].manifest.sample_n,
-                    quote=_quote(winner[twin.sample_id], Outcome.TRUE_POSITIVE),
+                    names[win], PairVerdict.CORRECT.value, runs[win].manifest.sample_n
                 ),
                 loser=ExampleSide(
                     names[lose], lost.value, runs[lose].manifest.sample_n,
-                    quote=_quote(loser[pid], Outcome.FALSE_POSITIVE) if alarm else "",
                     silent=_silent(runs[lose], {pid, twin.sample_id}),
                 ),
             )
@@ -207,23 +244,6 @@ def _changed(decoy: str, twin: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
         tuple(ln[indent:].rstrip() for ln in removed if ln.strip()),
         tuple(ln[indent:].rstrip() for ln in added if ln.strip()),
     )
-
-
-def _first_run(
-    run: ReviewerRun, pair: tuple[LabeledSample, LabeledSample]
-) -> dict[str, SampleOutcome]:
-    """1회차의 지적만으로 다시 채점한 그 짝 - 예시에 싣는 문구는 이 회차의 것이다."""
-    view = regrade_view(run.outcomes, pair, [ProvableSafetyGrader(overlap_slack=0)], run=0)
-    return {o.sample_id: o for o in view}
-
-
-def _quote(outcome: SampleOutcome, want: Outcome) -> str:
-    """그 판정을 만든 첫 지적의 첫 문장."""
-    judged = outcome.judgments.get(ProvableSafetyGrader.name, ())
-    for observed, judgment in zip(outcome.observations.observed, judged, strict=True):
-        if judgment.outcome is want:
-            return _sentence(observed.finding.message)
-    return ""
 
 
 def _silent(run: ReviewerRun, sample_ids: set[str]) -> bool:

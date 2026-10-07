@@ -41,12 +41,15 @@ from codeproof_ai.eval.pairing import (
     score_pairs,
 )
 from codeproof_ai.eval.report import (
+    HIGHLIGHTS,
+    LANDING,
     RULE_SELECTIONS,
     SETUP_KEYS,
     AgentSection,
     at_a_glance,
     pair_ladder,
     render_figures,
+    render_highlights,
     render_measurements,
     spread_of,
 )
@@ -1378,7 +1381,37 @@ def _cmd_report(
     drawn = render_figures(selections, graders, samples, sections, ladder=ladder, glance=glance)
     outputs = {out: body, **{str(figures / name): svg for name, svg in drawn.items()}}
     codes = [_emit_generated(text, path, check=check) for path, text in outputs.items()]
-    return max(*codes, _stale_figures(figures, drawn, check=check))
+    headline = next((s for s in spreads if s.select == "ALL"), None)
+    highlights = render_highlights(headline, glance)
+    landing = _emit_block(Path(out).parent / LANDING, highlights, check=check)
+    return max(*codes, landing, _stale_figures(figures, drawn, check=check))
+
+
+def _emit_block(page: Path, block: str, *, check: bool) -> int:
+    """손으로 쓰는 페이지 안의 생성 구간 - 표시(`HIGHLIGHTS`) 사이만 바꾼다. 다르면 --check 는 1.
+
+    페이지나 표시가 없으면 건드리지 않는다 - 시험 코퍼스의 출력 디렉터리에는 페이지가 없다.
+    저장소 페이지에 표시가 있는지는 문서 테스트가 본다.
+    """
+    start, end = HIGHLIGHTS
+    text = page.read_text(encoding="utf-8") if page.is_file() else ""
+    if start not in text or end not in text.split(start, 1)[1]:
+        return 0
+    head, rest = text.split(start, 1)
+    tail = rest.split(end, 1)[1]
+    fresh = f"{head}{start}\n{block}  {end}{tail}"
+    if fresh == text:
+        print(f"{page} 의 생성 구간은 최신이다")
+        return 0
+    if check:
+        print(
+            f"{page} 의 생성 구간이 낡았다 - `uv run codeproof report` 로 다시 만든다",
+            file=sys.stderr,
+        )
+        return 1
+    page.write_text(fresh, encoding="utf-8")
+    print(f"{page} 의 생성 구간을 썼다")
+    return 0
 
 
 def _stale_figures(figures: Path, drawn: Mapping[str, str], *, check: bool) -> int:

@@ -22,6 +22,7 @@ from codeproof_ai.cli import _COMMANDS, build_parser, main
 from codeproof_ai.corpus.decoy import TrapKind, pair_dirs
 from codeproof_ai.corpus.plan import PLAN
 from codeproof_ai.corpus.shape import GuardShape
+from codeproof_ai.eval.report import HIGHLIGHTS
 
 ROOT = Path(__file__).resolve().parents[2]
 MEASUREMENTS = ROOT / "docs" / "MEASUREMENTS.md"
@@ -60,15 +61,13 @@ _SCORE_ROW = (
 )
 
 
-def _scoreboard() -> tuple[int, dict[str, dict[str, str | None]]]:
-    """생성물 「점수판」 - (사다리 끝 slack, 지표 이름 → 칸)."""
+def _scoreboard() -> dict[str, dict[str, str | None]]:
+    """생성물 「점수판」 - 지표 이름 → 칸."""
     text = MEASUREMENTS.read_text(encoding="utf-8")
     section = text.split("## 점수판", 1)[-1].split("\n## ", 1)[0]
-    loose = re.search(r"\| slack 0→(\d+) \|", section)
-    assert loose, "생성물에서 점수판을 읽지 못했다"
     rows = {m["label"]: m.groupdict() for m in re.finditer(_SCORE_ROW, section, re.M)}
     assert len(rows) >= 4, f"점수판의 지표를 다 읽지 못했다: {sorted(rows)}"
-    return int(loose[1]), rows
+    return rows
 
 
 class TestReferencedFilesExist:
@@ -331,16 +330,15 @@ class TestProseDoesNotContradictTheGeneratedFile:
         """🔴 산문의 점수판 숫자(두 리뷰어 · 차이와 구간)가 생성물 「점수판」과 같아야 한다.
 
         README 첫 화면의 숫자다 - 손으로 옮긴 숫자는 묶음을 다시 재면 조용히 낡는다.
-        「N줄 안의 지적까지 인정하면」 뒤의 숫자는 사다리 끝 값과 견준다 (A2a).
         """
-        loose, rows = _scoreboard()
+        rows = _scoreboard()
         labels = "|".join(map(re.escape, rows))
         pair = re.compile(
             rf"(?P<label>{labels})[^\n]{{0,40}}?"
             r"Claude (?P<a>\d+\.\d)% ·\s+Codex (?P<b>\d+\.\d)%"
         )
         diff = re.compile(
-            r"차이 (?P<d>[+-]\d+\.\d)%p \[(?P<lo>[+-]\d+\.\d), (?P<hi>[+-]\d+\.\d)\]"
+            r"차이 (?P<d>[+-]\d+\.\d)%p\s+\[(?P<lo>[+-]\d+\.\d), (?P<hi>[+-]\d+\.\d)\]"
         )
         quoted = 0
         wrong: list[str] = []
@@ -349,8 +347,7 @@ class TestProseDoesNotContradictTheGeneratedFile:
             for m in pair.finditer(text):
                 quoted += 1
                 row = rows[m["label"]]
-                lenient = f"{loose}줄" in text[max(0, m.start() - 80) : m.start()]
-                want = (row["a1"], row["b1"]) if lenient else (row["a"], row["b"])
+                want = (row["a"], row["b"])
                 if (m["a"], m["b"]) != want:
                     wrong.append(f"{name}: {m[0]!r} vs 생성물 {want}")
             for m in diff.finditer(text):
@@ -384,7 +381,7 @@ class TestProseDoesNotContradictTheGeneratedFile:
             re.M,
         )
         assert main, "「에이전트 비교」에서 주 지표 줄을 읽지 못했다"
-        _, rows = _scoreboard()
+        rows = _scoreboard()
         primary = [r for r in rows.values() if r["primary"]]
         assert len(primary) == 1, f"점수판의 주 지표 줄이 하나가 아니다: {len(primary)}"
         (row,) = primary
@@ -392,7 +389,7 @@ class TestProseDoesNotContradictTheGeneratedFile:
 
     def test_misses_are_the_complement_of_catches(self) -> None:
         """「놓쳤다」는 「짚었다」의 여집합이다 - 판정 묶음이 어긋나면 둘의 합이 100% 가 아니다."""
-        _, rows = _scoreboard()
+        rows = _scoreboard()
         caught, missed = rows["버그를 짚었다"], rows["버그를 놓쳤다"]
         for key in ("a", "b", "a1", "b1"):
             total = float(str(caught[key])) + float(str(missed[key]))
@@ -770,12 +767,25 @@ class TestTheLandingPage:
 
         손으로 쓴 문장 · 캡션의 숫자는 코퍼스가 바뀌면 조용히 낡는다 (누락 점검).
         """
-        page = self.PAGE.read_text(encoding="utf-8")
+        start, end = HIGHLIGHTS
+        page = re.sub(  # 생성 구간은 report 가 채운다 - 숫자는 거기서만 (`report --check` 가 본다)
+            re.escape(start) + r".*?" + re.escape(end), "", self.PAGE.read_text(encoding="utf-8"),
+            flags=re.S,
+        )
         html = re.sub(r"<(style|pre|code)\b.*?</\1>", "", page, flags=re.S)
         texts = re.findall(r"<(p|li|figcaption|h[1-6])\b[^>]*>(.*?)</\1>", html, re.S)
         assert len(texts) >= 5, "본문을 못 읽었다 - 대조가 공허하다"
         quoted = [t for _, t in texts if re.search(r"\d", re.sub(r"<[^>]+>", "", t))]
         assert not quoted, f"페이지 문장에 숫자가 있다: {quoted}"
+
+    def test_its_highlights_are_generated(self) -> None:
+        """첫 화면의 핵심 발견은 생성 구간이다 - 표시가 사라지면 report 가 채우기를 멈춘다."""
+        html = self.PAGE.read_text(encoding="utf-8")
+        start, end = HIGHLIGHTS
+        assert html.count(start) == 1, "생성 구간의 시작 표시가 하나가 아니다"
+        assert html.count(end) == 1, "생성 구간의 끝 표시가 하나가 아니다"
+        block = html.split(start, 1)[1].split(end, 1)[0]
+        assert block.count('class="card"') >= 1, "생성 구간이 비어 있다 - `uv run codeproof report`"
 
     def test_its_repository_links_point_at_files_that_exist(self) -> None:
         """저장소 문서 링크(blob/main/…)는 바깥 주소라 위 검사가 보지 않는다.

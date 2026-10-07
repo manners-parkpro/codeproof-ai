@@ -7,7 +7,7 @@
 
 from __future__ import annotations
 
-from codeproof_ai.eval.glance import fixed, pick_examples
+from codeproof_ai.eval.glance import fixed, near_miss, pick_examples
 from codeproof_ai.eval.pairing import PairVerdict
 
 C, V, U, R = (
@@ -19,15 +19,16 @@ C, V, U, R = (
 SLACKS = (0, 2, 5, 10)
 RUNS = 3
 
-Side = PairVerdict | list[PairVerdict] | dict[int, PairVerdict]
+Side = PairVerdict | list[PairVerdict] | dict[int, PairVerdict | list[PairVerdict]]
 
 
 def _verdict(side: Side, slack: int, run: int) -> PairVerdict:
-    """판정 하나면 늘 같고, 목록이면 회차마다, 사전이면 slack 마다 다르다."""
+    """판정 하나면 늘 같고, 목록이면 회차마다, 사전이면 slack 마다 (그 안에서 회차마다) 다르다."""
+    if isinstance(side, dict):
+        at = side[slack]
+        return at[run] if isinstance(at, list) else at
     if isinstance(side, list):
         return side[run]
-    if isinstance(side, dict):
-        return side[slack]
     return side
 
 
@@ -76,3 +77,21 @@ class TestPickExamples:
 
     def test_both_correct_is_not_a_split(self) -> None:
         assert pick_examples(_ladder({"D1": (C, C)}), {"D1": 3}) == []
+
+
+class TestNearMiss:
+    """결함 근처를 가리켰는데 slack 0 에서는 「놓침」인 짝 - 첫 화면 카드의 예시다."""
+
+    def test_missed_strictly_but_caught_one_step_wider(self) -> None:
+        ladder = _ladder({"D140": (C, {0: U, 2: C, 5: C, 10: C}), "D9": (C, U)})
+        assert near_miss(ladder, {"D140": 9, "D9": 5}, 1) == "D140"  # 늘 놓친 D9 는 아니다
+
+    def test_every_run_must_move(self) -> None:
+        """🔴 한 회차만 옮겨 가는 짝은 실행 변동과 매칭 정책이 섞인다."""
+        ladder = _ladder({"D1": (C, {0: U, 2: [C, C, U], 5: C, 10: C})})
+        assert near_miss(ladder, {"D1": 4}, 1) is None
+
+    def test_the_shortest_pair_wins(self) -> None:
+        moving: Side = {0: R, 2: V, 5: V, 10: V}
+        ladder = _ladder({"D2": (moving, C), "D3": (moving, C)})
+        assert near_miss(ladder, {"D2": 30, "D3": 12}, 0) == "D3"

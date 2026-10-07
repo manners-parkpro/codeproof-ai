@@ -29,7 +29,6 @@ text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
 .claude { fill: #8250df; } .codex { fill: #1a7f37; }
 .pc { fill: #1a7f37; } .pv { fill: #bf8700; } .pb { fill: #8c959f; } .pr { fill: #cf222e; }
 .whisker { stroke: #59636e; stroke-width: 2; } .zero { stroke: #cf222e; stroke-dasharray: 4 3; }
-.loose { fill-opacity: 0.3; } .card { fill: #f6f8fa; stroke: #d1d9e0; }
 .code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 text.guard { fill: #0969da; } text.bug { fill: #cf222e; } text.small { font-size: 11px; }
 @media (prefers-color-scheme: dark) {
@@ -37,7 +36,7 @@ text.guard { fill: #0969da; } text.bug { fill: #cf222e; } text.small { font-size
   .grid { stroke: #3d444d; } .safe { fill: #4493f8; } .inj { fill: #f0883e; }
   .claude { fill: #ab7df8; } .codex { fill: #3fb950; }
   .pc { fill: #3fb950; } .pv { fill: #d29922; } .pb { fill: #656c76; } .pr { fill: #f85149; }
-  .whisker { stroke: #9198a1; } .card { fill: #161b22; stroke: #3d444d; }
+  .whisker { stroke: #9198a1; }
   text.muted { fill: #9198a1; } text.guard { fill: #4493f8; } text.bug { fill: #f85149; }
 }
 </style>"""
@@ -132,14 +131,16 @@ class ScoreRow:
 
 @dataclass(frozen=True, slots=True)
 class Scoreboard:
-    """두 리뷰어의 점수판 - 첫 줄이 「짚음」이다 (허용 오차 줄이 그 줄을 읽는다)."""
+    """두 리뷰어의 점수판."""
 
     names: tuple[str, str]
+    models: tuple[str, str]
     pairs: int
     runs: tuple[int, int]
     slacks: tuple[int, ...]
     rows: tuple[ScoreRow, ...]
     conditions: str = ""
+    """짧은 조건 - effort · 프롬프트 · docstring."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -149,8 +150,6 @@ class ExampleSide:
     name: str
     verdict: str
     runs: int
-    quote: str = ""
-    """1회차의 그 판정을 만든 지적 - P-C 는 twin 의 TP, P-V · P-R 은 decoy 의 FP."""
     silent: bool = False
     """두 파일 모두 모든 회차에 지적이 없다."""
 
@@ -192,20 +191,24 @@ def _width(value: int, top: int) -> float:
     return 0 if value == 0 or top == 0 else max(2.0, round(value / top * BAR, 1))
 
 
+SELECT_LABEL = {"ALL": "전체 규칙 (ALL)", "S": "보안 규칙만 (S)", "F,E": "오류·스타일 규칙 (F,E)"}
+"""Ruff 룰 선택을 누구나 읽는 말로 - 모르는 선택은 플래그 그대로 적는다."""
+
+
 def spread_svg(points: Sequence[Spread], negatives: int) -> str:
-    """같은 지적 · 정의만 바꿨다 - 룰 선택마다 두 정의의 FP (결과 2 · 6)."""
-    title = "같은 지적, 정답 정의만 바꿨다 — 증명 가능하게 안전한 코드 위의 FP"
+    """같은 경고 · 채점 규칙만 바꿨다 - 룰 선택마다 두 정의의 FP (결과 2 · 6)."""
+    title = "같은 경고, 채점 규칙만 바꿨다 — 안전한 코드에서 헛경고로 센 수"
     body = [
         _t(20, 30, title, "title"),
-        _t(20, 50, f"Ruff 지적은 그대로이고 채점자만 다르다 · slack 0 · 음성 {negatives}쌍",
-           "muted"),
+        _t(20, 50, f"Ruff(파이썬 린터)의 경고는 그대로 · 안전한 코드 {negatives}개 · "
+           "위치는 정확히 겹친 것만 인정", "muted"),
     ]
     top = max((max(p.safety_fp, p.injected_fp) for p in points), default=0)
     y = 72
     for p in points:
         body += [
-            _t(20, y + 18, f"--ruff-select {p.select}", "strong"),
-            _t(20, y + 36, f"음성 위 지적 {p.findings}건", "muted"),
+            _t(20, y + 18, SELECT_LABEL.get(p.select, f"--ruff-select {p.select}"), "strong"),
+            _t(20, y + 36, f"안전한 코드 위 경고 {p.findings}건", "muted"),
         ]
         for row, (fp, cls) in enumerate(((p.safety_fp, "safe"), (p.injected_fp, "inj"))):
             by = y + 6 + row * 22
@@ -220,11 +223,12 @@ def spread_svg(points: Sequence[Spread], negatives: int) -> str:
         y += 60
     body += [
         _rect(20, y + 6, 12, 12, "safe"),
-        _t(38, y + 16, "provable_safety — 근거 범위 안의 결함 주장만 FP"),
-        _rect(380, y + 6, 12, 12, "inj"),
-        _t(398, y + 16, "injected_defect — Qodo 정의, 판정 불가 칸이 없다"),
+        _t(38, y + 16, "이 저장소 규칙 — 증명된 범위 안의 결함 주장만 헛경고 (provable_safety)"),
+        _rect(20, y + 28, 12, 12, "inj"),
+        _t(38, y + 38, "벤치마크(Qodo) 규칙 — 결함 없는 코드의 경고는 전부 헛경고 "
+           "(injected_defect)"),
     ]
-    return _svg(y + 36, title, body)
+    return _svg(y + 58, title, body)
 
 
 _SEGMENTS = (("correct", "pc", "P-C 구별"), ("over_flag", "pv", "P-V 과잉지적"),
@@ -350,8 +354,9 @@ def agents_svg(
     return _svg(bottom + 26, title, body)
 
 
-SCORE_BAR = 230  # 점수판 막대 폭 (0~100%)
-CODE_LINES = 4  # 예시 한 쪽에 싣는 바뀐 줄 - 넘으면 … 한 줄로 줄인다
+SCORE_BAR = 360  # 점수판 막대 폭 (0~100%)
+SCORE_X = 215  # 점수판 막대 시작 - 왼쪽은 지표 이름과 풀이
+CODE_LINES = 2  # 예시 한 쪽에 싣는 바뀐 줄 - 넘으면 … 한 줄로 줄인다
 
 
 def _units(text: str) -> int:
@@ -372,120 +377,68 @@ def _clip(text: str, units: int) -> str:
     return flat  # 닿지 않는다 - 위에서 폭이 units 를 넘었다
 
 
-def _wrap(text: str, units: int) -> list[str]:
-    """표시 폭으로 줄을 나눈다 - 공백에서만 끊는다. 낱말 하나가 넘치면 그 줄만 자른다."""
-    lines: list[str] = []
-    line = ""
-    for word in text.split():
-        joined = f"{line} {word}" if line else word
-        if line and _units(joined) > units:
-            lines.append(line)
-            line = word
-        else:
-            line = joined
-    if line:
-        lines.append(line)
-    return [_clip(ln, units) for ln in lines]
-
-
-def _bar(x: float, y: float, share: Share, cls: str) -> list[str]:
-    """굵은 막대는 선언한 매칭(slack 0)의 값, 아래 가는 선은 사다리 끝 slack 의 값이다.
-
-    🔴 두 값을 한 막대의 진하기로 겹치지 않는다 - 「짚음」은 넓히면 늘고 「놓침」은 줄어, 겹치면
-       숫자가 막대의 어느 끝인지 줄마다 달라진다.
-    """
-    strict, loose = round(share.strict * SCORE_BAR, 1), round(share.loose * SCORE_BAR, 1)
-    out = [_rect(x, y, max(strict, 2.0), 11, cls)] if strict else []
-    if loose:
-        out.append(_rect(x, y + 12, max(loose, 2.0), 3, f"{cls} loose"))
-    return out
-
-
 def scoreboard_svg(board: Scoreboard) -> str:
-    """점수판 - 같은 짝 판정을 지표 넷으로 다시 묶었다 (README 첫 화면 · 생성물 「점수판」).
+    """점수판 - 같은 짝 판정을 지표 넷으로 다시 묶었다 (첫 화면 · 생성물 「점수판」).
 
-    🔴 리뷰어마다의 구간은 싣지 않는다 - 구간은 같은 짝 위의 차이에만 있다
-       (F6 · `agents_svg` 와 같다).
-    🔴 숫자는 선언한 매칭(slack 0)이고, 사다리 끝 slack 의 값을 줄마다 같이 싣는다 - 매칭 정책의
-       몫을 숨기지 않는다 (A2a).
+    🔴 리뷰어마다의 구간은 싣지 않는다 - 구간은 주 지표의 같은 짝 위 차이에만 있다 (F6).
+    🔴 숫자는 선언한 매칭(slack 0)이다. 사다리 전체에서 판정이 같은지는 한 줄로 적고, 사다리 값은
+       생성물에 둔다 (A2a).
     """
     a, b = board.names
-    loose = board.slacks[-1]
     n = "·".join(dict.fromkeys(map(str, board.runs)))
-    title = f"{a} 와 {b} — 같은 코드를 리뷰했다"
-    head = (
-        f"안전한 판과 가드만 지운 판 {board.pairs}쌍 · 샘플당 {n}회 · "
-        "한 번 돌렸을 때의 기대 비율 · 채점 provable_safety — 짚은 줄이 정답 자리와 겹쳐야 인정"
-    )
-    body = [_t(20, 30, title, "title")]
-    y = 50
-    for line in _wrap(head, 130):
-        body.append(_t(20, y, line, "muted"))
-        y += 18
-    body += [
-        _rect(20, y - 2, 12, 11, "claude"), _t(38, y + 8, a),
-        _rect(140, y - 2, 12, 11, "codex"), _t(158, y + 8, b),
-        _rect(250, y + 2, 24, 3, "pb loose"),
-        _t(280, y + 8, f"가는 선 — 정답 자리에서 {loose}줄 안까지 인정하면", "muted"),
-        _t(WIDTH - 20, y + 8, f"차이 ({a} - {b}) · 95%", "muted small", "end"),
+    title = f"{a} 와 {b} — 같은 코드 {board.pairs}쌍을 리뷰했다"
+    body = [
+        _t(20, 30, title, "title"),
+        _t(20, 50, f"짝마다 {n}회 리뷰 · 한 번 리뷰했을 때 기대할 수 있는 비율 · "
+           "채점: 증명된 범위 안의 결함 주장만 헛경고 (provable_safety)", "muted"),
     ]
-    x0 = 230.0
-    y += 24
+    y = 72
     for row in board.rows:
-        label = row.label + (" — 주 지표" if row.primary else "")
-        body += [
-            _t(20, y + 13, label, "strong"),
-            _t(20, y + 30, _clip(row.meaning, 36), "muted small"),
-        ]
+        label = row.label + (" (핵심)" if row.primary else "")
+        body += [_t(20, y + 18, label, "strong"), _t(20, y + 36, row.meaning, "muted small")]
         for i, (share, cls) in enumerate(((row.a, "claude"), (row.b, "codex"))):
-            by = y + 1 + i * 18
-            body += _bar(x0, by, share, cls)
+            by = y + 6 + i * 22
+            w = max(2.0, round(share.strict * SCORE_BAR, 1)) if share.strict else 0.0
+            if w:
+                body.append(_rect(SCORE_X, by, w, 16, cls))
+            body.append(_t(SCORE_X + w + 6, by + 12, f"{_pct(share.strict)}%"))
+        if row.primary:
+            e = row.diff
+            lo, hi = _pct(e.lo, signed=True), _pct(e.hi, signed=True)
+            reading = "우연으로 보기 어렵다" if row.distinguishable else "우연일 수 있다"
             body += [
-                _t(x0 + SCORE_BAR + 10, by + 10, f"{_pct(share.strict)}%"),
-                _t(x0 + SCORE_BAR + 52, by + 10, f"{loose}줄 {_pct(share.loose)}%", "muted small"),
+                _t(WIDTH - 20, y + 18, f"차이 {_pct(e.point, signed=True)}%p", "strong", "end"),
+                _t(WIDTH - 20, y + 34, f"95% 신뢰구간 [{lo}, {hi}]", "muted small", "end"),
+                _t(WIDTH - 20, y + 48, reading, "muted small", "end"),
             ]
-        e = row.diff
-        verdict = "구별된다" if row.distinguishable else "구별되지 않는다"
-        if not row.stable:
-            verdict += " · slack 에 흔들린다"
-        lo, hi = _pct(e.lo, signed=True), _pct(e.hi, signed=True)
-        diff = f"{_pct(e.point, signed=True)}%p [{lo}, {hi}]"
-        body += [
-            _t(WIDTH - 20, y + 13, diff, "strong" if row.primary else "", "end"),
-            _t(WIDTH - 20, y + 30, verdict, "muted", "end"),
-        ]
-        y += 50
+        y += 60
+    ma, mb = board.models
+    loose = board.slacks[-1]
     moved = [r.label for r in board.rows if not r.stable]
-    ladder = "·".join(map(str, board.slacks))
-    notes = [
-        (
-            f"차이의 판정은 허용 오차 {ladder}줄에서 모두 같다." if not moved
-            else f"허용 오차 {ladder}줄에서 판정이 흔들린다: " + " · ".join(moved) + "."
-        )
-        + " 주 지표는 수집 전에 선언했고, 나머지 셋은 같은 짝 판정을 다시 묶은 보조다"
-        " (다중 비교 보정 없음).",
-        "차이의 구간은 같은 짝을 함께 복원추출한 부트스트랩이다.",
+    steady = (
+        f"결함 줄 근처({loose}줄)까지 지적을 인정해도 결론은 같다" if not moved
+        else f"결함 줄 근처({loose}줄)까지 인정하면 결론이 바뀐다: " + " · ".join(moved)
+    )
+    note = " · ".join(x for x in (steady, board.conditions) if x)
+    body += [
+        _rect(20, y + 6, 12, 12, "claude"), _t(38, y + 16, f"{a} · {ma}"),
+        _rect(300, y + 6, 12, 12, "codex"), _t(318, y + 16, f"{b} · {mb}"),
+        _t(20, y + 38, _clip(note, 128), "muted"),
     ]
-    if board.conditions:
-        notes.append(f"조건: {board.conditions}")
-    for note in notes:
-        for line in _wrap(note, 130):
-            body.append(_t(20, y + 6, line, "muted"))
-            y += 18
-    return _svg(y + 10, title, body)
+    return _svg(y + 54, title, body)
 
 
 _SIDE = {
-    "P-C": "가드를 지운 판만 짚었다",
-    "P-V": "안전한 판에도 경고했다",
-    "P-B": "결함 자리를 짚지 못했다",
-    "P-R": "안전한 판만 경고했다",
+    "P-C": "버그만 지적",
+    "P-V": "안전한 코드에도 경고",
+    "P-B": "결함을 못 짚음",
+    "P-R": "안전한 코드만 경고",
 }
 
 
 def _side(s: ExampleSide) -> str:
-    what = "아무것도 지적하지 않았다" if s.silent else _SIDE.get(s.verdict, s.verdict)
-    return f"{'✓' if s.verdict == 'P-C' else '✗'} {s.name} — {s.runs}회 모두 {what}"
+    what = "아무 지적 없음" if s.silent else _SIDE.get(s.verdict, s.verdict)
+    return f"{'✓' if s.verdict == 'P-C' else '✗'} {s.name} · {s.runs}회 모두 {what}"
 
 
 def _code(lines: Sequence[str]) -> list[str]:
@@ -498,45 +451,39 @@ def _code(lines: Sequence[str]) -> list[str]:
 
 
 def examples_svg(examples: Sequence[Example], *, pairs: int, kinds: int) -> str:
-    """무엇을 리뷰했나 - 규칙으로 고른 예시 짝 (랜딩 페이지 첫 그림 · 생성물 「점수판」의 예시).
+    """무엇을 리뷰시켰나 - 규칙으로 고른 예시 짝 (첫 화면 · 생성물 「점수판」의 예시).
 
     🔴 예시를 손으로 고르지 않는다 - 고르는 규칙은 `glance` 에 있고 그림에도 적는다.
     """
-    title = "무엇을 리뷰했나 — 안전한 판과 가드만 지운 판"
+    title = "안전장치 한 줄만 다른 코드 쌍 — 리뷰어는 지운 쪽만 지적해야 맞다"
     body = [
         _t(20, 30, title, "title"),
-        _t(20, 50, f"직접 쓴 파이썬 코드 {pairs}쌍 · 함정 {kinds}종 · 리뷰어는 파일을 하나씩 받고, "
-           "가드를 지운 판만 지적해야 한다", "muted"),
-        _t(20, 68, "예시는 규칙으로 골랐다 — 한쪽은 모든 회차 · 허용 오차에서 정확히 가르고 "
-           "다른 쪽은 늘 같은 오답을 낸 짝 중 decoy 가 가장 짧은 것", "muted small"),
+        _t(20, 50, f"직접 쓴 파이썬 코드 {pairs}쌍 · 헷갈리기 쉬운 유형 {kinds}가지 · "
+           "리뷰어는 두 코드를 따로 받는다", "muted"),
     ]
-    y = 82
+    y = 74
     for ex in examples:
-        top, cy = y, y + 44
-        inner = [
-            _t(36, y + 22, ex.pair_id, "strong"),
-            _t(WIDTH - 36, y + 22, f"{ex.kind} · decoy {ex.lines}줄", "muted", "end"),
+        body += [
+            _t(20, y + 14, _clip(f"버그 — {ex.defect}", 84), "strong"),
+            _t(WIDTH - 20, y + 14, f"{ex.pair_id.split('-', 1)[0]} · 코드 {ex.lines}줄",
+               "muted small", "end"),
         ]
-        for mark, lines, cls, side in (("-", ex.removed, "guard", "안전한 판"),
-                                       ("+", ex.added, "bug", "가드를 지운 판")):
+        cy = y + 34
+        for mark, lines, cls, side in (("-", ex.removed, "guard", "안전한 코드"),
+                                       ("+", ex.added, "bug", "버그 코드")):
             for i, line in enumerate(_code(lines)):
                 if i == 0:
-                    inner.append(_t(36, cy, side, "muted small"))
-                inner.append(_t(136, cy, f"{mark} {_clip(line, 82)}", f"code {cls}"))
-                cy += 17
-        defect = _clip(f"가드를 지운 판의 결함 — {ex.defect}", 112)
-        inner.append(_t(36, cy + 3, defect, "muted small"))
-        cy += 25
-        for s in (ex.winner, ex.loser):
-            inner.append(_t(36, cy, _side(s), "strong" if s is ex.winner else ""))
-            cy += 17
-            if s.quote:
-                inner.append(_t(52, cy, f"“{_clip(s.quote, 106)}”", "muted small"))
-                cy += 17
-        height = cy - top
-        body.append(
-            f'<rect class="card" x="20" y="{top}" width="{WIDTH - 40}" height="{height}" rx="6"/>'
-        )
-        body += inner
-        y = top + height + 12
-    return _svg(y + 4, title, body)
+                    body.append(_t(20, cy, side, "muted small"))
+                body.append(_t(100, cy, f"{mark} {_clip(line, 54)}", f"code {cls}"))
+                cy += 18
+        for i, side_ in enumerate((ex.winner, ex.loser)):
+            cls = "strong" if i == 0 else ""
+            body.append(_t(WIDTH - 20, y + 34 + i * 18, _side(side_), cls, "end"))
+        y = cy + 14
+    runs = examples[0].winner.runs if examples else 0
+    rule = (
+        f"예시는 규칙으로 골랐다 — 한쪽은 {runs}회 모두 맞히고 다른 쪽은 {runs}회 모두 틀린 짝 중 "
+        "가장 짧은 것 · 위치를 세는 규칙을 바꿔도 같은 짝만"
+    )
+    body.append(_t(20, y + 4, rule, "muted small"))
+    return _svg(y + 20, title, body)

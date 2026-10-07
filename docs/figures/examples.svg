@@ -1,5 +1,5 @@
 <!-- 생성물 - `uv run codeproof report` 가 만든다. 손으로 고치지 않는다. -->
-<svg xmlns="http://www.w3.org/2000/svg" width="760" height="435" viewBox="0 0 760 435" role="img" aria-label="무엇을 리뷰했나 — 안전한 판과 가드만 지운 판">
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="262" viewBox="0 0 760 262" role="img" aria-label="안전장치 한 줄만 다른 코드 쌍 — 리뷰어는 지운 쪽만 지적해야 맞다">
 <style>
 text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
        "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; fill: #1f2328; font-size: 12px; }
@@ -9,7 +9,6 @@ text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
 .claude { fill: #8250df; } .codex { fill: #1a7f37; }
 .pc { fill: #1a7f37; } .pv { fill: #bf8700; } .pb { fill: #8c959f; } .pr { fill: #cf222e; }
 .whisker { stroke: #59636e; stroke-width: 2; } .zero { stroke: #cf222e; stroke-dasharray: 4 3; }
-.loose { fill-opacity: 0.3; } .card { fill: #f6f8fa; stroke: #d1d9e0; }
 .code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 text.guard { fill: #0969da; } text.bug { fill: #cf222e; } text.small { font-size: 11px; }
 @media (prefers-color-scheme: dark) {
@@ -17,35 +16,28 @@ text.guard { fill: #0969da; } text.bug { fill: #cf222e; } text.small { font-size
   .grid { stroke: #3d444d; } .safe { fill: #4493f8; } .inj { fill: #f0883e; }
   .claude { fill: #ab7df8; } .codex { fill: #3fb950; }
   .pc { fill: #3fb950; } .pv { fill: #d29922; } .pb { fill: #656c76; } .pr { fill: #f85149; }
-  .whisker { stroke: #9198a1; } .card { fill: #161b22; stroke: #3d444d; }
+  .whisker { stroke: #9198a1; }
   text.muted { fill: #9198a1; } text.guard { fill: #4493f8; } text.bug { fill: #f85149; }
 }
 </style>
-<rect class="bg" width="760" height="435" rx="8"/>
-<text x="20" y="30" class="title" text-anchor="start">무엇을 리뷰했나 — 안전한 판과 가드만 지운 판</text>
-<text x="20" y="50" class="muted" text-anchor="start">직접 쓴 파이썬 코드 150쌍 · 함정 14종 · 리뷰어는 파일을 하나씩 받고, 가드를 지운 판만 지적해야 한다</text>
-<text x="20" y="68" class="muted small" text-anchor="start">예시는 규칙으로 골랐다 — 한쪽은 모든 회차 · 허용 오차에서 정확히 가르고 다른 쪽은 늘 같은 오답을 낸 짝 중 decoy 가 가장 짧은 것</text>
-<rect class="card" x="20" y="82" width="720" height="154" rx="6"/>
-<text x="36" y="104" class="strong" text-anchor="start">D117-page-size-capped-before-slicing</text>
-<text x="724" y="104" class="muted" text-anchor="end">bounded_input · decoy 10줄</text>
-<text x="36" y="126" class="muted small" text-anchor="start">안전한 판</text>
-<text x="136" y="126" class="code guard" text-anchor="start">- limit = min(limit, _MAX_PAGE)</text>
-<text x="36" y="143" class="muted small" text-anchor="start">가드를 지운 판</text>
-<text x="136" y="143" class="code bug" text-anchor="start">+ (지운 줄)</text>
-<text x="36" y="163" class="muted small" text-anchor="start">가드를 지운 판의 결함 — limit 을 상한으로 줄이는 줄이 없다.</text>
-<text x="36" y="185" class="strong" text-anchor="start">✓ Claude Code — 3회 모두 가드를 지운 판만 짚었다</text>
-<text x="52" y="202" class="muted small" text-anchor="start">“_MAX_PAGE(100)가 선언되어 있지만 page()에서 limit 상한으로 적용되지 않아, 한 쪽 크기 제한이 실제로 동작하…”</text>
-<text x="36" y="219" text-anchor="start">✗ Codex CLI — 3회 모두 아무것도 지적하지 않았다</text>
-<rect class="card" x="20" y="248" width="720" height="171" rx="6"/>
-<text x="36" y="270" class="strong" text-anchor="start">D069-retry-overwrites-the-same-key</text>
-<text x="724" y="270" class="muted" text-anchor="end">idempotent_retry · decoy 20줄</text>
-<text x="36" y="292" class="muted small" text-anchor="start">안전한 판</text>
-<text x="136" y="292" class="code guard" text-anchor="start">- _ledger[delivery_id] = row</text>
-<text x="36" y="309" class="muted small" text-anchor="start">가드를 지운 판</text>
-<text x="136" y="309" class="code bug" text-anchor="start">+ _ledger[f"row-{len(_ledger)}"] = row</text>
-<text x="36" y="329" class="muted small" text-anchor="start">가드를 지운 판의 결함 — 적립 행의 키를 원장 크기로 매번 새로 만든다.</text>
-<text x="36" y="351" class="strong" text-anchor="start">✓ Codex CLI — 3회 모두 가드를 지운 판만 짚었다</text>
-<text x="52" y="368" class="muted small" text-anchor="start">“Each notification retry inserts another credit record without removing or reusing the previous record.”</text>
-<text x="36" y="385" text-anchor="start">✗ Claude Code — 3회 모두 안전한 판에도 경고했다</text>
-<text x="52" y="402" class="muted small" text-anchor="start">“notify 호출 전에 _ledger에 행을 기록하므로, 모든 시도가 실패해 ConnectionError를 raise하거나 notify가 다…”</text>
+<rect class="bg" width="760" height="262" rx="8"/>
+<text x="20" y="30" class="title" text-anchor="start">안전장치 한 줄만 다른 코드 쌍 — 리뷰어는 지운 쪽만 지적해야 맞다</text>
+<text x="20" y="50" class="muted" text-anchor="start">직접 쓴 파이썬 코드 150쌍 · 헷갈리기 쉬운 유형 14가지 · 리뷰어는 두 코드를 따로 받는다</text>
+<text x="20" y="88" class="strong" text-anchor="start">버그 — limit 을 상한으로 줄이는 줄이 없다.</text>
+<text x="740" y="88" class="muted small" text-anchor="end">D117 · 코드 10줄</text>
+<text x="20" y="108" class="muted small" text-anchor="start">안전한 코드</text>
+<text x="100" y="108" class="code guard" text-anchor="start">- limit = min(limit, _MAX_PAGE)</text>
+<text x="20" y="126" class="muted small" text-anchor="start">버그 코드</text>
+<text x="100" y="126" class="code bug" text-anchor="start">+ (지운 줄)</text>
+<text x="740" y="108" class="strong" text-anchor="end">✓ Claude Code · 3회 모두 버그만 지적</text>
+<text x="740" y="126" text-anchor="end">✗ Codex CLI · 3회 모두 아무 지적 없음</text>
+<text x="20" y="172" class="strong" text-anchor="start">버그 — 적립 행의 키를 원장 크기로 매번 새로 만든다.</text>
+<text x="740" y="172" class="muted small" text-anchor="end">D069 · 코드 20줄</text>
+<text x="20" y="192" class="muted small" text-anchor="start">안전한 코드</text>
+<text x="100" y="192" class="code guard" text-anchor="start">- _ledger[delivery_id] = row</text>
+<text x="20" y="210" class="muted small" text-anchor="start">버그 코드</text>
+<text x="100" y="210" class="code bug" text-anchor="start">+ _ledger[f"row-{len(_ledger)}"] = row</text>
+<text x="740" y="192" class="strong" text-anchor="end">✓ Codex CLI · 3회 모두 버그만 지적</text>
+<text x="740" y="210" text-anchor="end">✗ Claude Code · 3회 모두 안전한 코드에도 경고</text>
+<text x="20" y="246" class="muted small" text-anchor="start">예시는 규칙으로 골랐다 — 한쪽은 3회 모두 맞히고 다른 쪽은 3회 모두 틀린 짝 중 가장 짧은 것 · 위치를 세는 규칙을 바꿔도 같은 짝만</text>
 </svg>
