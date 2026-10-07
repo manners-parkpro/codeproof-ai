@@ -79,6 +79,7 @@ SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict conv
            xauthor-inventory-ids xauthor-builtin-instructions xauthor-pair-leak xauthor-pair-leak-readme
            xauthor-run-credit xauthor-run-repro xauthor-run-kind xauthor-run-budget xauthor-run-frozen
            review-unlabeled review-no-defect-claim review-self-corroboration review-static-citation
+           review-silent-agent review-agent-citation
            xauthor-run-restore xauthor-audit-schema xauthor-run-refused xauthor-run-refused-kind
            xauthor-run-refused-resume xauthor-run-idle-cut scripts-typed xauthor-run-gate-output
            xauthor-run-gate-rc xauthor-run-timeout xauthor-run-kind-budget xauthor-run-interrupted
@@ -759,6 +760,14 @@ claim_review-static-citation() { echo "정적분석기의 지적에는 인용 �
 break_review-static-citation() { perl -0pi -e 's/        if not kinds\[name\]\.is_deterministic:/        if True:/' "$_REV"; }
 guard_review-static-citation() { uv run pytest tests/review/test_review.py -q -k reviewed_without_grading; }
 
+claim_review-silent-agent() { echo "답을 남기지 않은 에이전트 실행은 오류다 — 「지적 0건」으로 접으면 미측정이 미탐지가 된다 (F4)"; }
+break_review-silent-agent() { perl -0pi -e 's/    if reviewer\.available_runs\(sample\.sample_id\) < 1:/    if False:/' "$_REV"; }
+guard_review-silent-agent() { uv run pytest tests/review/test_review.py -q -k silent_agent; }
+
+claim_review-agent-citation() { echo "에이전트 지적에는 인용 검증을 건다 — 지어낸 인용은 근거 0 이다 (E3 하드 게이트)"; }
+break_review-agent-citation() { perl -0pi -e 's/        if not kinds\[name\]\.is_deterministic:/        if False:/' "$_REV"; }
+guard_review-agent-citation() { uv run pytest tests/review/test_review.py -q -k "verified_with_its_quote or made_up_quote"; }
+
 _XA=scripts/xauthor.py
 _XR=scripts/xauthor_run.py
 
@@ -855,7 +864,8 @@ break_xauthor-run-idle-cut() { perl -0pi -e 's/        idle = not window_has_ses
 guard_xauthor-run-idle-cut() { uv run pytest tests/scripts/test_xauthor_run.py -q -k refill; }
 
 claim_scripts-typed() { echo "scripts/ 도 타입 검사를 받는다 — 빠지면 외부 출력을 읽는 실행기의 None · 비목록 경로가 조용히 산다"; }
-break_scripts-typed() { perl -0pi -e 's/def windows_used\(out: Path\) -> int:/def windows_used(out: Path) -> str:/' "$_XR"; }
+# 🔴 깨기는 파일 크기를 바꾼다 - 같은 크기면 되돌린 뒤 같은 초 안의 mypy 가 증분 캐시의 옛 결과를 낸다 (DESIGN 교훈 #67)
+break_scripts-typed() { perl -0pi -e 's/def windows_used\(out: Path\) -> int:/def windows_used(out: Path) -> str | None:/' "$_XR"; }
 guard_scripts-typed() { uv run mypy; }
 
 claim_xauthor-run-gate-output() { echo "관문은 검사 출력이 끝까지 찍혀야 통과다 — 종료 코드만 보면 쌍의 코드가 SystemExit(0) 으로 끝낸 관문이 통과한다 (§7.10d 관문)"; }

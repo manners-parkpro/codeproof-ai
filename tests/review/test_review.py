@@ -6,10 +6,12 @@
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING
 
 import pytest
 
+from codeproof_ai import review
 from codeproof_ai.analysis.registry import create_analyzer
 from codeproof_ai.cli import main
 from codeproof_ai.domain.evidence import EvidenceKind, Verdict
@@ -17,7 +19,7 @@ from codeproof_ai.domain.target import ReviewTarget, SourceFile
 from codeproof_ai.eval.grading.safety import ProvableSafetyGrader
 from codeproof_ai.eval.runner import run_reviewer
 from codeproof_ai.eval.sample import LabeledSample, Stratum
-from codeproof_ai.review import render_review, review_file
+from codeproof_ai.review import ReviewError, render_review, review_file
 from codeproof_ai.reviewers.wrap import AnalyzerReviewer
 
 if TYPE_CHECKING:
@@ -117,3 +119,71 @@ class TestCommand:
         if name.endswith(".txt"):
             path.write_text("x = 1\n", encoding="utf-8")
         assert main(["review", str(path)]) == 2
+
+
+def _agent_says(monkeypatch: pytest.MonkeyPatch, findings: list[dict[str, object]] | None) -> None:
+    """실행기(review-with-agent.sh) 대신 그 출력의 모양을 쓴다 - `<샘플>.0.json` + RUN.json.
+
+    `findings` 가 None 이면 답을 남기지 않은 실행이다.
+    """
+
+    def fake(agent: str, src: Path, out: Path) -> None:
+        out.mkdir(parents=True)
+        record = {"agent": agent, "identity": f"{agent}-code 9.9.9 · m-1 · effort=low"}
+        (out / "RUN.json").write_text(json.dumps(record), encoding="utf-8")
+        if findings is not None:
+            (out / "review.0.json").write_text(json.dumps({"findings": findings}), encoding="utf-8")
+        assert (src / "MANIFEST.json").exists()
+
+    monkeypatch.setattr(review, "run_agent", fake)
+
+
+def _said(path: str, line: int, quote: str) -> dict[str, object]:
+    return {
+        "file": path, "line_start": line, "line_end": line, "category": "security",
+        "severity": "error", "quoted_code": quote, "message": "shell=True 에 외부 입력",
+        "failure_mode": "명령 주입",
+    }
+
+
+class TestAgent:
+    """🔴 에이전트 지적도 run_reviewer 한 곳으로 돌고, 인용 검증을 받는다 - 지어낸 인용은 0 이다."""
+
+    def test_an_agent_finding_is_verified_with_its_quote(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        path = _file(tmp_path, "shell.py", SHELL)
+        _agent_says(monkeypatch, [_said("shell.py", 6, "subprocess.run(cmd, shell=True)")])
+        report = review_file(path, agent="claude")
+        assert report.reviewers[-1] == "claude-code 9.9.9 · m-1 · effort=low"
+        mine = [e for e in report.entries if e.reviewer == "claude"]
+        assert len(mine) == 1
+        citation = next(ev for ev in mine[0].verified.evidence if ev.kind is EvidenceKind.CITATION)
+        assert citation.verdict is Verdict.SUPPORTS
+        assert "(정적분석기 + 에이전트)" in render_review(report)
+
+    def test_a_made_up_quote_gets_no_credit(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        path = _file(tmp_path, "shell.py", SHELL)
+        _agent_says(monkeypatch, [_said("shell.py", 6, "os.system(user_input)")])
+        mine = [e for e in review_file(path, agent="claude").entries if e.reviewer == "claude"]
+        citation = next(ev for ev in mine[0].verified.evidence if ev.kind is EvidenceKind.CITATION)
+        assert citation.verdict is Verdict.REFUTES
+        assert mine[0].verified.confidence == 0.0
+
+    def test_a_silent_agent_is_an_error_not_zero_findings(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """🔴 답을 남기지 않은 실행을 「지적 0건」으로 접으면 미측정이 미탐지가 된다 (F4)."""
+        _agent_says(monkeypatch, None)
+        with pytest.raises(ReviewError, match="답을 남기지 않았다"):
+            review_file(_file(tmp_path, "shell.py", SHELL), agent="claude")
+
+    def test_the_command_says_why_the_agent_failed(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        _agent_says(monkeypatch, None)
+        assert main(["review", str(_file(tmp_path, "shell.py", SHELL)), "--agent", "claude"]) == 1
+        assert "답을 남기지 않았다" in capsys.readouterr().err
+
