@@ -72,7 +72,7 @@ def _normalize_snippet(snippet: str) -> str:
 class Finding:
     """단일 지적.
 
-    🔴 fingerprint 에 라인 번호를 쓰지 않는다 (CLAUDE.md D2).
+    🔴 fingerprint 에 라인 번호를 쓰지 않는다 (CLAUDE.md B2).
        쓰면 위쪽 줄만 고쳐도 모든 지적이 새 지적이 된다.
 
     Attributes:

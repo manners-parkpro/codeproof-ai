@@ -1,6 +1,6 @@
 """근거(Evidence) — 런타임 검증 산출물.
 
-🔴 이 모듈은 정답 라벨을 모른다 (CLAUDE.md I2).
+🔴 이 모듈은 정답 라벨을 모른다 (CLAUDE.md A1).
    Verification 은 라벨 없이 돌아야 하는 제품 기능이고,
    정답 대조는 eval/ 의 Grader 이 한다.
 """
@@ -30,8 +30,8 @@ class EvidenceKind(StrEnum):
     REACHABILITY = "reachability"
     """해당 코드가 엔트리포인트에서 도달 가능한가.
 
-    v1 은 모듈 단위까지만 본다 — 파이썬 전용 호출그래프 도구가 전멸했다
-    (CLAUDE.md T3).
+    v1 은 파일 안 함수 단위 참조까지만 본다 — 파이썬 전용 호출그래프 도구가 전멸했다
+    (CLAUDE.md C4).
     """
 
 

@@ -17,7 +17,7 @@ class _Scope:
 
 
 def _span(node: ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef) -> tuple[int, int]:
-    """🔴 데코레이터 줄을 포함한 범위 (CLAUDE.md D3).
+    """🔴 데코레이터 줄을 포함한 범위 (CLAUDE.md B3).
 
     FunctionDef.lineno 는 `def` 키워드를 가리키고 데코레이터는 그 앞이다.
     Ruff 는 데코레이터 줄에 진단을 자주 내므로, 보정하지 않으면

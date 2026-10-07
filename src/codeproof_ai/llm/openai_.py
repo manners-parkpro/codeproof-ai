@@ -62,7 +62,7 @@ class OpenAIReviewProvider:
         stream: bool = False,  # noqa: ARG002 - 비스트리밍 경로만 우선 구현
     ) -> ReviewResponse:
         if not effort:
-            msg = "effort 를 명시해야 한다 - 사다리가 벤더마다 다르다 (L4)"
+            msg = "effort 를 명시해야 한다 - 사다리가 벤더마다 다르다 (D4)"
             raise ValueError(msg)
 
         schema = review_schema()

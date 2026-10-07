@@ -69,7 +69,7 @@ class AnthropicReviewProvider:
         stream: bool = False,
     ) -> ReviewResponse:
         if not effort:
-            msg = "effort 를 명시해야 한다 - 기본값이 모델마다 다르다 (L4)"
+            msg = "effort 를 명시해야 한다 - 기본값이 모델마다 다르다 (D4)"
             raise ValueError(msg)
 
         client = self._get_client()
@@ -152,7 +152,7 @@ class AnthropicReviewProvider:
         """🔴 Anthropic 의 input_tokens 는 **마지막 캐시 breakpoint 이후만** 센다.
 
         공식 예시: 200k 캐시 문서 + 50토큰 질문 -> input_tokens: 50.
-        보정 없이 OpenAI 의 prompt_tokens 와 더하면 범주 오류다 (L2).
+        보정 없이 OpenAI 의 prompt_tokens 와 더하면 범주 오류다 (D2).
         """
         u = getattr(message, "usage", None)
         if u is None:

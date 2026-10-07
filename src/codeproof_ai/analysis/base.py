@@ -1,7 +1,7 @@
 """정적분석 확장점.
 
 🔴 이 모듈에 Python 전용 개념이 새어 들어가면 Java 확장 약속이 깨진다
-   (CLAUDE.md I3). `.py` 확장자, ast 노드 타입, ruff 룰 코드를 여기 두지 않는다.
+   (CLAUDE.md A3). `.py` 확장자, ast 노드 타입, ruff 룰 코드를 여기 두지 않는다.
 """
 
 from __future__ import annotations
@@ -126,7 +126,7 @@ class Analyzer(Protocol):
     """한 가지 정적분석 도구를 감싼다.
 
     구현체는 도구 원본 출력을 domain.Finding 으로 정규화할 책임을 진다.
-    특히 **컬럼 규약 변환은 구현체 안에서만** 한다 (D1) -
+    특히 **컬럼 규약 변환은 구현체 안에서만** 한다 (B1) -
     어댑터 하나가 변환 하나를 책임진다.
     """
 
@@ -190,7 +190,7 @@ class SymbolIndex(Protocol):
     def enclosing_symbol(self, source: str, line: int) -> tuple[str | None, str | None]:
         """(정규화 이름, 종류) 를 반환한다. 최상위면 (None, None).
 
-        🔴 데코레이터 줄을 포함해야 한다 (D3) -
+        🔴 데코레이터 줄을 포함해야 한다 (B3) -
            FunctionDef.lineno 는 `def` 를 가리키고 데코레이터는 그 앞이다.
         """
         ...

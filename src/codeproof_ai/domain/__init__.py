@@ -2,7 +2,7 @@
 
 🔴 이 패키지는 stdlib 과 typing 외에 아무것도 import 하지 않는다.
    외부 의존성이 들어오는 순간 도메인 테스트가 API 키를 요구하기 시작한다.
-   근거: CLAUDE.md I1.
+   근거: CLAUDE.md A1.
 
 정답 라벨(Defect·LabeledSample·Stratum)은 여기 없다 - eval/sample.py 에 있다.
 런타임은 eval/ 을 import 할 수 없으므로 라벨을 볼 방법이 구조적으로 없다.

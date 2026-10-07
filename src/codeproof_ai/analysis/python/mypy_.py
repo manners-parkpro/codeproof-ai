@@ -1,6 +1,6 @@
 """mypy 어댑터.
 
-🔴 `mypy.api.run` 을 쓰지 않는다 (CLAUDE.md T1).
+🔴 `mypy.api.run` 을 쓰지 않는다 (CLAUDE.md C2).
    스트리밍이 불가능하고, 모듈 상태와 메모리를 워커에 누수시키며,
    run_dmypy 는 스레드 안전하지 않다. subprocess 가 격리·타임아웃·크래시 봉쇄를 준다.
 

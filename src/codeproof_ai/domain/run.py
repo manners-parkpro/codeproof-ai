@@ -1,6 +1,6 @@
 """실행 매니페스트 — 재현성의 최소 단위.
 
-🔴 manifest 없는 결과는 저장하지 않는다 (CLAUDE.md E1).
+🔴 manifest 없는 결과는 저장하지 않는다 (CLAUDE.md F1).
    store/ 는 경고가 아니라 **거부**해야 한다.
 """
 
@@ -34,14 +34,14 @@ class RunManifest:
             날짜 없는 Claude ID 도 그 자체가 스냅샷이다 (4.6 세대 이후).
         prompt_hash: 프롬프트 파일 내용 해시. 프롬프트는 코드가 아니라 데이터다.
         corpus_hash: 코퍼스 스냅샷 해시.
-        effort: 🔴 명시값. None 이면 안 된다 — 기본값이 모델마다 다르다 (L4).
+        effort: 🔴 명시값. None 이면 안 된다 — 기본값이 모델마다 다르다 (D4).
             claude-opus-5-5 는 medium, claude-sonnet-5 는 high.
         sample_n: 반복 횟수. Anthropic 은 seed 도 temperature 도 없으므로
-            재현성은 반복 + 오차막대로만 확보된다 (E4).
+            재현성은 반복 + 오차막대로만 확보된다 (F8).
         params_sent: 실제로 보낸 파라미터.
         params_omitted: 🔴 **의도적으로 생략한** 파라미터.
             리뷰어는 보낸 것만큼 안 보낸 것도 알아야 한다.
-        cache_policy: "nonce" | "cold_only" | "uncontrolled". 캐싱 비대칭 대응 (L3).
+        cache_policy: "nonce" | "cold_only" | "uncontrolled". 캐싱 비대칭 대응 (D3).
             🔴 `uncontrolled` 는 에이전트 CLI 용이다. CLI 의 시스템 프롬프트가
             우리 프롬프트 **앞에** 오므로 맨 앞 nonce 가 불가능하고, 캐시 적중도
             실제로 관측됐다 - 앞의 둘 중 무엇으로 적어도 거짓이다.
@@ -70,7 +70,7 @@ class RunManifest:
 
     def __post_init__(self) -> None:
         if not self.effort:
-            msg = "effort 는 명시해야 한다 — 기본값이 모델마다 다르다 (L4)"
+            msg = "effort 는 명시해야 한다 — 기본값이 모델마다 다르다 (D4)"
             raise ValueError(msg)
         if self.sample_n < 1:
             msg = f"sample_n 은 1 이상이다: {self.sample_n}"

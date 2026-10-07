@@ -1,6 +1,6 @@
 """저장소 - 재현성의 최소 요건.
 
-🔴 가장 중요한 검사는 **매니페스트 없는 결과가 거부되는가**(E1) 다.
+🔴 가장 중요한 검사는 **매니페스트 없는 결과가 거부되는가**(F1) 다.
    경고가 아니라 거부여야 하고, 그게 코드가 아니라 **스키마**로 막혀야 한다.
 """
 
@@ -37,7 +37,7 @@ AnalyzerReviewer(RuffAnalyzer(select=select)),
 
 
 class TestManifestIsMandatory:
-    """🔴 E1 - 매니페스트 없는 결과는 저장될 수 없다."""
+    """🔴 F1 - 매니페스트 없는 결과는 저장될 수 없다."""
 
     def test_orphan_observation_is_rejected_by_schema(self, db: Path) -> None:
         with Store(db) as store, pytest.raises(sqlite3.IntegrityError):
