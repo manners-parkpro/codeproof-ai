@@ -19,7 +19,11 @@ from codeproof_ai.corpus.proof import race_window
 ATTEMPTS = 5
 
 _THREADS = 8
-_PER_THREAD = 40
+# 🔴 [실측] main CI(macOS)에서 5회 모두 twin 을 못 깼다 - 창을 벌려도 워커가 겹치지 않으면
+#    경쟁이 안 난다 (D051 과 같은 증상 · 859f1a7). 이 기계에서는 40 으로도 놓친 적이 없어
+#    재현하지 못했고, D051 선례대로 워커가 오래 돌도록 작업량을 10배로 올린다.
+#    400 으로 4개 동시 부하 100회 - decoy 깸 0 · twin 놓침 0.
+_PER_THREAD = 400
 
 
 def attack(mod: ModuleType) -> bool:
