@@ -222,6 +222,18 @@ class TestCreditWindows:
         self._cuts(out, 1)
         assert xr.over_budget(out)
 
+    def test_a_window_without_a_finished_session_has_not_started(self, tmp_path: Path) -> None:
+        """🔴 충전 전의 재시도는 창을 쓰지 않는다 - 세면 늦은 충전 하나가 멈춤 규칙을 건다."""
+        out = tmp_path / "out"
+        (out / "XC001").mkdir(parents=True)
+        (out / "XC001" / "write-1.json").write_text(json.dumps({"window": 1}), encoding="utf-8")
+        assert xr.window_has_sessions(out)
+        self._cuts(out, 1)
+        assert not xr.window_has_sessions(out)
+        with (out / "events.jsonl").open("a", encoding="utf-8") as f:
+            f.write(json.dumps({"event": "credit_cut_idle"}) + "\n")
+        assert xr.windows_used(out) == 2
+
 
 class TestPrompts:
     def test_the_first_attempt_has_no_gate_output(self) -> None:
@@ -333,7 +345,8 @@ if args[:1] == ["sandbox"]:
 box, last, prompt = Path(args[args.index("-C") + 1]), Path(args[args.index("-o") + 1]), args[-1]
 n = conf["calls"]
 conf["calls"] = n + 1
-if conf.get("cut_at") == n:
+cuts = conf.get("cut_at")
+if n == cuts or (isinstance(cuts, list) and n in cuts):
     conf_path.write_text(json.dumps(conf))
     (box / "stray.txt").write_text("half-written")
     print(json.dumps({"type": "error", "message": "Your workspace is out of credits."}))
@@ -432,7 +445,22 @@ class TestFlowWithAFakeCodex:
         assert s["pairs"][0]["outcome"] == "accepted"
         assert s["pairs"][0]["attempts"] == 1
         assert s["pairs"][0]["not_counted"] == ["credits"]
-        assert s["windows_used"] == 2
+        # 첫 호출부터 끊겼다 - 이 실행은 그 창을 쓰지 않았다
+        assert (s["windows_used"], s["credit_cuts"], s["idle_cuts"]) == (1, 0, 1)
+
+    def test_retries_before_the_refill_do_not_use_windows(self, pair: Any) -> None:
+        """감사에서 끊긴 뒤 (창 1 끝) 충전 전 재시도 둘이 또 끊긴다 - 창은 둘째에 머문다."""
+        self._configure(pair, cut_at=[1, 2, 3], audits=[[]])  # 0 = write-1, 1~3 = audit
+        for _ in range(3):
+            with pytest.raises(xr.Stop) as stop:
+                xr.run_pair(pair)
+            assert stop.value.rc == xr.CUT
+        xr.run_pair(pair)
+        s = xr.summarize(pair.out)
+        assert s["pairs"][0]["outcome"] == "accepted"
+        assert (s["windows_used"], s["credit_cuts"], s["idle_cuts"]) == (2, 1, 2)
+        audit = json.loads((pair.d / "audit.json").read_text(encoding="utf-8"))
+        assert audit["window"] == 2
 
     def _calls(self, p: Any) -> int:
         return int(json.loads((p.out.parent / "fake.json").read_text(encoding="utf-8"))["calls"])

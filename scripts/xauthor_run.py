@@ -203,8 +203,20 @@ def events_of(out: Path) -> list[dict[str, Any]]:
 
 
 def windows_used(out: Path) -> int:
-    """지금까지 쓴 크레딧 창 - 끊길 때마다 창 하나가 끝난다 (하네스 중단은 세지 않는다)."""
+    """지금까지 쓴 크레딧 창 - 끊길 때마다 창 하나가 끝난다 (하네스 중단은 세지 않는다).
+
+    충전 전의 재시도가 끊긴 것(`credit_cut_idle`)은 세지 않는다 - 그 창은 앞의 끊김에서 이미 끝났다.
+    """
     return 1 + sum(e.get("event") == "credit_cut" for e in events_of(out))
+
+
+def window_has_sessions(out: Path) -> bool:
+    """지금 창에서 끝난 세션이 있는가 - 없이 끊겼으면 충전 전의 재시도다."""
+    now = windows_used(out)
+    return any(
+        _load(q).get("window") == now
+        for d in pair_dirs(out) for q in d.iterdir() if SESSION_RECORD.match(q.name)
+    )
 
 
 def over_budget(out: Path) -> bool:
@@ -378,8 +390,10 @@ def session(
         )
     s = read_session(d / f"{step}.jsonl", d / f"{step}.err", rc, timed_out=timed_out)
     if s.cut:
+        # 🔴 끝난 세션 없이 끊긴 것은 창을 끝내지 않는다 - 구동기는 충전 전에도 다시 부른다
+        idle = not window_has_sessions(p.out)
         abandon(d, step, "credits", box, snap)
-        _event(p.out, "credit_cut", pair=p.pid, step=step)
+        _event(p.out, "credit_cut_idle" if idle else "credit_cut", pair=p.pid, step=step)
         raise Stop(CUT, f"{p.pid} {step} 에서 크레딧이 끊겼다 - 세지 않고 되돌렸다")
     _json(d / f"{step}.json", {
         "step": step, "category": "write" if step.startswith("write-") else step,
@@ -664,6 +678,7 @@ def summarize(out: Path) -> dict[str, Any]:
     return {
         "kinds_filled": len(filled), "kinds": filled, "windows_used": windows_used(out),
         "credit_cuts": sum(e.get("event") == "credit_cut" for e in events),
+        "idle_cuts": sum(e.get("event") == "credit_cut_idle" for e in events),
         "refused": sum(e.get("event") == "refused" for e in events),
         "interrupted": sum(e.get("event") == "interrupted" for e in events),
         "totals": totals, "pairs": rows,
