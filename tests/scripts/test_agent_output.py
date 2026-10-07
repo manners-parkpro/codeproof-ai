@@ -122,6 +122,11 @@ class TestClaudeModelIsPinned:
         payload, _ = ao.extract_claude(env, "claude-fable-5-1")
         assert payload == {"findings": []}
 
+    def test_unreadable_denials_are_unknown_not_a_crash(self) -> None:
+        """경계 - 거부 목록이 목록이 아니면 개수를 모른다고 적는다 (감사가 따로 짚는다)."""
+        _, meta = ao.extract_claude(_envelope(permission_denials=True), "claude-fable-5-1")
+        assert "denials=?" in meta
+
 
 class TestResolve:
     def test_claude_takes_the_model_that_did_the_work(self) -> None:
@@ -155,6 +160,14 @@ class TestResolve:
     def test_codex_refuses_unsupported_effort(self) -> None:
         with pytest.raises(ao.RefusedError, match="effort"):
             ao.resolve_codex(self.CATALOG, "max")
+
+    @pytest.mark.parametrize("model", [None, "top"])
+    def test_unreadable_effort_levels_are_unsupported(self, model: str | None) -> None:
+        """경계 - 카탈로그의 effort 목록을 읽지 못하면 지원하지 않는 것으로 거부한다."""
+        catalog = {"models": [{"slug": "top", "priority": 1, "visibility": "list",
+                               "supported_reasoning_levels": 5}]}
+        with pytest.raises(ao.RefusedError, match="effort"):
+            ao.resolve_codex(catalog, "low", model)
 
     def test_codex_pinned_model_must_exist(self) -> None:
         assert ao.resolve_codex(self.CATALOG, "low", "second") == "second"
@@ -349,6 +362,14 @@ class TestAudit:
         (raw / "S.0.a0.claude.json").write_text(json.dumps(denied), encoding="utf-8")
         (raw / "T.0.a0.claude.json").write_text(json.dumps(_envelope()), encoding="utf-8")
         assert list(ao.audit(tmp_path)) == ["S.0.a0.claude.json"]
+
+    def test_unreadable_denials_are_flagged(self, tmp_path: Path) -> None:
+        """경계 - 목록이 아닌 거부 기록은 그 자체가 흔적이다 (읽다 죽지 않는다)."""
+        raw = tmp_path / "raw"
+        raw.mkdir()
+        odd = _envelope(permission_denials=True)
+        (raw / "S.0.a0.claude.json").write_text(json.dumps(odd), encoding="utf-8")
+        assert ao.audit(tmp_path) == {"S.0.a0.claude.json": ["true"]}
 
 
 class TestCodexFailureCause:

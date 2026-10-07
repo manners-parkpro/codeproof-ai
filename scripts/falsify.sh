@@ -79,7 +79,7 @@ SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict conv
            xauthor-inventory-ids xauthor-builtin-instructions xauthor-pair-leak xauthor-pair-leak-readme
            xauthor-run-credit xauthor-run-repro xauthor-run-kind xauthor-run-budget xauthor-run-frozen
            xauthor-run-restore xauthor-audit-schema xauthor-run-refused xauthor-run-refused-kind
-           xauthor-run-refused-resume xauthor-run-idle-cut)
+           xauthor-run-refused-resume xauthor-run-idle-cut scripts-typed)
 
 claim_layering() { echo "런타임(analysis)은 정답 라벨(eval)을 볼 수 없다 — A1"; }
 break_layering() {
@@ -829,6 +829,10 @@ guard_xauthor-run-refused-resume() { uv run pytest tests/scripts/test_xauthor_ru
 claim_xauthor-run-idle-cut() { echo "충전 전 재시도의 끊김은 창으로 세지 않는다 — 세면 늦은 충전 하나가 멈춤 규칙(창 여섯 개)을 건다 (§7.10d 수집 중 보정)"; }
 break_xauthor-run-idle-cut() { perl -0pi -e 's/        idle = not window_has_sessions\(p\.out\)\n/        idle = False\n/' "$_XR"; }
 guard_xauthor-run-idle-cut() { uv run pytest tests/scripts/test_xauthor_run.py -q -k refill; }
+
+claim_scripts-typed() { echo "scripts/ 도 타입 검사를 받는다 — 빠지면 외부 출력을 읽는 실행기의 None · 비목록 경로가 조용히 산다"; }
+break_scripts-typed() { perl -0pi -e 's/def windows_used\(out: Path\) -> int:/def windows_used(out: Path) -> str:/' "$_XR"; }
+guard_scripts-typed() { uv run mypy; }
 
 claim_xauthor-audit-schema() { echo "감사 exec 은 저자 exec 에 스키마 하나만 더한다 — 감사 카나리가 감사 인자 그대로를 본다 (§7.10d 상자)"; }
 break_xauthor-audit-schema() { perl -0pi -e 's/        args \+= \["--output-schema", str\(schema\)\]\n/        args += ["--output-schema", str(schema), "--skip-git-repo-check"]\n/' "$_XA"; }

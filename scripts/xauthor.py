@@ -349,7 +349,7 @@ def _inputs(rollout: Path) -> list[tuple[str, dict[str, Any]]]:
         if not isinstance(rec, dict):
             continue
         kind = rec.get("type")
-        payload = rec.get("payload") if isinstance(rec.get("payload"), dict) else {}
+        payload = got if isinstance(got := rec.get("payload"), dict) else {}
         role = payload.get("role")
         if kind in ("session_meta", "turn_context"):
             found.append((str(kind), payload))

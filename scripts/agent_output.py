@@ -151,7 +151,9 @@ def resolve_codex(catalog: object, effort: str, model: str | None = None) -> str
         raise RefusedError("모델 카탈로그를 읽지 못했다")
 
     def efforts(m: dict[str, object]) -> set[str]:
-        levels = m.get("supported_reasoning_levels") or []
+        levels = m.get("supported_reasoning_levels")
+        if not isinstance(levels, list):  # 읽지 못하면 지원하지 않는 것이다
+            return set()
         return {str(lv.get("effort")) for lv in levels if isinstance(lv, dict)}
 
     if model:
@@ -280,7 +282,8 @@ def extract_claude(envelope: dict[str, object], model: str) -> tuple[dict[str, o
     if payload is None:
         raise RefusedError("findings 를 찾지 못했다")
     denials = envelope.get("permission_denials") or []
-    meta = f"turns={envelope.get('num_turns')} denials={len(denials)}"
+    count = len(denials) if isinstance(denials, list) else "?"  # 목록이 아니면 감사가 짚는다
+    meta = f"turns={envelope.get('num_turns')} denials={count}"
     return payload, meta
 
 
@@ -365,7 +368,8 @@ def audit(out_dir: Path) -> dict[str, list[str]]:
         denials = env.get("permission_denials") if isinstance(env, dict) else None
         if denials:
             hits.setdefault(f.name, []).extend(
-                json.dumps(d, ensure_ascii=False)[:200] for d in denials
+                json.dumps(d, ensure_ascii=False)[:200]
+                for d in (denials if isinstance(denials, list) else [denials])
             )
     return hits
 

@@ -139,7 +139,7 @@ def read_session(events: Path, err: Path, rc: int, *, timed_out: bool) -> Sessio
             continue
         if ev.get("type") == "turn.completed":
             turns += 1
-            got = ev.get("usage") if isinstance(ev.get("usage"), dict) else {}
+            got = u if isinstance(u := ev.get("usage"), dict) else {}
             for k in USAGE_KEYS:
                 usage[k] += int(got.get(k) or 0)
         elif ev.get("type") in ("error", "turn.failed"):
@@ -207,7 +207,7 @@ def windows_used(out: Path) -> int:
 
     충전 전의 재시도가 끊긴 것(`credit_cut_idle`)은 세지 않는다 - 그 창은 앞의 끊김에서 이미 끝났다.
     """
-    return 1 + sum(e.get("event") == "credit_cut" for e in events_of(out))
+    return 1 + sum(1 for e in events_of(out) if e.get("event") == "credit_cut")
 
 
 def window_has_sessions(out: Path) -> bool:
