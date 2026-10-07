@@ -68,6 +68,7 @@ from codeproof_ai.llm.registry import (
 from codeproof_ai.llm.registry import available as provider_available
 from codeproof_ai.llm.render import load_prompt
 from codeproof_ai.llm.render import prompt_hash as prompt_hash_of
+from codeproof_ai.review import render_review, review_file
 from codeproof_ai.reviewers.imported import (
     BUNDLE_FILE,
     DIGEST_SUFFIX,
@@ -229,6 +230,14 @@ def build_parser() -> argparse.ArgumentParser:
         default="runs.db",
         help="결과 저장 경로. 'none' 이면 저장하지 않는다 (재현 불가)",
     )
+
+    rv = sub.add_parser(
+        "review",
+        help="파이썬 파일 하나에 Ruff · mypy 를 돌려 지적과 근거를 낸다"
+        " (결함 확인이 아니다 · API 불필요)",
+    )
+    rv.add_argument("path", help="리뷰할 파이썬 파일")
+    rv.add_argument("--out", default=None, help="보고서를 쓸 파일 - 없으면 화면에 낸다")
 
     sub.add_parser("doctor", help="자격증명 · 도구 준비 상태 확인")
 
@@ -1018,6 +1027,20 @@ def _print_observations(run: ReviewerRun) -> None:
             )
 
 
+def _cmd_review(path: Path, out: Path | None) -> int:
+    """정답이 없는 코드 - 채점하지 않고 지적과 근거만 낸다 (eval/review.py)."""
+    if path.suffix != ".py" or not path.is_file():
+        print(f"파이썬 파일이 아니다: {path}", file=sys.stderr)
+        return 2
+    text = render_review(review_file(path))
+    if out is None:
+        print(text, end="")
+    else:
+        out.write_text(text, encoding="utf-8")
+        print(f"보고서: {out}")
+    return 0
+
+
 def _cmd_doctor() -> int:
     """무엇이 준비됐고 무엇이 없는지 정확히 말한다."""
     print("정적분석 (API 불필요)")
@@ -1529,6 +1552,7 @@ _COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
     "export": lambda a: _cmd_export(Path(a.corpus), Path(a.out), a.prompt, a.docstrings),
     "pack": lambda a: _cmd_pack(Path(a.corpus), Path(a.src), Path(a.out), runs=a.runs),
     "doctor": lambda _a: _cmd_doctor(),
+    "review": lambda a: _cmd_review(Path(a.path), Path(a.out) if a.out else None),
     "history": lambda a: _cmd_history(a.store, a.limit, a.repro),
     "import": lambda a: _cmd_import(
         Path(a.corpus),

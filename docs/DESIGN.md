@@ -934,6 +934,7 @@ src/codeproof_ai/
 ├── corpus/shape.py          #   가드 위치 축 — 도출한다 (§3.5)
 ├── corpus/plan.py           #   확장 계획 — 칸별 목표, 테스트가 코퍼스 · DESIGN 과 대조 (§3.5)
 ├── store/{schema,sqlite}.py # SQLite — 매니페스트 없는 결과를 외래키가 거부 (F1)
+├── review.py                # 정답 없는 코드 — 지적과 근거 · 채점하지 않는다 (verify 의 첫 소비자)
 └── cli.py                   # 명령 목록은 §11 · `codeproof --help` (산문이 세면 낡는다)
 ```
 

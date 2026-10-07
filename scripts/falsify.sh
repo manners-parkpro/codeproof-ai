@@ -78,6 +78,7 @@ SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict conv
            xauthor-input-roles xauthor-var-tmp xauthor-verbatim xauthor-sandbox-flag
            xauthor-inventory-ids xauthor-builtin-instructions xauthor-pair-leak xauthor-pair-leak-readme
            xauthor-run-credit xauthor-run-repro xauthor-run-kind xauthor-run-budget xauthor-run-frozen
+           review-unlabeled review-no-defect-claim review-self-corroboration review-static-citation
            xauthor-run-restore xauthor-audit-schema xauthor-run-refused xauthor-run-refused-kind
            xauthor-run-refused-resume xauthor-run-idle-cut scripts-typed xauthor-run-gate-output
            xauthor-run-gate-rc xauthor-run-timeout xauthor-run-kind-budget xauthor-run-interrupted
@@ -737,6 +738,25 @@ guard_gate-twin-docstring() { uv run pytest tests/eval/test_gate.py -q -k twin_a
 claim_gate-plan() { echo "관문은 분류가 정한 칸 밖의 가드 위치를 거부한다 — 이름만 그 분류인 쌍이다 (corpus/plan.py)"; }
 break_gate-plan() { perl -0pi -e 's/    if shape in cells:/    if True:  # falsify.sh/' "$_GATE"; }
 guard_gate-plan() { uv run pytest tests/eval/test_gate.py -q -k test_plan; }
+
+# ── 정답 없는 코드의 리뷰 보고서 (codeproof review) - 지적과 근거만 낸다 ──
+_REV=src/codeproof_ai/review.py
+
+claim_review-unlabeled() { echo "정답이 없는 샘플은 채점하지 않는다 — 결함 라벨이 없다고 음성으로 채점하면 지적이 전부 FP 가 된다 (F4)"; }
+break_review-unlabeled() { perl -0pi -e 's/    if graders and unlabeled:/    if False:/' src/codeproof_ai/eval/runner.py; }
+guard_review-unlabeled() { uv run pytest tests/review/test_review.py -q -k unlabeled_samples_are_not_graded; }
+
+claim_review-no-defect-claim() { echo "리뷰 보고서는 결함 확인이라고 쓰지 않는다 — 지적과 근거일 뿐이다 (F4 · E2)"; }
+break_review-no-defect-claim() { perl -0pi -e 's/"> 결함을 확인하는 보고서가 아니다\. 리뷰어의 지적과, 지적마다 모은 근거를 보여 준다\.",/"> 확인된 결함과 근거다.",/' "$_REV"; }
+guard_review-no-defect-claim() { uv run pytest tests/review/test_review.py -q -k never_claims; }
+
+claim_review-self-corroboration() { echo "교차 확인자에는 다른 도구의 지적만 넘긴다 — 자기 확인은 항등식이다 (F7)"; }
+break_review-self-corroboration() { perl -0pi -e 's/if other != name for f in fs\]/for f in fs]/' "$_REV"; }
+guard_review-self-corroboration() { uv run pytest tests/review/test_review.py -q -k only_by_another_tool; }
+
+claim_review-static-citation() { echo "정적분석기의 지적에는 인용 검증을 걸지 않는다 — 파일을 직접 읽어 늘 맞으니 근거를 부풀린다"; }
+break_review-static-citation() { perl -0pi -e 's/        if not kinds\[name\]\.is_deterministic:/        if True:/' "$_REV"; }
+guard_review-static-citation() { uv run pytest tests/review/test_review.py -q -k reviewed_without_grading; }
 
 _XA=scripts/xauthor.py
 _XR=scripts/xauthor_run.py

@@ -28,6 +28,7 @@ from codeproof_ai.domain.reviewer import ReviewerKind
 from codeproof_ai.domain.run import RunManifest
 from codeproof_ai.eval.metrics import GraderResult, summarize
 from codeproof_ai.eval.provenance import harness_sha as current_sha
+from codeproof_ai.eval.sample import Stratum
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
@@ -301,6 +302,11 @@ def run_reviewer(
     """
     if sample_n < 1:
         msg = f"sample_n 은 1 이상이다: {sample_n}"
+        raise ValueError(msg)
+    unlabeled = [s.sample_id for s in samples if s.stratum is Stratum.UNLABELED]
+    if graders and unlabeled:
+        # 🔴 결함 라벨이 없다고 음성으로 채점하면 지적이 전부 FP 가 된다 (F4)
+        msg = f"정답이 없는 샘플은 채점하지 않는다: {unlabeled[:3]} - 지적과 근거만 낸다"
         raise ValueError(msg)
     if reviewer.kind.is_deterministic and sample_n > 1:
         msg = (
