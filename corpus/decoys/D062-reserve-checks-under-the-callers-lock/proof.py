@@ -10,8 +10,13 @@ from codeproof_ai.corpus.proof import race_window
 # 🔴 경쟁은 비결정적이다 - 양쪽 다 같은 횟수로 시도하므로 완화가 아니다.
 ATTEMPTS = 5
 
-_STOCK = 20
-_BUYERS = 60
+_BUYERS = 8
+# 🔴 구매자마다 여러 번 예약한다 - 한 번씩이면 겹칠 기회가 출발 직후 한 번뿐이라, 앞 구매자가
+#    다음 구매자가 깨기 전에 끝나면 경쟁이 안 난다. [실측] 60명 x 1회는 main CI(macOS)에서 5회
+#    모두 twin 을 못 깼고, 이 기계에서도 시도당 twin 을 단독 39/500 · 4중 부하 288/2000 놓쳤다
+#    (D051 · D015 와 같은 증상). 8명 x 1000회는 4중 부하 600회 - twin 놓침 0 · decoy 깸 0 (400회는 1/600).
+_PER_BUYER = 1000
+_STOCK = _BUYERS * _PER_BUYER // 2  # 수요가 재고의 두 배 - decoy 는 재고를 정확히 다 판다
 
 
 def attack(mod: ModuleType) -> bool:
@@ -29,8 +34,9 @@ def attack(mod: ModuleType) -> bool:
 
     def buy() -> None:
         start.wait()
-        if mod.reserve("widget", 1):
-            granted.append(1)
+        for _ in range(_PER_BUYER):
+            if mod.reserve("widget", 1):
+                granted.append(1)
 
     threads = [threading.Thread(target=buy) for _ in range(_BUYERS)]
     with race_window("_take"):

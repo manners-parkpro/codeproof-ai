@@ -11,7 +11,11 @@ from codeproof_ai.corpus.proof import race_window
 ATTEMPTS = 5
 
 _THREADS = 8
-_PER_THREAD = 40
+# 🔴 D015 가 같은 꼴(8 x 40 · 장벽 한 번)로 main CI(macOS)에서 5회 모두 twin 을 못 깼다. 이 기계에서는
+#    4중 부하 1200회에 놓침 0 이고 아주 무거운 부하(load 60 이상)에서야 5/50 을 놓쳤다 (독립 검토) - 로컬
+#    측정은 CI 를 대신하지 못한다. D015 선례대로 워커가 오래 돌도록 10배로 올린다. 400 으로 4중 부하
+#    600회 - decoy 깸 0 · twin 놓침 0.
+_PER_THREAD = 400
 
 
 def attack(mod: ModuleType) -> bool:
