@@ -36,6 +36,12 @@ class Stratum(StrEnum):
     DECOY = "D"
     """수제 near-miss. 버그처럼 보이지만 **증명 가능하게 안전**하다."""
 
+    UNLABELED = "U"
+    """정답이 없는 코드 - 사용자가 넣은 파일. **채점하지 않는다** (`codeproof review`).
+
+    🔴 결함 라벨이 없다고 음성이 아니다 - 모르는 것이다. 지적을 FP 로 세면 F4 가 막는 오류다.
+    """
+
 
 class DefectOrigin(StrEnum):
     """정답 라벨의 출처. 어느 채점자가 이 샘플을 쓸 수 있는지 결정한다."""
@@ -166,5 +172,11 @@ class LabeledSample:
 
     @property
     def is_negative(self) -> bool:
-        """음성 샘플인가 - 즉 여기서의 지적은 전부 FP 인가."""
+        """음성 샘플인가 - 즉 여기서의 지적은 전부 FP 인가.
+
+        🔴 정답이 없는 샘플에는 묻지 않는다 - 답이 「모른다」라서 기본값이 곧 오답이 된다.
+        """
+        if self.stratum is Stratum.UNLABELED:
+            msg = f"{self.sample_id}: 정답이 없는 샘플은 음성인지 모른다 - 채점하지 않는다"
+            raise ValueError(msg)
         return not self.defects

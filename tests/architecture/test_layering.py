@@ -38,8 +38,10 @@ ALLOWED: dict[str, frozenset[str]] = {
     "reviewers": frozenset({"domain", "analysis", "llm"}),
     "eval": frozenset({"domain", "analysis", "llm", "verify", "corpus", "reviewers"}),
     "store": frozenset({"domain", "eval"}),
+    # review 는 정답 없는 코드의 지적과 근거를 낸다 - 실행은 eval 의 run_reviewer 한 곳으로 (E00)
+    "review": frozenset({"domain", "analysis", "verify", "eval", "reviewers"}),
     "cli": frozenset(
-        {"domain", "analysis", "llm", "verify", "eval", "corpus", "store", "reviewers"}
+        {"domain", "analysis", "llm", "verify", "eval", "corpus", "store", "reviewers", "review"}
     ),
 }
 
