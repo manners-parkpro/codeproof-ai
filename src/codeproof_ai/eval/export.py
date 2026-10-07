@@ -33,7 +33,7 @@
 리뷰 지시는 「`quoted_code` 에 원문을 인용하라」고 하는데 규격에는 그 칸이
 없었다 - **지시끼리 모순**이다. 인용이 없으면 LLM 지적의 지문이
 `(category, 파일, "")` 로 수렴해 같은 파일의 서로 다른 지적이 하나로 뭉친다
-(D005#twin: 서로 다른 결함 2건 → 관측 1건).
+(한 twin 에서 서로 다른 결함 2건 → 관측 1건).
 
 → 규격 문장도, 실행기가 CLI 에 강제하는 `SCHEMA.json` 도 `review_schema()`
   하나에서 나온다. model_api 가 벤더 API 에 보내는 바로 그 스키마다.
@@ -73,7 +73,7 @@ def neutral_docstring(source: str) -> str:
        템플릿의 규칙이다.
     🔴 줄 번호가 바뀌면 정답 구간(미끼 · 가드 · twin)이 어긋나므로 그 한 줄만 바꾼다.
        ast 의 열은 바이트라 바이트로 자른다 (B1).
-    🔴 함수 · 클래스 docstring 은 건드리지 않는다 - 그 자체가 가드인 쌍이 있다 (D005 등).
+    🔴 함수 · 클래스 docstring 은 건드리지 않는다 - 그 자체가 가드인 쌍이 있다.
     """
     tree = ast.parse(source)
     first = tree.body[0] if tree.body else None

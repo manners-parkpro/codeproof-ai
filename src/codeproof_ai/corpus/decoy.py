@@ -6,7 +6,7 @@ decoy 란 **버그처럼 보이지만 증명 가능하게 안전한** 코드다.
 
 디렉터리 구조 (하나가 한 건):
 
-    corpus/decoys/D001-guarded-dict-access/
+    corpus/decoys/D00X-짧은-설명/
     ├── meta.toml    메타데이터 · 안전 근거
     ├── decoy.py     안전한 버전  → 여기서의 모든 지적은 FP
     └── twin.py      가드만 제거한 진짜 버그 버전 → 양성
@@ -443,8 +443,8 @@ def _check_guard_points_at_the_symbol(rec: DecoyRecord) -> list[Violation]:
       · 구간이 그 이름의 **정의 범위와 겹친다** (정의 자리 가드)
 
     ⚠ 둘을 다 허용하는 이유: 가드는 심볼의 정의일 수도, 그 심볼을 **부르는
-      자리**일 수도 있다. [실측] D026 은 `is_envelope` 의 정의(6-11)가 아니라
-      호출부(15-16)가 가드이고 그게 맞다 - 처음에 정의만 허용했다가
+      자리**일 수도 있다. [실측] 가드 심볼의 정의가 아니라 호출부가 가드인 쌍이
+      있고 그게 맞다 - 처음에 정의만 허용했다가
       정당한 decoy 둘을 잘못 잡았다.
     """
     if _mentions_symbol(rec, rec.guard):
@@ -528,10 +528,9 @@ def _check_twin(rec: DecoyRecord) -> list[Violation]:
 def _check_proof(rec: DecoyRecord) -> list[Violation]:
     """V12 - 실행 가능한 반증 시도가 있는가.
 
-    🔴 형식 검증은 안전 근거가 **참인지** 볼 수 없다. D015 는 가드로
-       `threading.Semaphore(4)` 를 썼고(세마포어 4는 상호배제가 아니다)
-       여기 있는 규칙을 **전부 통과**했다. 서면 근거만으로 「증명된 음성」을
-       주장할 수 없다.
+    🔴 형식 검증은 안전 근거가 **참인지** 볼 수 없다. 한 쌍은 상호배제가
+       아닌 동기화 객체를 가드로 썼는데 여기 있는 규칙을 **전부 통과**했다.
+       서면 근거만으로 「증명된 음성」을 주장할 수 없다.
 
     proof.py 의 내용까지 여기서 돌리지는 않는다 - 임의 코드 실행은 검증기가
     아니라 테스트의 일이다. 여기서는 **있는지와 모양만** 본다.
@@ -598,7 +597,7 @@ def _check_invisible(rec: DecoyRecord) -> list[Violation]:
     """V14 - 쌍의 파일에 원문 보이지 않는 문자가 없는가.
 
     🔴 도구 입력(JSON)에 쓴 유니코드 이스케이프는 실제 문자로 풀려 파일에 들어간다.
-       [실측 · 4라운드] D113 의 decoy · twin 정규식에 원문 U+FFFE · U+FFFF 가, proof.py 에 원문
+       [실측 · 4라운드] 한 쌍의 decoy · twin 에 원문 U+FFFE · U+FFFF 가, proof.py 에 원문
        U+2028 이 들어갔고 손으로 찾았다. 보이지 않아 사람도 리뷰어도 못 보고, U+2028 같은 줄
        구분자는 `str.splitlines` 와 도구가 세는 줄 번호를 어긋나게 한다 (B1).
 
@@ -712,7 +711,7 @@ def pair_dirs(root: Path) -> list[Path]:
 
     🔴 쌍을 찾는 규칙은 여기 하나다. [실측] 검증기 · 로더는 이 규칙을, 변이 CLI 와 반증 ·
        변이 테스트는 `glob("D*")` 를 따로 써서, 접두사가 다른 코퍼스에서는 변이 0개로
-       공허하게 통과할 자리였다. 그 전에도 경쟁 회귀 스크립트의 glob 이 D102 를 조용히
+       공허하게 통과할 자리였다. 그 전에도 경쟁 회귀 스크립트의 glob 이 쌍 하나를 조용히
        빠뜨렸다 (tests/corpus/test_mutants.py 머리말).
     """
     if not root.is_dir():

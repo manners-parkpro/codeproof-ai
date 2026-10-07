@@ -7,7 +7,7 @@
   `PairedFixGrader` - **정답 정의 자체**다. 「짝에도 같은 지적이 있으면
                      탐지의 증거가 아니다」.
 
-[실측] 그 차이가 숫자에 남는다. `D002#twin` 의 S602 는 안전한 쪽에도 똑같이
+[실측] 그 차이가 숫자에 남는다. 한 twin 의 Ruff `S602` 는 안전한 쪽에도 똑같이
 나오는데, InjectedDefectGrader 는 결함 위치와 겹치므로 **TP** 를 준다.
 짝 요약은 그 쌍을 P-V 로 표시하지만 **per-finding Precision 은 오염된 채**다.
 이 채점자는 그걸 채점 단계에서 막는다.
@@ -177,12 +177,12 @@ class PairedFixGrader:
         그 지적은 두 버전을 구별하지 못한 것이다.
 
         fingerprint 로 비교하지 않는 이유: 인용문이 들어 있어서, twin 이 **바꾼 줄**을
-        인용한 같은 주장이 다른 지적으로 갈린다 (codex D032 - `neutralize_cell` vs
-        `quote_cell`, 같은 함수의 같은 주장).
+        인용한 같은 주장이 다른 지적으로 갈린다 ([실측] codex 의 같은 함수 · 같은 주장이
+        바뀐 줄 인용 때문에 둘로 갈렸다).
 
         🔴 LLM 지적은 룰 대신 category 를 쓰고 심볼이 없이 들어온다. 러너가 심볼을
            붙이기 전에는 이 비교가 `(category, None)` 이 되어 **파일 안 같은
-           category 면 전부 같은 지적**이었다 - claude D005 는 다른 함수·다른
+           category 면 전부 같은 지적**이었다 - claude 의 한 지적은 다른 함수·다른
            인용인데 탐지가 지워졌다 (`runner._with_symbols`).
         """
         want = (finding.rule_id, finding.location.symbol)

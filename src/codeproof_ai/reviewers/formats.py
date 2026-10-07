@@ -181,8 +181,8 @@ def _bandit_span(res: dict[str, Any], line: int) -> Span:
     """bandit 의 보고 범위. line_range 는 노드가 걸친 줄이고 col_offset · end_col_offset 은
     그 첫 줄과 끝 줄의 0-based 문자 열이다 (B1). line_number 는 대표 줄일 뿐 범위의 시작이 아니다.
 
-    🔴 line_number 에 col_offset 을 붙이면 다른 줄의 열이 섞인다 - [실측] D002 twin 의 B602 는
-       line_number 11 · line_range 9-14 · col_offset 16 (9 행 `subprocess.run(` 의 시작).
+    🔴 line_number 에 col_offset 을 붙이면 다른 줄의 열이 섞인다 - [실측] 한 twin 의 B602 는
+       line_number 11 · line_range 9-14 · col_offset 16 (9 행 호출의 시작).
        대표 줄로만 맞추면 같은 호출을 Ruff(9 행)와 bandit(11 행)이 다른 자리에 둔다 (A2a).
     line_range 가 없는 출력이면 대표 줄 하나로 둔다.
     """

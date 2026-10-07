@@ -68,7 +68,7 @@ SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict conv
            gate-directions gate-survivor gate-neutral gate-prose gate-docstring gate-twin-docstring gate-plan
            xauthor-login-shell xauthor-silent-probe xauthor-unrun xauthor-probe-collision xauthor-vacuous-loop
            xauthor-input-roles xauthor-var-tmp xauthor-verbatim xauthor-sandbox-flag
-           xauthor-inventory-ids xauthor-builtin-instructions)
+           xauthor-inventory-ids xauthor-builtin-instructions xauthor-pair-leak)
 
 claim_layering() { echo "런타임(analysis)은 정답 라벨(eval)을 볼 수 없다 — A1"; }
 break_layering() {
@@ -649,6 +649,10 @@ guard_xauthor-inventory-ids() { uv run pytest tests/scripts/test_xauthor.py -q -
 claim_xauthor-builtin-instructions() { echo "카나리 흔적 집계는 codex 내장 지시만 뺀다 — session_meta 를 통째로 빼면 그 밖의 흔적을 놓친다 (§7.10d 수집 전 수정 ⑦)"; }
 break_xauthor-builtin-instructions() { perl -0pi -e 's/rest = \{k: v for k, v in payload\.items\(\) if k != "base_instructions"\}/rest = {}/' "$_XA"; }
 guard_xauthor-builtin-instructions() { uv run pytest tests/scripts/test_xauthor.py -q -k builtin_instructions; }
+
+claim_xauthor-pair-leak() { echo "저자가 상자에서 읽는 하네스 소스에 claude 쌍 번호 · 이름이 없다 — venv 는 읽기 허용이다 (§7.10d 「쓰는 입력」)"; }
+break_xauthor-pair-leak() { perl -0pi -e 's/\[실측\] 두 단계 건너 부르는 가드가/[실측] D051 처럼 두 단계 건너 부르는 가드가/' src/codeproof_ai/corpus/shape.py; }
+guard_xauthor-pair-leak() { uv run pytest tests/scripts/test_xauthor.py -q -k claude_pair; }
 
 # ── 하네스 ─────────────────────────────────────────────────────────────────
 

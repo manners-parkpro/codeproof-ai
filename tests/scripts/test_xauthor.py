@@ -5,13 +5,17 @@
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import json
+import re
 import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
+
+from codeproof_ai.corpus.decoy import pair_dirs
 
 if TYPE_CHECKING:
     from types import ModuleType
@@ -264,3 +268,66 @@ class TestModelInputTraces:
         traces = xa.model_input_traces(rollout, "xauthor-canary-1")
         assert traces["decoy"] == 1
         assert traces["memor"] == 1
+
+
+# ── 저자가 상자에서 읽을 수 있는 것 ─────────────────────────────────────────────
+
+REPO = SCRIPT.parents[1]
+_PAIR_ID = re.compile(r"\bD(\d{3})\b")
+
+
+def _claude_names() -> set[str]:
+    """claude 쌍의 decoy · twin 이 정의한 고유한 함수 · 클래스 이름 - dunder 와 짧은 이름은 뺀다."""
+    names = set()
+    for pair in pair_dirs(REPO / "corpus" / "decoys"):
+        for name in ("decoy.py", "twin.py"):
+            for node in ast.walk(ast.parse((pair / name).read_text(encoding="utf-8"))):
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                    n = node.name
+                    if not n.startswith("__") and "_" in n.strip("_") and len(n) >= 8:
+                        names.add(n)
+    return names
+
+
+def _claude_traces(text: str, names: set[str]) -> list[str]:
+    """claude 쌍 번호(D001~D150)와 고유 이름.
+
+    D100~D107 은 Ruff pydocstyle 룰 코드와 겹쳐 번호로 보지 않는다 - 이름 축이 대신 본다.
+    """
+    found = [
+        m[0] for m in _PAIR_ID.finditer(text)
+        if 1 <= int(m[1]) <= 150 and not 100 <= int(m[1]) <= 107
+    ]
+    return found + [n for n in sorted(names) if re.search(rf"\b{re.escape(n)}\b", text)]
+
+
+class TestNothingOfClaudePairsInTheBox:
+    """§7.10d 「쓰는 입력」 - claude 쌍의 코드는 주지 않는다 (claude 쌍에서 뽑은 설계 공간이다).
+
+    venv 는 프로필에서 읽기 허용이라 하네스 소스(wheel = src/codeproof_ai)가 상자에서 그대로 읽힌다.
+    [실측] 고치기 전 그 소스에 claude 쌍 참조 24곳 · decoy 고유 함수 이름 셋이 있었다.
+    🔴 §7.10d 측정이 끝나기 전에는 하네스 소스에 쌍 번호 · 쌍의 함수 이름을 쓰지 않는다 -
+       DESIGN 에 쓴다.
+    """
+
+    def test_what_the_author_can_read_names_no_claude_pair(self) -> None:
+        names = _claude_names()
+        readable = [
+            *(REPO / "src" / "codeproof_ai").rglob("*.py"),
+            *(p for p in (REPO / "corpus" / "decoys" / "_TEMPLATE").rglob("*") if p.is_file()),
+        ]
+        found = {
+            str(p.relative_to(REPO)): hits
+            for p in readable
+            if (hits := _claude_traces(p.read_text(encoding="utf-8"), names))
+        }
+        assert not found, found
+
+    def test_the_scan_catches_a_pair_number_and_a_name(self) -> None:
+        """대조 - 스캔이 공허하면 위 테스트는 무엇이 새도 통과한다."""
+        names = _claude_names()
+        assert len(names) >= 50
+        some = sorted(names)[0]
+        assert _claude_traces("[실측] D051 은 두 단계 건너다", names) == ["D051"]
+        assert _claude_traces(f"`{some}` 를 가드로 쓴다", names) == [some]
+        assert _claude_traces("FP 66건 중 45건이 D103 이었다", names) == []
