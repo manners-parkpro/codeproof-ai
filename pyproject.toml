@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "AI 코드리뷰 품질 측정 실험 플랫폼 — 측정 방식이 결과를 얼마나 만드는지 측정한다"
 readme = "README.md"
 authors = [
-    { name = "Colin", email = "jongsuk.park@lulumedic.com" }
+    { name = "Colin", email = "111325124+colin-lulu@users.noreply.github.com" }
 ]
 requires-python = ">=3.14"
 dependencies = [
