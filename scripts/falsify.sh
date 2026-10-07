@@ -64,7 +64,11 @@ SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict conv
            repro-unknown repro-kind race-switch-lower race-switch-restore invisible-rule invisible-lines
            ruff-target mypy-python mutant-weakening mutant-safe mutant-stale report-digests pack-records-digests
            proof-optimize pack-measured-code runner-measured-code
-           pair-discovery mutant-alias template-kinds lint-exclude)
+           pair-discovery mutant-alias template-kinds lint-exclude
+           gate-directions gate-survivor gate-neutral gate-prose gate-docstring gate-twin-docstring gate-plan
+           xauthor-login-shell xauthor-silent-probe xauthor-unrun xauthor-probe-collision xauthor-vacuous-loop
+           xauthor-input-roles xauthor-var-tmp xauthor-verbatim xauthor-sandbox-flag
+           xauthor-inventory-ids xauthor-builtin-instructions)
 
 claim_layering() { echo "런타임(analysis)은 정답 라벨(eval)을 볼 수 없다 — A1"; }
 break_layering() {
@@ -567,6 +571,83 @@ guard_template-kinds() { uv run pytest tests/docs/test_consistency.py -q -k temp
 claim_lint-exclude() { echo "코퍼스는 린트하지 않는다 — 제외에서 빠진 코퍼스는 ruff --fix 가 쌍을 고쳐 쓴다 (G2 · DESIGN §7.10d)"; }
 break_lint-exclude() { perl -0pi -e 's/"corpus\/xauthor", //' pyproject.toml; }
 guard_lint-exclude() { uv run pytest tests/corpus/test_not_linted.py -q; }
+
+# ── codex 가 쓴 쌍의 관문 (DESIGN §7.10d) - 규칙마다 한 줄을 무력화하면 그 규칙의 시험이 운다 ──
+_GATE=src/codeproof_ai/eval/gate.py
+
+claim_gate-directions() { echo "관문은 약화와 안전한 변형을 하나 이상씩 요구한다 — 약화만 있으면 증명이 주장 대신 구현을 묻는지 못 본다 (§3.5)"; }
+break_gate-directions() { perl -0pi -e 's/if not any\(m\.expect_broken for m in mutants\) or all\(m\.expect_broken for m in mutants\):/if not mutants:  # falsify.sh/' "$_GATE"; }
+guard_gate-directions() { uv run pytest tests/eval/test_gate.py -q -k both_directions; }
+
+claim_gate-survivor() { echo "관문은 증명이 놓친 약화를 실패로 센다 — 경쟁 약화는 race_runs 번 모두 깨져야 한다 (§7.10d)"; }
+break_gate-survivor() { perl -0pi -e 's/        if broke != \(runs if mutant\.expect_broken else 0\):/        if False:  # falsify.sh/' "$_GATE"; }
+guard_gate-survivor() { uv run pytest tests/eval/test_gate.py -q -k weakening_that_survives; }
+
+claim_gate-neutral() { echo "관문은 neutral 내보내기가 모듈 docstring 한 줄만 바꾸는지 본다 — 줄 번호가 정답 구간이다 (§7.10c)"; }
+break_gate-neutral() { perl -0pi -e 's/        if problem:\n            problems\.append/        if False:  # falsify.sh\n            problems.append/' "$_GATE"; }
+guard_gate-neutral() { uv run pytest tests/eval/test_gate.py -q -k "test_neutral and not problem"; }
+
+claim_gate-prose() { echo "관문은 산문 주석을 단서로 거부한다 — 도구 지시만 받는다 (§7.10d 단서)"; }
+break_gate-prose() { perl -0pi -e 's/if tok\.type == tokenize\.COMMENT and not _DIRECTIVE\.match\(tok\.string\)/if False  # falsify.sh/' "$_GATE"; }
+guard_gate-prose() { uv run pytest tests/eval/test_gate.py -q -k "cues_prose_comment or test_prose_comments"; }
+
+claim_gate-docstring() { echo "관문은 guard_lines 밖의 함수 · 클래스 docstring 을 단서로 거부한다 (§7.10d 단서)"; }
+break_gate-docstring() { perl -0pi -e 's/    outside = \[start for start, end, _ in decoy_docs if end < guard\.start or start > guard\.end\]/    outside: list[int] = []  # falsify.sh/' "$_GATE"; }
+guard_gate-docstring() { uv run pytest tests/eval/test_gate.py -q -k docstring_outside_the_guard; }
+
+claim_gate-twin-docstring() { echo "관문은 twin 이 decoy 에 없는 docstring 을 더하면 거부한다 — 지켜지지 않는 약속이 단서다 (§7.10c)"; }
+break_gate-twin-docstring() { perl -0pi -e 's/if added := \[start for start, _, text in twin_docs if text not in known\]:/if added := []:  # falsify.sh/' "$_GATE"; }
+guard_gate-twin-docstring() { uv run pytest tests/eval/test_gate.py -q -k twin_adds_a_docstring; }
+
+claim_gate-plan() { echo "관문은 분류가 정한 칸 밖의 가드 위치를 거부한다 — 이름만 그 분류인 쌍이다 (corpus/plan.py)"; }
+break_gate-plan() { perl -0pi -e 's/    if shape in cells:/    if True:  # falsify.sh/' "$_GATE"; }
+guard_gate-plan() { uv run pytest tests/eval/test_gate.py -q -k test_plan; }
+
+_XA=scripts/xauthor.py
+
+claim_xauthor-login-shell() { echo "저자 exec 는 로그인 셸을 끈다 — path_helper 가 venv 를 /usr/bin 뒤로 밀어 python3 가 시스템 판이 된다 (§7.10d 수집 전 수정 ⑤)"; }
+break_xauthor-login-shell() { perl -0pi -e 's/        "-c", "allow_login_shell=false",\n//' "$_XA"; }
+guard_xauthor-login-shell() { uv run pytest tests/scripts/test_xauthor.py -q -k login_shell; }
+
+claim_xauthor-silent-probe() { echo "점검표 항목이 아무것도 찍지 않으면 통과가 아니다 — 막힌 것과 안 돈 것이 같아 보인다 (§7.10d 상자)"; }
+break_xauthor-silent-probe() { perl -0pi -e 's/return "OK" if f"CANARY-OK-\{name\}" in lines and /return "OK" if /' "$_XA"; }
+guard_xauthor-silent-probe() { uv run pytest tests/scripts/test_xauthor.py -q -k "TestJudgeCheck or marker_in_the_command"; }
+
+claim_xauthor-unrun() { echo "카나리에서 시킨 명령이 보이지 않으면 「안 돌림」이다 — 건너뛰거나 고친 명령을 「막혔다」로 읽지 않는다 (§7.10d 상자)"; }
+break_xauthor-unrun() { perl -0pi -e 's/verdict_of\(name, out\) if mine else "안 돌림"/verdict_of(name, out) if mine else "OK"/' "$_XA"; }
+guard_xauthor-unrun() { uv run pytest tests/scripts/test_xauthor.py -q -k skipped_command; }
+
+claim_xauthor-probe-collision() { echo "카나리는 명령을 표지로도 가른다 — ls <홈> 은 ls <홈>/.codex 안에도 있어 남의 출력을 읽는다 (§7.10d 상자)"; }
+break_xauthor-probe-collision() { perl -0pi -e 's/ and marker\.search\(cmd\)/  # falsify.sh/' "$_XA"; }
+guard_xauthor-probe-collision() { uv run pytest tests/scripts/test_xauthor.py -q -k inside_another_command; }
+
+claim_xauthor-vacuous-loop() { echo "쓰기 가능 폴더를 하나도 시도하지 않은 점검은 성립하지 않는다 — 시도 0 은 「쓴 곳 없음」과 같아 보인다 (§7.10d 상자)"; }
+break_xauthor-vacuous-loop() { perl -0pi -e 's/ and w == 0 and n > 0/ and w == 0/' "$_XA"; }
+guard_xauthor-vacuous-loop() { uv run pytest tests/scripts/test_xauthor.py -q -k "tried-nothing or loop-did-not-run"; }
+
+claim_xauthor-input-roles() { echo "카나리는 developer 입력의 흔적도 센다 — 기억 · 지시 파일은 그 자리로 들어온다 (§7.10d 상자)"; }
+break_xauthor-input-roles() { perl -0pi -e 's/\("developer", "user", "system"\)/("user", "system")/' "$_XA"; }
+guard_xauthor-input-roles() { uv run pytest tests/scripts/test_xauthor.py -q -k developer_input; }
+
+claim_xauthor-var-tmp() { echo "프로필은 /private/var/tmp 를 막는다 — 빼면 그곳만 쓰기 · 읽기가 됐다 (§7.10d 상자)"; }
+break_xauthor-var-tmp() { perl -0pi -e 's/\x27"\/private\/var\/tmp"="none"\}\x27/\x27}\x27/' "$_XA"; }
+guard_xauthor-var-tmp() { uv run pytest tests/scripts/test_xauthor.py -q -k declared_allowlist; }
+
+claim_xauthor-verbatim() { echo "점검표에는 따옴표 · \$ 가 없다 — codex 가 그대로 보고하는 것을 본 모양은 홑따옴표로 감싼 명령뿐이다 (§7.10d 상자)"; }
+break_xauthor-verbatim() { perl -0pi -e 's/\("BOX-WRITE", "touch probe\.txt", True\)/("BOX-WRITE", "touch \$TMPDIR\/probe.txt", True)/' "$_XA"; }
+guard_xauthor-verbatim() { uv run pytest tests/scripts/test_xauthor.py -q -k no_quotes; }
+
+claim_xauthor-sandbox-flag() { echo "저자 exec 에 --sandbox 를 주지 않는다 — 주면 프로필 대신 옛 workspace-write 가 조용히 걸린다 (§7.10d 수집 전 수정 ⑥)"; }
+break_xauthor-sandbox-flag() { perl -0pi -e 's/        "--color", "never", "-C", str\(box\),/        "--sandbox", "workspace-write", "--color", "never", "-C", str(box),/' "$_XA"; }
+guard_xauthor-sandbox-flag() { uv run pytest tests/scripts/test_xauthor.py -q -k sandbox_flag; }
+
+claim_xauthor-inventory-ids() { echo "카나리 공개 요약의 session_meta 는 키만 싣는다 — 계정 식별자가 든다 (§7.10d 수집 전 수정 ⑦)"; }
+break_xauthor-inventory-ids() { perl -0pi -e 's/line = f"\{kind\} \(\{len\(text\)\}자\): 키 \{\x27, \x27\.join\(sorted\(payload\)\)\}"/line = f"{kind} ({len(text)}자): {text[:160]}"/' "$_XA"; }
+guard_xauthor-inventory-ids() { uv run pytest tests/scripts/test_xauthor.py -q -k account_ids; }
+
+claim_xauthor-builtin-instructions() { echo "카나리 흔적 집계는 codex 내장 지시만 뺀다 — session_meta 를 통째로 빼면 그 밖의 흔적을 놓친다 (§7.10d 수집 전 수정 ⑦)"; }
+break_xauthor-builtin-instructions() { perl -0pi -e 's/rest = \{k: v for k, v in payload\.items\(\) if k != "base_instructions"\}/rest = {}/' "$_XA"; }
+guard_xauthor-builtin-instructions() { uv run pytest tests/scripts/test_xauthor.py -q -k builtin_instructions; }
 
 # ── 하네스 ─────────────────────────────────────────────────────────────────
 

@@ -20,6 +20,7 @@ from codeproof_ai.eval.export import (
     neutral_docstring,
     sample_digest,
 )
+from codeproof_ai.eval.gate import neutral_problem
 from codeproof_ai.eval.loader import load_decoy_samples
 from codeproof_ai.llm.render import load_prompt, prompt_hash
 from codeproof_ai.llm.schema import review_schema
@@ -159,15 +160,7 @@ class TestDocstringKnob:
         """
         for s in load_decoy_samples(root):
             for f in s.target.files:
-                new = neutral_docstring(f.content)
-                before, after = f.content.splitlines(), new.splitlines()
-                assert len(before) == len(after), s.sample_id
-                changed = [
-                    i for i, (x, y) in enumerate(zip(before, after, strict=True)) if x != y
-                ]
-                assert len(changed) == 1, s.sample_id
-                purpose = (ast.get_docstring(ast.parse(f.content)) or "").partition(" - ")[0]
-                assert ast.get_docstring(ast.parse(new)) == f"{purpose.rstrip('.')}.", s.sample_id
+                assert neutral_problem(f.content) is None, s.sample_id  # 관문(§7.10d)과 같은 규칙
 
     def test_function_docstrings_are_untouched(
         self, shipped_samples: list[LabeledSample]

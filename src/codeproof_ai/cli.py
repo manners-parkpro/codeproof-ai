@@ -24,6 +24,7 @@ from codeproof_ai.corpus.mutants import breaks, load_mutants, mutant_alias
 from codeproof_ai.domain.reviewer import ReviewerKind
 from codeproof_ai.eval.bait import BaitStatus, measure
 from codeproof_ai.eval.export import DOCSTRING_MODES, export_for_agent, sample_digest
+from codeproof_ai.eval.gate import RACE_RUNS, gate
 from codeproof_ai.eval.grading.corroboration import StaticCorroborationGrader
 from codeproof_ai.eval.grading.injected import InjectedDefectGrader
 from codeproof_ai.eval.grading.paired import PairedFixGrader
@@ -75,6 +76,56 @@ if TYPE_CHECKING:
     from codeproof_ai.domain.reviewer import Reviewer
     from codeproof_ai.eval.grading.base import Grader
     from codeproof_ai.eval.sample import LabeledSample
+
+
+def _add_decoy_parsers(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    """`decoy` 하위 명령 - build_parser 가 너무 길어 떼어 냈다."""
+    decoy = sub.add_parser("decoy", help="D층 decoy 코퍼스 관리")
+    decoy_sub = decoy.add_subparsers(dest="decoy_command", required=True)
+
+    dv = decoy_sub.add_parser("validate", help="decoy 코퍼스 검증")
+    dv.add_argument("--corpus", default="corpus/decoys", help="decoy 디렉터리")
+    dv.add_argument(
+        "--strict",
+        action="store_true",
+        help="경고도 실패로 취급한다 (CI 용)",
+    )
+
+    ds = decoy_sub.add_parser(
+        "stats", help="미끼가 실제로 물리는지 - 사용 가능한 리뷰어로 측정"
+    )
+    ds.add_argument("--corpus", default="corpus/decoys")
+    ds.add_argument(
+        "--ruff-select", default="ALL", help="좁히면 물리는 비율이 떨어진다"
+    )
+
+    dmu = decoy_sub.add_parser(
+        "mutants", help="쌍마다 실린 변이로 증명을 다시 깨 본다 - 경쟁 변이는 여러 번"
+    )
+    dmu.add_argument("--corpus", default="corpus/decoys")
+    dmu.add_argument(
+        "--race-runs",
+        type=int,
+        default=30,
+        help="경쟁 변이를 몇 번 돌릴지 (0 이면 건너뛴다) - 약화는 매번 깨져야 한다",
+    )
+    dmu.add_argument("pairs", nargs="*", help="쌍 접두사 (예: D104) - 없으면 전부")
+
+    dg = decoy_sub.add_parser(
+        "gate", help="codex 가 쓴 쌍의 관문 - 기계로 보는 것만 (DESIGN §7.10d)"
+    )
+    dg.add_argument("--corpus", default="corpus/xauthor/codex")
+    dg.add_argument(
+        "--race-runs",
+        type=int,
+        default=RACE_RUNS,
+        help="경쟁 약화를 몇 번 돌릴지 - 매번 깨져야 한다 (관문은 건너뛰지 않는다)",
+    )
+    dg.add_argument("pairs", nargs="*", help="쌍 접두사 (예: XC001) - 없으면 전부")
+
+    dn = decoy_sub.add_parser("new", help="템플릿에서 새 decoy 를 만든다")
+    dn.add_argument("decoy_id", help="예: D003-caller-held-lock")
+    dn.add_argument("--corpus", default="corpus/decoys")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -144,40 +195,7 @@ def build_parser() -> argparse.ArgumentParser:
     im.add_argument("--slack", type=int, default=0)
     im.add_argument("--store", default="runs.db")
 
-    decoy = sub.add_parser("decoy", help="D층 decoy 코퍼스 관리")
-    decoy_sub = decoy.add_subparsers(dest="decoy_command", required=True)
-
-    dv = decoy_sub.add_parser("validate", help="decoy 코퍼스 검증")
-    dv.add_argument("--corpus", default="corpus/decoys", help="decoy 디렉터리")
-    dv.add_argument(
-        "--strict",
-        action="store_true",
-        help="경고도 실패로 취급한다 (CI 용)",
-    )
-
-    ds = decoy_sub.add_parser(
-        "stats", help="미끼가 실제로 물리는지 - 사용 가능한 리뷰어로 측정"
-    )
-    ds.add_argument("--corpus", default="corpus/decoys")
-    ds.add_argument(
-        "--ruff-select", default="ALL", help="좁히면 물리는 비율이 떨어진다"
-    )
-
-    dmu = decoy_sub.add_parser(
-        "mutants", help="쌍마다 실린 변이로 증명을 다시 깨 본다 - 경쟁 변이는 여러 번"
-    )
-    dmu.add_argument("--corpus", default="corpus/decoys")
-    dmu.add_argument(
-        "--race-runs",
-        type=int,
-        default=30,
-        help="경쟁 변이를 몇 번 돌릴지 (0 이면 건너뛴다) - 약화는 매번 깨져야 한다",
-    )
-    dmu.add_argument("pairs", nargs="*", help="쌍 접두사 (예: D104) - 없으면 전부")
-
-    dn = decoy_sub.add_parser("new", help="템플릿에서 새 decoy 를 만든다")
-    dn.add_argument("decoy_id", help="예: D003-caller-held-lock")
-    dn.add_argument("--corpus", default="corpus/decoys")
+    _add_decoy_parsers(sub)
 
     m = sub.add_parser(
         "measure",
@@ -343,6 +361,27 @@ def _cmd_decoy_validate(corpus: Path, *, strict: bool) -> int:
     if strict and report.warn_count:
         return 1
     return 0
+
+
+def _cmd_decoy_gate(corpus: Path, race_runs: int, prefixes: Sequence[str]) -> int:
+    """쌍마다 관문을 돈다 (DESIGN §7.10d) - 하나라도 실패하면 1, 쌍이 없으면 2."""
+    if race_runs < 1:
+        print("--race-runs 는 1 이상이다 - 관문은 경쟁 약화를 건너뛰지 않는다", file=sys.stderr)
+        return 2
+    pairs = [d for d in pair_dirs(corpus) if not prefixes or d.name.split("-")[0] in prefixes]
+    if not pairs:
+        print(f"쌍이 없다: {corpus}", file=sys.stderr)
+        return 2
+    failed = 0
+    with tempfile.TemporaryDirectory(prefix="codeproof-gate-") as tmp:
+        for pair in pairs:
+            checks = gate(pair, Path(tmp), race_runs=race_runs)
+            print(pair.name)
+            for c in checks:
+                print(f"  {'✓' if c.ok else '✗'}  {c.name}" + (f"  {c.detail}" if c.detail else ""))
+            failed += not all(c.ok for c in checks)
+    print(f"\n관문 {len(pairs)}쌍 · 통과 {len(pairs) - failed}")
+    return 1 if failed else 0
 
 
 def _cmd_decoy_mutants(corpus: Path, race_runs: int, prefixes: Sequence[str]) -> int:
@@ -1059,6 +1098,8 @@ def _dispatch_decoy(args: argparse.Namespace) -> int:
         return _cmd_decoy_stats(corpus, args.ruff_select)
     if args.decoy_command == "mutants":
         return _cmd_decoy_mutants(corpus, args.race_runs, args.pairs)
+    if args.decoy_command == "gate":
+        return _cmd_decoy_gate(corpus, args.race_runs, args.pairs)
     return _cmd_decoy_new(corpus, args.decoy_id)
 
 
