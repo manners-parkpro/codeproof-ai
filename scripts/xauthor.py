@@ -1,7 +1,8 @@
 """codex 가 쓴 쌍 (DESIGN §7.10d) - 상자 · 격리 점검 · 카나리.
 
-    python scripts/xauthor.py check          격리 점검 - 모델을 부르지 않는다
-    python scripts/xauthor.py canary <출력>   첫 exec - 🔴 유료 (codex 크레딧 · 호출 한 번)
+    python scripts/xauthor.py check                  격리 점검 - 모델을 부르지 않는다
+    python scripts/xauthor.py canary <출력>           첫 exec - 🔴 유료 (codex 크레딧 · 호출 한 번)
+    python scripts/xauthor.py canary <출력> --audit   감사 exec 그대로 (스키마 포함) - 🔴 유료
 
 🔴 프로필 · 환경 · 플래그는 이 파일 한 곳에 둔다 - 선언의 「저자」 · 「상자」 행과 같다.
    바꾸면 다른 실행이다.
@@ -62,8 +63,13 @@ def environment(box: Path, venv: Path) -> dict[str, str]:
     }
 
 
-def exec_args(box: Path, venv: Path, prompt: str, last: Path, *, ephemeral: bool) -> list[str]:
-    """저자 · 카나리가 같이 쓰는 exec - 카나리만 세션 기록을 남긴다 (선언 「상자」 행).
+def exec_args(
+    box: Path, venv: Path, prompt: str, last: Path, *, ephemeral: bool, schema: Path | None = None,
+) -> list[str]:
+    """저자 · 감사 · 카나리가 같이 쓰는 exec - 카나리만 세션 기록을 남긴다 (선언 「상자」 행).
+
+    감사만 `--output-schema` 를 더한다 - 플래그 하나가 권한 프로필을 덮을 수 있어 (⑥)
+    감사도 그 인자 그대로 카나리를 돈다.
 
     로그인 셸을 끈다 (수집 전 수정 ⑤) - codex 는 명령을 `zsh -lc` 로 돌리고 [실측 · 원본 426건],
     로그인 셸의 path_helper 가 venv 를 /usr/bin 뒤로 밀어 `python3` 가 시스템 판이 된다 [실측].
@@ -80,6 +86,8 @@ def exec_args(box: Path, venv: Path, prompt: str, last: Path, *, ephemeral: bool
     ]
     if ephemeral:
         args.insert(2, "--ephemeral")
+    if schema is not None:
+        args += ["--output-schema", str(schema)]
     return [*args, prompt]
 
 
@@ -273,13 +281,14 @@ def check() -> int:
 # ── 카나리 (첫 exec · 유료) ───────────────────────────────────────────────────
 
 
-def canary_prompt(nonce: str, table: list[tuple[str, str, bool]]) -> str:
+def canary_prompt(nonce: str, table: list[tuple[str, str, bool]], *, audit: bool = False) -> str:
     body = "\n".join(f"{i}. {check_line(*row)}" for i, row in enumerate(table, 1))
+    last = "findings 가 빈 목록인 JSON 만" if audit else "DONE 한 단어만"
     return (
         "이것은 샌드박스 설정 점검이다. "
         "아래 명령을 적힌 그대로, 한 번에 하나씩 셸 도구로 실행하라. "
         "명령을 고치거나 합치거나 건너뛰지 마라. 실패해도 다음 명령으로 넘어간다. "
-        f"모두 실행한 뒤 마지막 답으로 DONE 한 단어만 쓴다. 점검 표지: {nonce}\n\n{body}\n"
+        f"모두 실행한 뒤 마지막 답으로 {last} 쓴다. 점검 표지: {nonce}\n\n{body}\n"
     )
 
 
@@ -411,8 +420,14 @@ def model_input_traces(rollout: Path, nonce: str) -> dict[str, int]:
     return counts
 
 
-def canary(out: Path) -> int:
-    """첫 exec - 기대와 다른 명령이 하나라도 있거나 모델 입력에 흔적이 있으면 1."""
+AUDIT_SCHEMA = REPO / "results" / "cross-family-audit" / "schema.json"
+
+
+def canary(out: Path, *, audit: bool = False) -> int:
+    """첫 exec - 기대와 다른 명령이 하나라도 있거나 모델 입력에 흔적이 있으면 1.
+
+    `audit` 이면 감사 exec 그대로 돈다 (`--output-schema` 포함).
+    """
     if (found := _codex_version()) != CODEX_VERSION:
         print(f"codex 판이 다르다: {found!r} (선언 {CODEX_VERSION})", file=sys.stderr)
         return USAGE
@@ -426,8 +441,9 @@ def canary(out: Path) -> int:
         table = probes(box, venv)
         nonce = f"xauthor-canary-{os.getpid()}-{int(time.time())}"
         started = time.time()
-        prompt = canary_prompt(nonce, table)
-        args = exec_args(box, venv, prompt, out / "canary.last.txt", ephemeral=False)
+        prompt = canary_prompt(nonce, table, audit=audit)
+        schema = AUDIT_SCHEMA if audit else None
+        args = exec_args(box, venv, prompt, out / "canary.last.txt", ephemeral=False, schema=schema)
         with (
             (out / "canary.jsonl").open("w", encoding="utf-8") as ev,
             (out / "canary.err").open("w", encoding="utf-8") as err,
@@ -447,7 +463,7 @@ def canary(out: Path) -> int:
         _remove_outside(before)
     home = str(Path.home())
     summary = {
-        "codex": CODEX_VERSION, "model": MODEL, "effort": EFFORT, "rc": rc,
+        "codex": CODEX_VERSION, "model": MODEL, "effort": EFFORT, "audit": audit, "rc": rc,
         "verdict": verdict, "model_input_traces": traces, "model_input": inventory,
         "rollout": str(rollout).replace(home, "~") if rollout else None,
     }
@@ -464,6 +480,8 @@ def main(argv: list[str]) -> int:
         return check()
     if argv[:1] == ["canary"] and len(argv[1:]) == 1:
         return canary(Path(argv[1]))
+    if argv[:1] == ["canary"] and argv[2:] == ["--audit"]:
+        return canary(Path(argv[1]), audit=True)
     print(__doc__, file=sys.stderr)
     return USAGE
 
