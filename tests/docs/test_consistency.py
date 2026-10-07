@@ -526,3 +526,28 @@ class TestMeasuredClaimsAreLabelled:
         assert not unmarked, (
             "출처 표기 없는 배수 주장:\n" + "\n".join(f"  {u}" for u in unmarked)
         )
+
+
+class TestTheLandingPage:
+    """docs/index.html - GitHub Pages 의 첫 페이지. 받은 사람이 파일로 열어도 같아야 한다.
+
+    숫자는 페이지에 쓰지 않는다 - 그림(생성물)이 든다. 그래서 페이지는 손으로 쓰고 생성하지 않는다.
+    """
+
+    PAGE = ROOT / "docs" / "index.html"
+
+    def test_its_relative_images_and_links_resolve(self) -> None:
+        html = self.PAGE.read_text(encoding="utf-8")
+        refs = re.findall(r'(?:src|href)="([^"#]+)"', html)
+        # 스킴(https: · data: …)이 있으면 상대 경로가 아니다
+        local = [r for r in refs if not re.match(r"[a-z][a-z0-9+.-]*:", r)]
+        assert local, "상대 경로가 하나도 없다 - 대조가 공허하다"
+        missing = [r for r in local if not (self.PAGE.parent / r).is_file()]
+        assert not missing, f"페이지가 없는 파일을 가리킨다: {missing}"
+
+    def test_it_loads_nothing_from_outside(self) -> None:
+        """링크는 괜찮다 - 불러오는 자원(그림 · 스크립트 · 스타일)만 막는다."""
+        html = self.PAGE.read_text(encoding="utf-8")
+        assert not re.findall(r'src="https?://', html)
+        assert "<script" not in html
+        assert not re.findall(r'<link[^>]+href="https?://', html)

@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CodeProof AI</title>
+<link rel="icon" href="data:,">
+<meta name="description" content="AI 코드리뷰어의 품질 숫자 중 얼마가 모델의 것이고 얼마가 측정 선택의 것인가 — 재 본 결과를 한 페이지에.">
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --line: #d1d9e0; --accent: #0969da; --card: #f6f8fa;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --line: #3d444d; --accent: #4493f8; --card: #161b22;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --line: #3d444d; --accent: #4493f8; --card: #161b22;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg); line-height: 1.6;
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+  }
+  main { max-width: 820px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 28px; margin: 0 0 4px; }
+  h2 { font-size: 20px; margin: 40px 0 8px; padding-top: 16px; border-top: 1px solid var(--line); }
+  p { margin: 8px 0; }
+  .lede { color: var(--muted); margin-bottom: 16px; }
+  .question { font-size: 18px; font-weight: 600; margin: 20px 0; padding: 12px 16px;
+              background: var(--card); border-left: 4px solid var(--accent); border-radius: 4px; }
+  figure { margin: 16px 0; }
+  figure img { width: 100%; height: auto; display: block; border-radius: 8px; }
+  figcaption { color: var(--muted); font-size: 14px; margin-top: 6px; }
+  pre { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 12px 16px;
+        overflow-x: auto; font-size: 14px; }
+  a { color: var(--accent); }
+  ul { padding-left: 20px; }
+  .links a { margin-right: 16px; white-space: nowrap; }
+  footer { margin-top: 48px; color: var(--muted); font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>CodeProof AI</h1>
+  <p class="lede">코드리뷰 품질 측정 실험 — 리뷰어를 비교하는 대신, 측정 방식이 결과를 얼마나 만드는지를 잰다.</p>
+  <p class="links">
+    <a href="https://github.com/manners-parkpro/codeproof-ai">GitHub 저장소</a>
+    <a href="https://github.com/manners-parkpro/codeproof-ai/blob/main/docs/RESULTS.md">결과 · 근거 · 한계</a>
+    <a href="https://github.com/manners-parkpro/codeproof-ai/blob/main/docs/AI-WORKFLOW.md">AI 에이전트와 만든 방식</a>
+    <a href="https://github.com/manners-parkpro/codeproof-ai/blob/main/docs/VERIFY.md">직접 무너뜨려 보기</a>
+  </p>
+
+  <p>실무 Spring 백엔드에서 Codex 와 Claude 를 매일 쓰다가 질문이 생겼다.</p>
+  <p class="question">AI 리뷰어가 내는 품질 숫자 중 얼마가 모델의 것이고, 얼마가 측정 선택의 것인가?</p>
+  <p>증명 가능하게 안전한 코드와 가드만 지운 짝을 쌍으로 만들고, 리뷰어의 지적은 그대로 둔 채 채점 정의 · 룰 선택 ·
+    매칭 허용 오차만 바꿔 다시 쟀다. 아래 그림은 모두 <code>uv run codeproof report</code> 가 만드는 생성물이다.</p>
+
+  <h2>정답 정의를 바꾸면</h2>
+  <figure>
+    <img src="figures/spread.svg" alt="같은 지적을 두 정답 정의로 채점한 FP — 룰 선택별">
+    <figcaption>정의 하나를 바꾸면 FP 가 수십 배 갈린다. 보안 룰만 고르면 두 정의가 일치한다 — 편차도 설정의 함수다.</figcaption>
+  </figure>
+
+  <h2>짝으로 보면</h2>
+  <figure>
+    <img src="figures/pairs.svg" alt="같은 Ruff 실행의 짝 판정 — 채점 정의별">
+    <figcaption>같은 실행이 한 정의에서는 「거의 다 놓쳤다」, 다른 정의에서는 「거꾸로 찾았다」가 된다.</figcaption>
+  </figure>
+
+  <h2>에이전트를 비교하면</h2>
+  <figure>
+    <img src="figures/agents.svg" alt="Claude Code 와 Codex CLI — 같은 짝 위의 차이와 95% 구간">
+    <figcaption>두 구간을 눈으로 겹쳐 보지 않고 같은 짝 위의 차이로 낸다. 매칭 허용 오차 사다리 전체에서 판정이 같은지 함께 본다.
+      같은 프롬프트 하나 · Claude 가 쓴 쌍이라는 조건이 붙는다.</figcaption>
+  </figure>
+
+  <h2>받아서 돌려 보기 — API 키 없이</h2>
+  <pre><code>git clone https://github.com/manners-parkpro/codeproof-ai.git
+cd codeproof-ai
+uv sync
+uv run pytest
+./scripts/verify.sh</code></pre>
+  <p>필요한 것은 git 과 uv 뿐이다. <code>verify.sh</code> 는 위 주장이 이 기계에서 재현되는지, 테스트가 공허하지 않은지
+    (불변식을 일부러 깨고 테스트가 우는지) 본다.</p>
+
+  <footer>그림의 숫자는 생성물이다 — 손으로 고치지 않고, 테스트가 최신인지 본다.</footer>
+</main>
+</body>
+</html>

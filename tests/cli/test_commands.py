@@ -900,6 +900,24 @@ class TestReport:
         assert main(["report", "--corpus", missing, "--out", "-"]) == 2
         assert "샘플이 없다" in capsys.readouterr().err
 
+    def test_figures_are_drawn_beside_the_output_not_in_the_repo(
+        self, small_corpus: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """🔴 그림은 --out 옆의 figures/ 로 간다 - 고정 경로면 시험 코퍼스로 저장소 그림을 덮어쓴다.
+
+        [실측] 기본값을 docs/figures 로 두었을 때 4쌍 시험 코퍼스의 report 가 진짜 그림을 덮어써
+        최신 확인 테스트가 실패하고 falsify 가 더러운 트리로 멈췄다.
+        """
+        out = tmp_path / "gen" / "MEASUREMENTS.md"
+        empty = tmp_path / "no-agents"
+        empty.mkdir()
+        args = ["--corpus", str(small_corpus), "--agents", str(empty), "--out", str(out)]
+        code = main(["report", *args])
+        assert code == 0
+        drawn = sorted(p.name for p in (out.parent / "figures").iterdir())
+        assert drawn == ["pairs.svg", "spread.svg"]  # 에이전트 묶음이 없으면 에이전트 그림은 없다
+        capsys.readouterr()
+
     def test_unknown_analyzer_is_exit_2(
         self, small_corpus: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:

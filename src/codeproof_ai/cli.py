@@ -287,8 +287,8 @@ def _add_report_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser])
     )
     rep.add_argument(
         "--figures",
-        default="docs/figures",
-        help="생성 그림(SVG) 디렉터리 - 측정값 문서와 같은 계산에서 그린다 (--out - 이면 없음)",
+        default=None,
+        help="생성 그림(SVG) 디렉터리 - 기본은 --out 옆의 figures/ (--out - 이면 그리지 않는다)",
     )
 
 
@@ -1442,7 +1442,7 @@ _COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
     ),
     "report": lambda a: _cmd_report(
         Path(a.corpus), a.analyzer, a.ruff_select, a.out, check=a.check, agents=Path(a.agents),
-        figures=Path(a.figures),
+        figures=Path(a.figures) if a.figures else Path(a.out).parent / "figures",
     ),
     "export": lambda a: _cmd_export(Path(a.corpus), Path(a.out), a.prompt, a.docstrings),
     "pack": lambda a: _cmd_pack(Path(a.corpus), Path(a.src), Path(a.out), runs=a.runs),

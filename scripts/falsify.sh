@@ -50,7 +50,7 @@ PASS=0; FAIL=0; FAILED_NAMES=()
 #   break_X   그 불변식을 깨는 최소 변경
 #   guard_X   가드. 깨끗한 트리에서 **통과**하고 깨뜨린 뒤 **실패**해야 한다.
 
-SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict convention docs-tree docs-results-prose generated figures-generated
+SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict convention docs-tree docs-results-prose generated figures-generated figures-beside landing-page
            agent-contract span-match llm-symbol import-format import-manifest import-rejected
            signed-runner pack-first-runs bundle-separators pair-difference model-pin
            docstring-neutral signed-docstrings resume-docstrings runner-docstrings compare-one-axis
@@ -202,6 +202,14 @@ guard_generated() { uv run codeproof report --check; }
 claim_figures-generated() { echo "생성 그림을 손으로 고쳐도 --check 가 잡는다 — 그림은 README 첫 화면에 실린다 (F5b)"; }
 break_figures-generated() { perl -0pi -e 's/>777</>778</' docs/figures/spread.svg; }
 guard_figures-generated() { uv run codeproof report --check; }
+
+claim_figures-beside() { echo "그림은 --out 옆에 그린다 — 고정 경로면 시험 코퍼스의 report 가 저장소 그림을 덮어쓴다"; }
+break_figures-beside() { perl -0pi -e 's/Path\(a\.out\)\.parent \/ "figures"/Path("docs\/figures")/' src/codeproof_ai/cli.py; }
+guard_figures-beside() { uv run pytest tests/cli/test_commands.py -q -k beside_the_output; }
+
+claim_landing-page() { echo "Pages 첫 페이지가 가리키는 그림은 실제로 있다 — 받은 사람이 파일로 열어도 같다"; }
+break_landing-page() { perl -0pi -e 's/src="figures\/pairs\.svg"/src="figures\/nope.svg"/' docs/index.html; }
+guard_landing-page() { uv run pytest tests/docs/test_consistency.py -q -k its_relative; }
 
 # ── 에이전트 층 (A2b · DESIGN §7.10) - 첫 전체 실행에서 조용히 틀렸던 자리들 ──
 

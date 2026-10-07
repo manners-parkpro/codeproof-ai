@@ -6,6 +6,7 @@
 
 실무 Spring 백엔드에서 Codex 와 Claude 를 매일 쓰다가 생긴 질문, 「AI 리뷰어가 내는 품질 숫자를 얼마나 믿을 수 있나」를
 직접 재 본 프로젝트다. 이 저장소도 AI 에이전트와 함께 만들었다 ([아래](#ai-에이전트와-만든-방식)).
+그림으로 보는 한 페이지: <https://manners-parkpro.github.io/codeproof-ai/>
 
 > **상태** — 정적분석기(Ruff · mypy)와 에이전트 층(Claude Code · Codex CLI, 목표 150쌍 · 각 3회) 측정을 마쳤다.
 > 모델 API 층은 어댑터만 있고 아직 재지 않았다.
