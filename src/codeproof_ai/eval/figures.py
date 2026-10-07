@@ -415,7 +415,7 @@ def scoreboard_svg(board: Scoreboard) -> str:
     title = f"{a} 와 {b} — 같은 코드를 리뷰했다"
     head = (
         f"안전한 판과 가드만 지운 판 {board.pairs}쌍 · 샘플당 {n}회 · "
-        "한 번 돌렸을 때의 기대 비율 · 채점 provable_safety — 결함 줄과 겹친 지적만 인정"
+        "한 번 돌렸을 때의 기대 비율 · 채점 provable_safety — 짚은 줄이 정답 자리와 겹쳐야 인정"
     )
     body = [_t(20, 30, title, "title")]
     y = 50
@@ -426,7 +426,7 @@ def scoreboard_svg(board: Scoreboard) -> str:
         _rect(20, y - 2, 12, 11, "claude"), _t(38, y + 8, a),
         _rect(140, y - 2, 12, 11, "codex"), _t(158, y + 8, b),
         _rect(250, y + 2, 24, 3, "pb loose"),
-        _t(280, y + 8, f"가는 선 — 결함 줄에서 {loose}줄 안까지 인정하면", "muted"),
+        _t(280, y + 8, f"가는 선 — 정답 자리에서 {loose}줄 안까지 인정하면", "muted"),
         _t(WIDTH - 20, y + 8, f"차이 ({a} - {b}) · 95%", "muted small", "end"),
     ]
     x0 = 230.0
@@ -462,7 +462,8 @@ def scoreboard_svg(board: Scoreboard) -> str:
             f"차이의 판정은 허용 오차 {ladder}줄에서 모두 같다." if not moved
             else f"허용 오차 {ladder}줄에서 판정이 흔들린다: " + " · ".join(moved) + "."
         )
-        + " 주 지표는 수집 전에 선언했고, 나머지 셋은 같은 짝 판정을 다시 묶은 보조다.",
+        + " 주 지표는 수집 전에 선언했고, 나머지 셋은 같은 짝 판정을 다시 묶은 보조다"
+        " (다중 비교 보정 없음).",
         "차이의 구간은 같은 짝을 함께 복원추출한 부트스트랩이다.",
     ]
     if board.conditions:
