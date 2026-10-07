@@ -22,7 +22,7 @@ uv run mypy                      # files 설정은 pyproject 에
 uv run codeproof doctor          # 자격증명·도구 준비 상태
 uv run codeproof measure         # 정적분석기로 채점 기준 편차 측정 (API 불필요)
 uv run codeproof history         # 저장된 실행 · 재현성 확인
-uv run codeproof report          # docs/MEASUREMENTS.md 생성 (--check 로 최신 확인)
+uv run codeproof report          # docs/MEASUREMENTS.md · docs/figures/*.svg 생성 (--check 로 최신 확인)
 uv run codeproof pack --from <실행기 출력> --out results/agent/<이름> [--runs N]  # 에이전트 묶음 (N = 수집 전에 선언한 회차 수)
 uv run codeproof decoy validate  # decoy 규격 검사
 uv run codeproof decoy new <id>  # 템플릿에서 새 decoy
@@ -468,7 +468,7 @@ D층 집계 FPR 은 「도구의 오탐률」이 아니라 **「내가 고른 �
 ### F5b. 변동하는 측정값을 산문에 베끼지 않는다 🔴
 
 ```bash
-uv run codeproof report            # docs/MEASUREMENTS.md 생성
+uv run codeproof report            # docs/MEASUREMENTS.md · docs/figures/*.svg 생성
 uv run codeproof report --check    # 낡았으면 exit 1
 ```
 
@@ -550,6 +550,8 @@ P-V 로 만든다. 다회 실행은 관점을 골라 **라벨을 붙인다** —
 자기선호 편향으로 Claude vs Codex 비교가 무효화된다. 코드 도메인의 판정자 일치도는
 전 도메인 최악이다(pairwise κ 0.159 / Fleiss κ 0.070).
 불가피하면 **평가 대상과 다른 패밀리**에서 뽑고, 자체 라벨 30건 검증 κ 를 같이 보고한다.
+예외 하나 — 보조 민감도(측정 뒤 FP 구간 지적의 재판정)에만 리뷰어를 가린 같은 패밀리 판정자 둘을 쓰고 κ 대신
+판정자 사이의 일치를 낸다. 주 지표에는 쓰지 않는다 (DESIGN §4.2 · 선언 2026-10-05).
 
 평가 대상을 확인자로 쓰는 것도 금지 — `SelfCorroborationError`.
 

@@ -24,6 +24,7 @@ from codeproof_ai.corpus.mutants import breaks, load_mutants, mutant_alias
 from codeproof_ai.domain.reviewer import ReviewerKind
 from codeproof_ai.eval.bait import BaitStatus, measure
 from codeproof_ai.eval.export import DOCSTRING_MODES, export_for_agent, sample_digest
+from codeproof_ai.eval.figures import BANNER as FIGURE_BANNER
 from codeproof_ai.eval.gate import RACE_RUNS, gate
 from codeproof_ai.eval.grading.corroboration import StaticCorroborationGrader
 from codeproof_ai.eval.grading.injected import InjectedDefectGrader
@@ -39,7 +40,19 @@ from codeproof_ai.eval.pairing import (
     pair_summary,
     score_pairs,
 )
-from codeproof_ai.eval.report import SETUP_KEYS, AgentSection, render_measurements
+from codeproof_ai.eval.report import (
+    HIGHLIGHTS,
+    LANDING,
+    RULE_SELECTIONS,
+    SETUP_KEYS,
+    AgentSection,
+    at_a_glance,
+    pair_ladder,
+    render_figures,
+    render_highlights,
+    render_measurements,
+    spread_of,
+)
 from codeproof_ai.eval.runner import (
     ReviewerRun,
     run_reviewer,
@@ -70,7 +83,7 @@ from codeproof_ai.reviewers.wrap import AnalyzerReviewer, ProviderReviewer
 from codeproof_ai.store.sqlite import ReproCheck, Store
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Sequence
+    from collections.abc import Callable, Mapping, Sequence
 
     from codeproof_ai.analysis.base import Analyzer
     from codeproof_ai.domain.reviewer import Reviewer
@@ -109,7 +122,7 @@ def _add_decoy_parsers(sub: argparse._SubParsersAction[argparse.ArgumentParser])
         default=30,
         help="경쟁 변이를 몇 번 돌릴지 (0 이면 건너뛴다) - 약화는 매번 깨져야 한다",
     )
-    dmu.add_argument("pairs", nargs="*", help="쌍 접두사 (예: XC001) - 없으면 전부")
+    dmu.add_argument("pairs", nargs="*", help="쌍 접두사 (폴더 이름의 앞부분) - 없으면 전부")
 
     dg = decoy_sub.add_parser(
         "gate", help="codex 가 쓴 쌍의 관문 - 기계로 보는 것만 (DESIGN §7.10d)"
@@ -278,6 +291,11 @@ def _add_report_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser])
         default="results/agent",
         help="에이전트 묶음(<이름>/RUN.json + findings.jsonl) 디렉터리. 없으면 정적분석기만",
     )
+    rep.add_argument(
+        "--figures",
+        default=None,
+        help="생성 그림(SVG) 디렉터리 - 기본은 --out 옆의 figures/ (--out - 이면 그리지 않는다)",
+    )
 
 
 def _add_export_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -368,9 +386,8 @@ def _cmd_decoy_gate(corpus: Path, race_runs: int, prefixes: Sequence[str]) -> in
     if race_runs < 1:
         print("--race-runs 는 1 이상이다 - 관문은 경쟁 약화를 건너뛰지 않는다", file=sys.stderr)
         return 2
-    pairs = [d for d in pair_dirs(corpus) if not prefixes or d.name.split("-")[0] in prefixes]
-    if not pairs:
-        print(f"쌍이 없다: {corpus}", file=sys.stderr)
+    pairs = _pick_pairs(corpus, prefixes)
+    if pairs is None:
         return 2
     failed = 0
     with tempfile.TemporaryDirectory(prefix="codeproof-gate-") as tmp:
@@ -384,6 +401,23 @@ def _cmd_decoy_gate(corpus: Path, race_runs: int, prefixes: Sequence[str]) -> in
     return 1 if failed else 0
 
 
+def _pick_pairs(corpus: Path, prefixes: Sequence[str]) -> list[Path] | None:
+    """접두사로 쌍을 고른다 - 없는 접두사가 있거나 고른 쌍이 없으면 알리고 None.
+
+    🔴 맞는 쌍이 0개인데 「변이 0개 · 기대와 다름 0」 으로 통과하면 공허하다 (독립 검토).
+    """
+    dirs = pair_dirs(corpus)
+    names = {d.name.split("-")[0] for d in dirs}
+    if unknown := [p for p in prefixes if p not in names]:
+        print(f"없는 쌍: {' '.join(unknown)} ({corpus})", file=sys.stderr)
+        return None
+    pairs = [d for d in dirs if not prefixes or d.name.split("-")[0] in prefixes]
+    if not pairs:
+        print(f"쌍이 없다: {corpus}", file=sys.stderr)
+        return None
+    return pairs
+
+
 def _cmd_decoy_mutants(corpus: Path, race_runs: int, prefixes: Sequence[str]) -> int:
     """쌍의 mutants.py 를 돌린다 - 결정적 변이는 한 번, 경쟁 변이(RACY)는 race_runs 번.
 
@@ -393,7 +427,9 @@ def _cmd_decoy_mutants(corpus: Path, race_runs: int, prefixes: Sequence[str]) ->
     if race_runs < 0:
         print("--race-runs 는 0 이상이다", file=sys.stderr)
         return 2
-    pairs = [d for d in pair_dirs(corpus) if not prefixes or d.name.split("-")[0] in prefixes]
+    pairs = _pick_pairs(corpus, prefixes)
+    if pairs is None:
+        return 2
     wrong: list[str] = []
     counted = 0
     with tempfile.TemporaryDirectory(prefix="codeproof-mutants-") as tmp:
@@ -1295,7 +1331,8 @@ def _cmd_pack(corpus: Path, src: Path, out: Path, *, runs: int | None = None) ->
 
 
 def _cmd_report(
-    corpus: Path, analyzer: str, ruff_select: str, out: str, *, check: bool, agents: Path
+    corpus: Path, analyzer: str, ruff_select: str, out: str, *, check: bool, agents: Path,
+    figures: Path,
 ) -> int:
     """🔴 측정값을 **생성**한다 - 문서가 숫자를 베끼면 반드시 낡는다."""
     samples = load_decoy_samples(corpus)
@@ -1313,15 +1350,89 @@ def _cmd_report(
         return 2
 
     graders = _graders_for(analyzer, 0, samples)
-    run = run_reviewer(AnalyzerReviewer(an), samples, graders)
+    # 룰 선택 손잡이 - 그림과 측정값 문서의 「룰 선택」 표가 같은 실행을 쓴다 (결과 6)
+    selections = (
+        {
+            sel: run_reviewer(
+                AnalyzerReviewer(create_analyzer("ruff", select=tuple(sel.split(",")))),
+                samples, graders,
+            )
+            for sel in RULE_SELECTIONS
+        }
+        if analyzer == "ruff"
+        else {}
+    )
+    run = selections.get(ruff_select) or run_reviewer(AnalyzerReviewer(an), samples, graders)
     sections = _agent_sections(agents, samples)
     if sections is None:
         return 2
     # 보조 ③ - twin 정답 구간을 넓힌 라벨. 에이전트 비교에서만 쓴다 (DESIGN §7.10c).
     widened = load_decoy_samples(corpus, widen_twin=True) if sections else []
-    return _emit_generated(
-        render_measurements(run, samples, graders, sections, widened), out, check=check
+    spreads = [spread_of(sel, r, graders) for sel, r in selections.items()]
+    # 짝 판정 사다리 - 측정값 문서의 표와 짝 그림이 같은 목록을 쓴다 (A2a)
+    ladder = pair_ladder(selections, samples)
+    # 점수판 · 예시 - 측정값 문서의 「점수판」과 두 그림이 같은 값을 쓴다
+    glance = at_a_glance(sections, samples)
+    body = render_measurements(
+        run, samples, graders, sections, widened, selections=spreads, ladder=ladder, glance=glance
     )
+    if out == "-" or not selections:
+        return _emit_generated(body, out, check=check)
+    drawn = render_figures(selections, graders, samples, sections, ladder=ladder, glance=glance)
+    outputs = {out: body, **{str(figures / name): svg for name, svg in drawn.items()}}
+    codes = [_emit_generated(text, path, check=check) for path, text in outputs.items()]
+    headline = next((s for s in spreads if s.select == "ALL"), None)
+    highlights = render_highlights(headline, glance)
+    landing = _emit_block(Path(out).parent / LANDING, highlights, check=check)
+    return max(*codes, landing, _stale_figures(figures, drawn, check=check))
+
+
+def _emit_block(page: Path, block: str, *, check: bool) -> int:
+    """손으로 쓰는 페이지 안의 생성 구간 - 표시(`HIGHLIGHTS`) 사이만 바꾼다. 다르면 --check 는 1.
+
+    페이지나 표시가 없으면 건드리지 않는다 - 시험 코퍼스의 출력 디렉터리에는 페이지가 없다.
+    저장소 페이지에 표시가 있는지는 문서 테스트가 본다.
+    """
+    start, end = HIGHLIGHTS
+    text = page.read_text(encoding="utf-8") if page.is_file() else ""
+    if start not in text or end not in text.split(start, 1)[1]:
+        return 0
+    head, rest = text.split(start, 1)
+    tail = rest.split(end, 1)[1]
+    fresh = f"{head}{start}\n{block}  {end}{tail}"
+    if fresh == text:
+        print(f"{page} 의 생성 구간은 최신이다")
+        return 0
+    if check:
+        print(
+            f"{page} 의 생성 구간이 낡았다 - `uv run codeproof report` 로 다시 만든다",
+            file=sys.stderr,
+        )
+        return 1
+    page.write_text(fresh, encoding="utf-8")
+    print(f"{page} 의 생성 구간을 썼다")
+    return 0
+
+
+def _stale_figures(figures: Path, drawn: Mapping[str, str], *, check: bool) -> int:
+    """🔴 더는 만들지 않는 그림을 남기지 않는다 - 남으면 문서가 옛 숫자를 계속 싣는다.
+
+    [실측] 에이전트 비교를 하지 않게 된 뒤에도 옛 agents.svg 가 남아 `--check` 가 통과했다.
+    생성물 표시(첫 줄)가 있는 그림만 본다 - `--figures` 가 가리키는 곳의 다른 그림은
+    건드리지 않는다.
+    """
+    stale = sorted(
+        p for p in figures.glob("*.svg")
+        if p.name not in drawn and p.read_text(encoding="utf-8").startswith(FIGURE_BANNER)
+    )
+    for p in stale:
+        if check:
+            print(f"{p} 는 더는 만들지 않는 그림이다 - `uv run codeproof report` 로 지운다",
+                  file=sys.stderr)
+        else:
+            p.unlink()
+            print(f"{p} 를 지웠다 - 더는 만들지 않는 그림이다")
+    return int(check and bool(stale))
 
 
 def _emit_generated(body: str, out: str, *, check: bool) -> int:
@@ -1412,7 +1523,8 @@ _COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
         store_path=a.store,
     ),
     "report": lambda a: _cmd_report(
-        Path(a.corpus), a.analyzer, a.ruff_select, a.out, check=a.check, agents=Path(a.agents)
+        Path(a.corpus), a.analyzer, a.ruff_select, a.out, check=a.check, agents=Path(a.agents),
+        figures=Path(a.figures) if a.figures else Path(a.out).parent / "figures",
     ),
     "export": lambda a: _cmd_export(Path(a.corpus), Path(a.out), a.prompt, a.docstrings),
     "pack": lambda a: _cmd_pack(Path(a.corpus), Path(a.src), Path(a.out), runs=a.runs),

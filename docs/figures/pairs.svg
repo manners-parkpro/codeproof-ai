@@ -1,0 +1,65 @@
+<!-- 생성물 - `uv run codeproof report` 가 만든다. 손으로 고치지 않는다. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="268" viewBox="0 0 760 268" role="img" aria-label="짝 판정도 채점 정의의 함수다 — 같은 Ruff 실행">
+<style>
+text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+       "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; fill: #1f2328; font-size: 12px; }
+.bg { fill: #ffffff; } .muted { fill: #59636e; } .title { font-size: 16px; font-weight: 600; }
+.strong { font-weight: 600; } .grid { stroke: #d1d9e0; stroke-width: 1; }
+.safe { fill: #0969da; } .inj { fill: #bc4c00; }
+.claude { fill: #8250df; } .codex { fill: #1a7f37; }
+.pc { fill: #1a7f37; } .pv { fill: #bf8700; } .pb { fill: #8c959f; } .pr { fill: #cf222e; }
+.whisker { stroke: #59636e; stroke-width: 2; } .zero { stroke: #cf222e; stroke-dasharray: 4 3; }
+.code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+text.guard { fill: #0969da; } text.bug { fill: #cf222e; } text.small { font-size: 11px; }
+@media (prefers-color-scheme: dark) {
+  text { fill: #e6edf3; } .bg { fill: #0d1117; } .muted { fill: #9198a1; }
+  .grid { stroke: #3d444d; } .safe { fill: #4493f8; } .inj { fill: #f0883e; }
+  .claude { fill: #ab7df8; } .codex { fill: #3fb950; }
+  .pc { fill: #3fb950; } .pv { fill: #d29922; } .pb { fill: #656c76; } .pr { fill: #f85149; }
+  .whisker { stroke: #9198a1; }
+  text.muted { fill: #9198a1; } text.guard { fill: #4493f8; } text.bug { fill: #f85149; }
+}
+</style>
+<rect class="bg" width="760" height="268" rx="8"/>
+<text x="20" y="30" class="title" text-anchor="start">짝 판정도 채점 정의의 함수다 — 같은 Ruff 실행</text>
+<text x="20" y="50" class="muted" text-anchor="start">decoy(안전)와 twin(가드 제거) 150쌍 · 막대는 slack 0 · 오른쪽은 slack 마다 가장 많은 판정</text>
+<text x="740" y="84" class="muted" text-anchor="end">slack 0·2·5·10</text>
+<text x="20" y="84" class="strong" text-anchor="start">--ruff-select ALL</text>
+<text x="20" y="105" text-anchor="start">provable_safety</text>
+<rect class="pc" x="190" y="92" width="2.3" height="18" rx="2"/>
+<rect class="pv" x="192.3" y="92" width="11.3" height="18" rx="2"/>
+<rect class="pb" x="203.6" y="92" width="303.7" height="18" rx="2"/>
+<text x="355.45" y="105" text-anchor="middle">134</text>
+<rect class="pr" x="507.3" y="92" width="22.7" height="18" rx="2"/>
+<text x="518.65" y="105" text-anchor="middle">10</text>
+<text x="740" y="105" class="muted" text-anchor="end">P-B·P-B·P-B·P-B 안정</text>
+<text x="20" y="131" text-anchor="start">injected_defect</text>
+<rect class="pv" x="190" y="118" width="58.9" height="18" rx="2"/>
+<text x="219.45" y="131" text-anchor="middle">26</text>
+<rect class="pr" x="248.9" y="118" width="281.1" height="18" rx="2"/>
+<text x="389.45" y="131" text-anchor="middle">124</text>
+<text x="740" y="131" class="strong" text-anchor="end">P-R·P-V·P-V·P-V 흔들린다</text>
+<text x="20" y="164" class="strong" text-anchor="start">--ruff-select S</text>
+<text x="20" y="185" text-anchor="start">provable_safety</text>
+<rect class="pc" x="190" y="172" width="4.5" height="18" rx="2"/>
+<rect class="pv" x="194.5" y="172" width="6.8" height="18" rx="2"/>
+<rect class="pb" x="201.3" y="172" width="317.3" height="18" rx="2"/>
+<text x="359.95" y="185" text-anchor="middle">140</text>
+<rect class="pr" x="518.6" y="172" width="11.3" height="18" rx="2"/>
+<text x="740" y="185" class="muted" text-anchor="end">P-B·P-B·P-B·P-B 안정</text>
+<text x="20" y="211" text-anchor="start">injected_defect</text>
+<rect class="pc" x="190" y="198" width="4.5" height="18" rx="2"/>
+<rect class="pv" x="194.5" y="198" width="6.8" height="18" rx="2"/>
+<rect class="pb" x="201.3" y="198" width="317.3" height="18" rx="2"/>
+<text x="359.95" y="211" text-anchor="middle">140</text>
+<rect class="pr" x="518.6" y="198" width="11.3" height="18" rx="2"/>
+<text x="740" y="211" class="muted" text-anchor="end">P-B·P-B·P-B·P-B 안정</text>
+<rect class="pc" x="20" y="238" width="12" height="12" rx="2"/>
+<text x="38" y="248" text-anchor="start">P-C 구별</text>
+<rect class="pv" x="150" y="238" width="12" height="12" rx="2"/>
+<text x="168" y="248" text-anchor="start">P-V 과잉지적</text>
+<rect class="pb" x="280" y="238" width="12" height="12" rx="2"/>
+<text x="298" y="248" text-anchor="start">P-B 미탐지</text>
+<rect class="pr" x="410" y="238" width="12" height="12" rx="2"/>
+<text x="428" y="248" text-anchor="start">P-R 역전</text>
+</svg>

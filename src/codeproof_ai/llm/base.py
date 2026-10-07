@@ -55,7 +55,7 @@ class ReviewResponse:
             Anthropic SDK 가 스키마를 조용히 재작성하므로
             Pydantic 모델이 아니라 이 값을 로깅해야 한다.
         request_id: 벤더 요청 id. 장애 보고용.
-        ttft_ms: 첫 토큰까지 시간. 스트리밍에서 직접 잰 값만 넣는다 (E5).
+        ttft_ms: 첫 토큰까지 시간. 스트리밍에서 직접 잰 값만 넣는다 (F3 · DESIGN §7bis.2).
         total_ms: 전체 소요 시간.
     """
 
@@ -93,7 +93,7 @@ class ReviewProvider(Protocol):
                 claude-opus-5-5 는 medium, claude-sonnet-5 는 high.
             cache_nonce: 캐시 무력화용 nonce. 🔴 프롬프트 **맨 앞**에 붙인다 (D3).
                 캐싱은 prefix 매칭이라 뒤에 붙이면 무효다.
-            stream: TTFT 를 재려면 True 여야 한다. 비스트리밍에서 유도 금지 (E5).
+            stream: TTFT 를 재려면 True 여야 한다. 비스트리밍에서 유도 금지 (F3 · DESIGN §7bis.2).
 
         구현 규약:
         - max_retries=0. 재시도는 호출자가 센다.

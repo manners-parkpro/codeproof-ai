@@ -19,7 +19,9 @@ import pytest
 
 from codeproof_ai.cli import main
 from codeproof_ai.eval.export import sample_digest
+from codeproof_ai.eval.figures import BANNER as FIGURE_BANNER
 from codeproof_ai.eval.loader import PRESENTED_FILENAME, load_decoy_samples
+from codeproof_ai.eval.report import HIGHLIGHTS, LANDING
 from codeproof_ai.reviewers.imported import (
     BUNDLE_FILE,
     DIGEST_SUFFIX,
@@ -418,6 +420,18 @@ class TestDecoyCommands:
     ) -> None:
         assert main(["decoy", "mutants", "D115", "--race-runs", "0"]) == 0
         assert "기대와 다름 0" in capsys.readouterr().out
+
+    def test_mutants_refuses_a_prefix_that_matches_no_pair(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """없는 접두사를 「변이 0개 · 기대와 다름 0」 으로 통과시키지 않는다.
+
+        하나만 틀려도 거절한다 - 맞는 쌍만 돌고 끝나면 오타가 조용히 빠진다 (독립 검토).
+        """
+        assert main(["decoy", "mutants", "D115", "NOPE999", "--race-runs", "0"]) == 2
+        assert "없는 쌍: NOPE999" in capsys.readouterr().err
+        assert main(["decoy", "gate", "NOPE999"]) == 2
+        assert "없는 쌍: NOPE999" in capsys.readouterr().err
 
     def test_mutants_fails_when_a_weakening_survives(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -899,6 +913,113 @@ class TestReport:
         missing = str(tmp_path / "none")
         assert main(["report", "--corpus", missing, "--out", "-"]) == 2
         assert "샘플이 없다" in capsys.readouterr().err
+
+    def test_figures_are_drawn_beside_the_output_not_in_the_repo(
+        self, small_corpus: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """🔴 그림은 --out 옆의 figures/ 로 간다 - 고정 경로면 시험 코퍼스로 저장소 그림을 덮어쓴다.
+
+        [실측] 기본값을 docs/figures 로 두었을 때 4쌍 시험 코퍼스의 report 가 진짜 그림을 덮어써
+        최신 확인 테스트가 실패하고 falsify 가 더러운 트리로 멈췄다.
+        """
+        out = tmp_path / "gen" / "MEASUREMENTS.md"
+        empty = tmp_path / "no-agents"
+        empty.mkdir()
+        args = ["--corpus", str(small_corpus), "--agents", str(empty), "--out", str(out)]
+        code = main(["report", *args])
+        assert code == 0
+        drawn = sorted(p.name for p in (out.parent / "figures").iterdir())
+        assert drawn == ["pairs.svg", "spread.svg"]  # 에이전트 묶음이 없으면 에이전트 그림은 없다
+        capsys.readouterr()
+
+    def test_printing_to_stdout_draws_no_figures(
+        self,
+        small_corpus: Path,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """`--out -` 는 그리지 않는다 (도움말의 약속).
+
+        어기면 현재 디렉터리에 figures/ 가 생긴다 (독립 검토).
+        """
+        monkeypatch.chdir(tmp_path)
+        empty = tmp_path / "no-agents"
+        empty.mkdir()
+        args = ["--corpus", str(small_corpus), "--agents", str(empty), "--out", "-"]
+        assert main(["report", *args]) == 0
+        assert "# 측정값" in capsys.readouterr().out
+        assert not (tmp_path / "figures").exists()
+
+    def test_a_figure_no_longer_drawn_fails_the_check_and_is_removed(
+        self, small_corpus: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """🔴 더는 만들지 않는 그림이 남으면 문서가 생성물과 다른 옛 숫자를 계속 싣는다.
+
+        [실측] 에이전트 비교를 하지 않게 된 뒤에도 옛 agents.svg 가 남아 `--check` 가 통과했다.
+        생성물 표시가 없는 그림은 이 명령이 만든 것이 아니므로 건드리지 않는다.
+        """
+        out = tmp_path / "gen" / "MEASUREMENTS.md"
+        empty = tmp_path / "no-agents"
+        empty.mkdir()
+        args = ["--corpus", str(small_corpus), "--agents", str(empty), "--out", str(out)]
+        assert main(["report", *args]) == 0
+        stale = out.parent / "figures" / "agents.svg"
+        stale.write_text(FIGURE_BANNER + "\n<svg/>\n", encoding="utf-8")
+        foreign = out.parent / "figures" / "logo.svg"
+        foreign.write_text("<svg/>\n", encoding="utf-8")
+        capsys.readouterr()
+
+        assert main(["report", *args, "--check"]) == 1
+        assert "더는 만들지 않는 그림" in capsys.readouterr().err
+        assert main(["report", *args]) == 0
+        assert not stale.exists()
+        assert foreign.exists()
+        assert main(["report", *args, "--check"]) == 0
+        capsys.readouterr()
+
+    def test_the_landing_block_is_filled_and_checked(
+        self, small_corpus: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """🔴 첫 화면의 핵심 발견은 생성물이다 - 표시 사이만 바꾸고, 낡으면 --check 가 운다 (F5b).
+
+        표시 밖의 손으로 쓴 글은 그대로 둔다.
+        """
+        out = tmp_path / "gen" / "MEASUREMENTS.md"
+        out.parent.mkdir(parents=True)
+        page = out.parent / LANDING
+        start, end = HIGHLIGHTS
+        page.write_text(
+            f"<p>손글씨</p>\n  {start}\n  옛 카드\n  {end}\n<p>끝</p>\n", encoding="utf-8"
+        )
+        empty = tmp_path / "no-agents"
+        empty.mkdir()
+        args = ["--corpus", str(small_corpus), "--agents", str(empty), "--out", str(out)]
+
+        assert main(["report", *args, "--check"]) == 1
+        assert "생성 구간이 낡았다" in capsys.readouterr().err
+        assert main(["report", *args]) == 0
+        text = page.read_text(encoding="utf-8")
+        assert "옛 카드" not in text
+        assert 'class="card"' in text
+        assert text.startswith("<p>손글씨</p>")
+        assert text.endswith("<p>끝</p>\n")
+        assert main(["report", *args, "--check"]) == 0
+        capsys.readouterr()
+
+    def test_a_page_without_the_markers_is_left_alone(
+        self, small_corpus: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        out = tmp_path / "gen" / "MEASUREMENTS.md"
+        out.parent.mkdir(parents=True)
+        page = out.parent / LANDING
+        page.write_text("<p>표시 없음</p>\n", encoding="utf-8")
+        empty = tmp_path / "no-agents"
+        empty.mkdir()
+        args = ["--corpus", str(small_corpus), "--agents", str(empty), "--out", str(out)]
+        assert main(["report", *args]) == 0
+        assert page.read_text(encoding="utf-8") == "<p>표시 없음</p>\n"
+        capsys.readouterr()
 
     def test_unknown_analyzer_is_exit_2(
         self, small_corpus: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]

@@ -1,0 +1,53 @@
+<!-- 생성물 - `uv run codeproof report` 가 만든다. 손으로 고치지 않는다. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="310" viewBox="0 0 760 310" role="img" aria-label="같은 경고, 채점 규칙만 바꿨다 — 안전한 코드에서 헛경고로 센 수">
+<style>
+text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+       "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; fill: #1f2328; font-size: 12px; }
+.bg { fill: #ffffff; } .muted { fill: #59636e; } .title { font-size: 16px; font-weight: 600; }
+.strong { font-weight: 600; } .grid { stroke: #d1d9e0; stroke-width: 1; }
+.safe { fill: #0969da; } .inj { fill: #bc4c00; }
+.claude { fill: #8250df; } .codex { fill: #1a7f37; }
+.pc { fill: #1a7f37; } .pv { fill: #bf8700; } .pb { fill: #8c959f; } .pr { fill: #cf222e; }
+.whisker { stroke: #59636e; stroke-width: 2; } .zero { stroke: #cf222e; stroke-dasharray: 4 3; }
+.code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+text.guard { fill: #0969da; } text.bug { fill: #cf222e; } text.small { font-size: 11px; }
+@media (prefers-color-scheme: dark) {
+  text { fill: #e6edf3; } .bg { fill: #0d1117; } .muted { fill: #9198a1; }
+  .grid { stroke: #3d444d; } .safe { fill: #4493f8; } .inj { fill: #f0883e; }
+  .claude { fill: #ab7df8; } .codex { fill: #3fb950; }
+  .pc { fill: #3fb950; } .pv { fill: #d29922; } .pb { fill: #656c76; } .pr { fill: #f85149; }
+  .whisker { stroke: #9198a1; }
+  text.muted { fill: #9198a1; } text.guard { fill: #4493f8; } text.bug { fill: #f85149; }
+}
+</style>
+<rect class="bg" width="760" height="310" rx="8"/>
+<text x="20" y="30" class="title" text-anchor="start">같은 경고, 채점 규칙만 바꿨다 — 안전한 코드에서 헛경고로 센 수</text>
+<text x="20" y="50" class="muted" text-anchor="start">Ruff(파이썬 린터)의 경고는 그대로 · 안전한 코드 150개 · 위치는 정확히 겹친 것만 인정</text>
+<text x="20" y="90" class="strong" text-anchor="start">오류·스타일 규칙 (F,E)</text>
+<text x="20" y="108" class="muted" text-anchor="start">안전한 코드 위 경고 34건</text>
+<text x="196" y="90" text-anchor="start">0</text>
+<rect class="inj" x="190" y="100" width="18.4" height="16" rx="2"/>
+<text x="214.4" y="112" text-anchor="start">34</text>
+<text x="740" y="90" class="strong" text-anchor="end">0 대 34</text>
+<text x="740" y="108" class="muted" text-anchor="end">배수로 잴 수 없다</text>
+<text x="20" y="150" class="strong" text-anchor="start">보안 규칙만 (S)</text>
+<text x="20" y="168" class="muted" text-anchor="start">안전한 코드 위 경고 8건</text>
+<rect class="safe" x="190" y="138" width="4.3" height="16" rx="2"/>
+<text x="200.3" y="150" text-anchor="start">8</text>
+<rect class="inj" x="190" y="160" width="4.3" height="16" rx="2"/>
+<text x="200.3" y="172" text-anchor="start">8</text>
+<text x="740" y="150" class="strong" text-anchor="end">8 대 8</text>
+<text x="740" y="168" class="muted" text-anchor="end">일치</text>
+<text x="20" y="210" class="strong" text-anchor="start">전체 규칙 (ALL)</text>
+<text x="20" y="228" class="muted" text-anchor="start">안전한 코드 위 경고 777건</text>
+<rect class="safe" x="190" y="198" width="9.2" height="16" rx="2"/>
+<text x="205.2" y="210" text-anchor="start">17</text>
+<rect class="inj" x="190" y="220" width="420" height="16" rx="2"/>
+<text x="616" y="232" text-anchor="start">777</text>
+<text x="740" y="210" class="strong" text-anchor="end">17 대 777</text>
+<text x="740" y="228" class="muted" text-anchor="end">45.7배</text>
+<rect class="safe" x="20" y="258" width="12" height="12" rx="2"/>
+<text x="38" y="268" text-anchor="start">이 저장소 규칙 — 증명된 범위 안의 결함 주장만 헛경고 (provable_safety)</text>
+<rect class="inj" x="20" y="280" width="12" height="12" rx="2"/>
+<text x="38" y="290" text-anchor="start">벤치마크(Qodo) 규칙 — 결함 없는 코드의 경고는 전부 헛경고 (injected_defect)</text>
+</svg>
