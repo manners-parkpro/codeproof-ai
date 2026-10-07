@@ -19,7 +19,7 @@ text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
 </style>
 <rect class="bg" width="760" height="288" rx="8"/>
 <text x="20" y="30" class="title" text-anchor="start">같은 지적, 정답 정의만 바꿨다 — 증명 가능하게 안전한 코드 위의 FP</text>
-<text x="20" y="50" class="muted" text-anchor="start">Ruff 지적은 그대로이고 채점자만 다르다 · 음성 150쌍</text>
+<text x="20" y="50" class="muted" text-anchor="start">Ruff 지적은 그대로이고 채점자만 다르다 · slack 0 · 음성 150쌍</text>
 <text x="20" y="90" class="strong" text-anchor="start">--ruff-select F,E</text>
 <text x="20" y="108" class="muted" text-anchor="start">음성 위 지적 34건</text>
 <text x="196" y="90" text-anchor="start">0</text>

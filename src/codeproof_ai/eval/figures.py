@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 BANNER = "<!-- 생성물 - `uv run codeproof report` 가 만든다. 손으로 고치지 않는다. -->"
 WIDTH = 760
 BAR = 420  # 막대 영역 폭
+PAIR_BAR = 340  # 짝 그림은 오른쪽에 사다리 열을 둔다
 LABEL_MIN = 22  # 이보다 좁은 막대 조각에는 숫자를 싣지 않는다
 STYLE = """<style>
 text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
@@ -69,6 +70,22 @@ class PairCounts:
     def total(self) -> int:
         return self.correct + self.over_flag + self.under_flag + self.reversed_
 
+    @property
+    def dominant(self) -> str:
+        """가장 많은 판정 - 같으면 앞선 것 (P-C · P-V · P-B · P-R 순). 짝이 없으면 -."""
+        counts = (self.correct, self.over_flag, self.under_flag, self.reversed_)
+        return ("P-C", "P-V", "P-B", "P-R")[counts.index(max(counts))] if self.total else "-"
+
+
+@dataclass(frozen=True, slots=True)
+class PairRung:
+    """짝 판정 사다리의 한 칸 - 룰 선택 · 채점 정의 · slack 하나의 판정 수."""
+
+    select: str
+    grader: str
+    slack: int
+    counts: PairCounts
+
 
 @dataclass(frozen=True, slots=True)
 class Estimate:
@@ -108,7 +125,8 @@ def spread_svg(points: Sequence[Spread], negatives: int) -> str:
     title = "같은 지적, 정답 정의만 바꿨다 — 증명 가능하게 안전한 코드 위의 FP"
     body = [
         _t(20, 30, title, "title"),
-        _t(20, 50, f"Ruff 지적은 그대로이고 채점자만 다르다 · 음성 {negatives}쌍", "muted"),
+        _t(20, 50, f"Ruff 지적은 그대로이고 채점자만 다르다 · slack 0 · 음성 {negatives}쌍",
+           "muted"),
     ]
     top = max((max(p.safety_fp, p.injected_fp) for p in points), default=0)
     y = 72
@@ -141,30 +159,50 @@ _SEGMENTS = (("correct", "pc", "P-C 구별"), ("over_flag", "pv", "P-V 과잉지
              ("under_flag", "pb", "P-B 미탐지"), ("reversed_", "pr", "P-R 역전"))
 
 
-def pairs_svg(groups: Sequence[tuple[str, Sequence[PairCounts]]]) -> str:
-    """같은 실행의 짝 판정 - 정의마다 실패의 모양이 다르다 (결과 3)."""
+def pairs_svg(rungs: Sequence[PairRung]) -> str:
+    """같은 실행의 짝 판정 - 막대는 slack 0, 오른쪽은 slack 사다리의 주된 판정 (결과 3 · A2a).
+
+    🔴 막대 하나로는 그 판정이 정의의 것인지 매칭 정책의 것인지 모른다 -
+       사다리에서 가장 많은 판정이 바뀌면 「흔들린다」고 적는다.
+    """
     title = "짝 판정도 채점 정의의 함수다 — 같은 Ruff 실행"
+    rows: dict[tuple[str, str], list[PairRung]] = {}
+    for r in rungs:
+        rows.setdefault((r.select, r.grader), []).append(r)
+    base = min((r.slack for r in rungs), default=0)
+    slacks = sorted({r.slack for r in rungs})
+    pairs = max((r.counts.total for r in rungs), default=0)
     body = [
         _t(20, 30, title, "title"),
-        _t(20, 50, "decoy(안전)와 twin(가드 제거)을 짝으로 놓고 정의마다 판정했다", "muted"),
+        _t(20, 50, f"decoy(안전)와 twin(가드 제거) {pairs}쌍 · 막대는 slack {base} · "
+           "오른쪽은 slack 마다 가장 많은 판정", "muted"),
+        _t(WIDTH - 20, 84, "slack " + "·".join(map(str, slacks)), "muted", "end"),
     ]
-    y = 72
-    for select, rows in groups:
-        body.append(_t(20, y + 12, f"--ruff-select {select}", "strong"))
-        y += 20
-        for r in rows:
-            body.append(_t(20, y + 13, r.grader))
-            x = 190.0
-            for attr, cls, _label in _SEGMENTS:
-                n = getattr(r, attr)
-                w = 0.0 if r.total == 0 else round(n / r.total * BAR, 1)
-                if w:
-                    body.append(_rect(x, y, w, 18, cls))
-                    if w >= LABEL_MIN:
-                        body.append(_t(x + w / 2, y + 13, str(n), anchor="middle"))
-                x += w
-            y += 26
-        y += 8
+    y, current = 72, ""
+    for (select, grader), rs in rows.items():
+        if select != current:
+            y += 8 if current else 0
+            body.append(_t(20, y + 12, f"--ruff-select {select}", "strong"))
+            y, current = y + 20, select
+        bar = min(rs, key=lambda r: r.slack).counts
+        body.append(_t(20, y + 13, grader))
+        x = 190.0
+        for attr, cls, _label in _SEGMENTS:
+            n = getattr(bar, attr)
+            w = 0.0 if bar.total == 0 else round(n / bar.total * PAIR_BAR, 1)
+            if w:
+                body.append(_rect(x, y, w, 18, cls))
+                if w >= LABEL_MIN:
+                    body.append(_t(x + w / 2, y + 13, str(n), anchor="middle"))
+            x += w
+        tops = [r.counts.dominant for r in sorted(rs, key=lambda r: r.slack)]
+        moved = len(set(tops)) > 1
+        verdict = "·".join(tops)
+        if bar.total:
+            verdict += " 흔들린다" if moved else " 안정"
+        body.append(_t(WIDTH - 20, y + 13, verdict, "strong" if moved else "muted", "end"))
+        y += 26
+    y += 8
     lx = 20.0
     for _attr, cls, label in _SEGMENTS:
         body += [_rect(lx, y + 6, 12, 12, cls), _t(lx + 18, y + 16, label)]
@@ -180,12 +218,24 @@ def _pct(v: float, *, signed: bool = False) -> str:
     return f"{v * 100:+.1f}" if signed else f"{v * 100:.1f}"
 
 
-def agents_svg(rates: Sequence[Estimate], ladder: Sequence[tuple[int, Estimate]]) -> str:
-    """에이전트 비교 - 두 리뷰어의 기대값과 같은 짝 위의 차이 · slack 사다리 (결과 7)."""
+def agents_svg(
+    rates: Sequence[tuple[str, float]],
+    ladder: Sequence[tuple[int, Estimate]],
+    *,
+    pairs: int,
+    runs: Sequence[int],
+) -> str:
+    """에이전트 비교 - 두 리뷰어의 기대값과 같은 짝 위의 차이 · slack 사다리 (결과 7).
+
+    🔴 리뷰어마다의 구간은 그리지 않는다 - 두 구간을 겹쳐 보는 읽기를 그림이 권하게 된다 (F6).
+       구간은 같은 짝 위의 차이에만 있다 (생성물의 비교 표와 같은 관례).
+    """
     title = "에이전트 비교 — 같은 짝 위의 차이로 낸다"
+    n = "·".join(dict.fromkeys(map(str, runs)))
     body = [
         _t(20, 30, title, "title"),
-        _t(20, 50, "provable_safety · 단일 실행 기대값 · 짝 부트스트랩 95% 구간", "muted"),
+        _t(20, 50, "구별 성공(P-C) 비율 · provable_safety · 단일 실행 기대값 (slack 0) · "
+           f"{pairs}쌍 · 샘플당 {n}회 · 차이는 짝 부트스트랩 95% 구간", "muted"),
     ]
     x0, x1 = 200.0, 600.0
     y = 76
@@ -193,18 +243,17 @@ def agents_svg(rates: Sequence[Estimate], ladder: Sequence[tuple[int, Estimate]]
         x = _x(v, 0, 1, x0, x1)
         body += [f'<line class="grid" x1="{x:g}" y1="{y - 8}" x2="{x:g}" y2="{y + 52}"/>',
                  _t(x, y + 66, f"{v:.0%}", "muted", "middle")]
-    for i, e in enumerate(rates):
+    body.append(_t(WIDTH - 20, y + 66, "비교는 아래의 차이로", "muted", "end"))
+    for i, (label, point) in enumerate(rates):
         cy = y + 8 + i * 28
-        cls = "claude" if "claude" in e.label else "codex"
+        cls = "claude" if "claude" in label else "codex"
         body += [
-            _t(20, cy + 4, e.label),
-            f'<line class="whisker" x1="{_x(e.lo, 0, 1, x0, x1):g}" y1="{cy}" '
-            f'x2="{_x(e.hi, 0, 1, x0, x1):g}" y2="{cy}"/>',
-            f'<circle class="{cls}" cx="{_x(e.point, 0, 1, x0, x1):g}" cy="{cy}" r="6"/>',
-            _t(WIDTH - 20, cy + 4, f"{_pct(e.point)}% [{_pct(e.lo)}, {_pct(e.hi)}]", anchor="end"),
+            _t(20, cy + 4, label),
+            f'<circle class="{cls}" cx="{_x(point, 0, 1, x0, x1):g}" cy="{cy}" r="6"/>',
+            _t(WIDTH - 20, cy + 4, f"{_pct(point)}%", anchor="end"),
         ]
     y += 104
-    names = " - ".join(e.label for e in rates)
+    names = " - ".join(label for label, _ in rates)
     body.append(_t(20, y, f"차이 ({names}) · slack 사다리", "strong"))
     lo = min(-0.1, *(e.lo for _, e in ladder)) if ladder else -0.1
     hi = max(0.4, *(e.hi for _, e in ladder)) if ladder else 0.4

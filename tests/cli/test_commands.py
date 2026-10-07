@@ -19,6 +19,7 @@ import pytest
 
 from codeproof_ai.cli import main
 from codeproof_ai.eval.export import sample_digest
+from codeproof_ai.eval.figures import BANNER as FIGURE_BANNER
 from codeproof_ai.eval.loader import PRESENTED_FILENAME, load_decoy_samples
 from codeproof_ai.reviewers.imported import (
     BUNDLE_FILE,
@@ -916,6 +917,52 @@ class TestReport:
         assert code == 0
         drawn = sorted(p.name for p in (out.parent / "figures").iterdir())
         assert drawn == ["pairs.svg", "spread.svg"]  # 에이전트 묶음이 없으면 에이전트 그림은 없다
+        capsys.readouterr()
+
+    def test_printing_to_stdout_draws_no_figures(
+        self,
+        small_corpus: Path,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """`--out -` 는 그리지 않는다 (도움말의 약속).
+
+        어기면 현재 디렉터리에 figures/ 가 생긴다 (독립 검토).
+        """
+        monkeypatch.chdir(tmp_path)
+        empty = tmp_path / "no-agents"
+        empty.mkdir()
+        args = ["--corpus", str(small_corpus), "--agents", str(empty), "--out", "-"]
+        assert main(["report", *args]) == 0
+        assert "# 측정값" in capsys.readouterr().out
+        assert not (tmp_path / "figures").exists()
+
+    def test_a_figure_no_longer_drawn_fails_the_check_and_is_removed(
+        self, small_corpus: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """🔴 더는 만들지 않는 그림이 남으면 문서가 생성물과 다른 옛 숫자를 계속 싣는다.
+
+        [실측] 에이전트 비교를 하지 않게 된 뒤에도 옛 agents.svg 가 남아 `--check` 가 통과했다.
+        생성물 표시가 없는 그림은 이 명령이 만든 것이 아니므로 건드리지 않는다.
+        """
+        out = tmp_path / "gen" / "MEASUREMENTS.md"
+        empty = tmp_path / "no-agents"
+        empty.mkdir()
+        args = ["--corpus", str(small_corpus), "--agents", str(empty), "--out", str(out)]
+        assert main(["report", *args]) == 0
+        stale = out.parent / "figures" / "agents.svg"
+        stale.write_text(FIGURE_BANNER + "\n<svg/>\n", encoding="utf-8")
+        foreign = out.parent / "figures" / "logo.svg"
+        foreign.write_text("<svg/>\n", encoding="utf-8")
+        capsys.readouterr()
+
+        assert main(["report", *args, "--check"]) == 1
+        assert "더는 만들지 않는 그림" in capsys.readouterr().err
+        assert main(["report", *args]) == 0
+        assert not stale.exists()
+        assert foreign.exists()
+        assert main(["report", *args, "--check"]) == 0
         capsys.readouterr()
 
     def test_unknown_analyzer_is_exit_2(

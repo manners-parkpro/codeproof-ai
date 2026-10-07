@@ -50,7 +50,7 @@ PASS=0; FAIL=0; FAILED_NAMES=()
 #   break_X   그 불변식을 깨는 최소 변경
 #   guard_X   가드. 깨끗한 트리에서 **통과**하고 깨뜨린 뒤 **실패**해야 한다.
 
-SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict convention docs-tree docs-results-prose generated figures-generated figures-beside landing-page
+SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict convention docs-tree docs-results-prose selection-headline selection-table selection-repeats fp-counts-floor pair-table pair-sentence pair-block generated figures-generated figures-beside stale-figure out-dash pairs-ladder-label pair-ladder-note agents-points landing-page landing-css landing-blob
            agent-contract span-match llm-symbol import-format import-manifest import-rejected
            signed-runner pack-first-runs bundle-separators pair-difference model-pin
            docstring-neutral signed-docstrings resume-docstrings runner-docstrings compare-one-axis
@@ -68,7 +68,7 @@ SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict conv
            gate-directions gate-survivor gate-neutral gate-prose gate-docstring gate-twin-docstring gate-plan
            xauthor-login-shell xauthor-silent-probe xauthor-unrun xauthor-probe-collision xauthor-vacuous-loop
            xauthor-input-roles xauthor-var-tmp xauthor-verbatim xauthor-sandbox-flag
-           xauthor-inventory-ids xauthor-builtin-instructions xauthor-pair-leak
+           xauthor-inventory-ids xauthor-builtin-instructions xauthor-pair-leak xauthor-pair-leak-readme
            xauthor-run-credit xauthor-run-repro xauthor-run-kind xauthor-run-budget xauthor-run-frozen
            xauthor-run-restore xauthor-audit-schema)
 
@@ -195,21 +195,77 @@ claim_docs-results-prose() { echo "결과를 옮겨 적은 문서(RESULTS · AI-
 break_docs-results-prose() { perl -0pi -e 's/`provable_safety` 의 「구별 성공 11\/60」/「구별 성공 11\/60」/' docs/AI-WORKFLOW.md; }
 guard_docs-results-prose() { uv run pytest tests/docs/test_consistency.py -q -k bare_discrimination; }
 
+claim_selection-headline() { echo "README 첫 화면의 「N 대 M — N배」가 생성물의 룰 선택 표와 다르면 테스트가 운다 (F5b)"; }
+break_selection-headline() { perl -0pi -e 's/17 대 777/17 대 776/' README.md; }
+guard_selection-headline() { uv run pytest tests/docs/test_consistency.py -q -k rule_selection_numbers; }
+
+claim_selection-table() { echo "RESULTS 의 룰 선택 표가 생성물과 다르면 테스트가 운다 — 「같은 계산으로 다시 나온다」를 문장이 아니라 검사로 (F5b)"; }
+break_selection-table() { perl -0pi -e 's/\| `ALL` \| 777 \| \*\*17\*\*/| `ALL` | 777 | **18**/' docs/RESULTS.md; }
+guard_selection-table() { uv run pytest tests/docs/test_consistency.py -q -k rule_selection_numbers; }
+
+claim_selection-repeats() { echo "「룰 선택」 표의 기본 선택 행은 헤드라인 표와 같은 실행이다 — FP 가 다르면 운다 (이름이 어긋난 채점자가 FP 0 이 되지 않게)"; }
+break_selection-repeats() { perl -0pi -e 's/\| `ALL` \| 777 \| 17 \| 777 \|/| `ALL` | 777 | 17 | 0 |/' docs/MEASUREMENTS.md; }
+guard_selection-repeats() { uv run pytest tests/docs/test_consistency.py -q -k selection_table_repeats; }
+
+claim_fp-counts-floor() { echo "산문의 FP 대조가 읽는 행이 줄면 운다 — 형식이 바뀌어 공허하게 통과하지 않게"; }
+break_fp-counts-floor() { perl -0pi -e 's/^provable_safety(           0   17)/provable-safety$1/m' docs/RESULTS.md; }
+guard_fp-counts-floor() { uv run pytest tests/docs/test_consistency.py -q -k fp_counts; }
+
+claim_pair-table() { echo "결과 3 의 짝 판정 표가 생성물의 짝 판정 사다리(ALL · slack 0)와 다르면 테스트가 운다 (F5b)"; }
+break_pair-table() { perl -0pi -e 's/\| 1 \| 5 \| \*\*134\*\* \|/| 1 | 5 | **133** |/' docs/RESULTS.md; }
+guard_pair-table() { uv run pytest tests/docs/test_consistency.py -q -k pair_verdicts; }
+
+claim_pair-sentence() { echo "「구별 성공 · 과잉 · 미탐지 · 역전」 문장이 생성물(S · slack 0)과 다르면 테스트가 운다 (F5b)"; }
+break_pair-sentence() { perl -0pi -e 's/미탐지 140 · 역전 5/미탐지 141 · 역전 5/' docs/RESULTS.md; }
+guard_pair-sentence() { uv run pytest tests/docs/test_consistency.py -q -k pair_verdicts; }
+
+claim_pair-block() { echo "결과 5 의 매칭 민감도 블록이 생성물의 사다리와 다르면 테스트가 운다 (F5b · A2a)"; }
+break_pair-block() { perl -0pi -e 's/       0    1    5  134   10/       0    1    5  133   10/' docs/RESULTS.md; }
+guard_pair-block() { uv run pytest tests/docs/test_consistency.py -q -k pair_verdicts; }
+
 claim_generated() { echo "생성물을 손으로 고치면 --check 가 잡는다 — F5b"; }
 break_generated() { perl -0pi -e 's/코퍼스 \*\*(\d+)쌍\*\*/코퍼스 **999쌍**/' docs/MEASUREMENTS.md; }
 guard_generated() { uv run codeproof report --check; }
 
 claim_figures-generated() { echo "생성 그림을 손으로 고쳐도 --check 가 잡는다 — 그림은 README 첫 화면에 실린다 (F5b)"; }
-break_figures-generated() { perl -0pi -e 's/>777</>778</' docs/figures/spread.svg; }
+break_figures-generated() { perl -0pi -e 's/손으로 고치지 않는다/손으로 고친다/' docs/figures/spread.svg; }
 guard_figures-generated() { uv run codeproof report --check; }
 
 claim_figures-beside() { echo "그림은 --out 옆에 그린다 — 고정 경로면 시험 코퍼스의 report 가 저장소 그림을 덮어쓴다"; }
 break_figures-beside() { perl -0pi -e 's/Path\(a\.out\)\.parent \/ "figures"/Path("docs\/figures")/' src/codeproof_ai/cli.py; }
 guard_figures-beside() { uv run pytest tests/cli/test_commands.py -q -k beside_the_output; }
 
+claim_stale-figure() { echo "더는 만들지 않는 그림이 남으면 --check 가 실패한다 — 문서가 옛 숫자를 계속 싣지 않게 (F5b)"; }
+break_stale-figure() { perl -0pi -e 's/if p\.name not in drawn and /if False and /' src/codeproof_ai/cli.py; }
+guard_stale-figure() { uv run pytest tests/cli/test_commands.py -q -k no_longer_drawn; }
+
+claim_out-dash() { echo "--out - 는 그림을 그리지 않는다 — 어기면 현재 디렉터리에 figures/ 가 생긴다"; }
+break_out-dash() { perl -0pi -e 's/    if out == "-" or not selections:/    if not selections:/' src/codeproof_ai/cli.py; }
+guard_out-dash() { uv run pytest tests/cli/test_commands.py -q -k printing_to_stdout; }
+
+claim_pairs-ladder-label() { echo "짝 그림은 slack 사다리에서 판정이 바뀌면 「흔들린다」고 적는다 — 막대 하나로 결론을 내지 않게 (A2a)"; }
+break_pairs-ladder-label() { perl -0pi -e 's/moved = len\(set\(tops\)\) > 1/moved = len(set(tops)) > 9/' src/codeproof_ai/eval/figures.py; }
+guard_pairs-ladder-label() { uv run pytest tests/eval/test_figures.py -q -k ladder_column; }
+
+claim_pair-ladder-note() { echo "측정값 문서의 짝 판정 사다리가 흔들림을 적는다 — 판정을 바꾸면 report --check 가 운다 (A2a · F5b)"; }
+break_pair-ladder-note() { perl -0pi -e 's/            if len\(tops\) > 1\n/            if len(tops) > 9\n/' src/codeproof_ai/eval/report.py; }
+guard_pair-ladder-note() { uv run codeproof report --check; }
+
+claim_agents-points() { echo "에이전트 그림은 리뷰어마다 점만 찍는다 — 두 구간을 겹쳐 보는 읽기를 권하지 않게 (F6)"; }
+break_agents-points() { perl -0pi -e 's/f"\{_pct\(point\)\}%"/f"{_pct(point)}% [0, 1]"/' src/codeproof_ai/eval/figures.py; }
+guard_agents-points() { uv run pytest tests/eval/test_figures.py -q -k points_and_only; }
+
 claim_landing-page() { echo "Pages 첫 페이지가 가리키는 그림은 실제로 있다 — 받은 사람이 파일로 열어도 같다"; }
 break_landing-page() { perl -0pi -e 's/src="figures\/pairs\.svg"/src="figures\/nope.svg"/' docs/index.html; }
 guard_landing-page() { uv run pytest tests/docs/test_consistency.py -q -k its_relative; }
+
+claim_landing-css() { echo "첫 페이지는 CSS 로도 바깥 자원을 부르지 않는다 — 받은 사람이 파일로 열어도 같다"; }
+break_landing-css() { perl -0pi -e 's/<style>\n/<style>\n  \@import url("https:\/\/example.com\/x.css");\n/' docs/index.html; }
+guard_landing-css() { uv run pytest tests/docs/test_consistency.py -q -k 'TheLandingPage and outside'; }
+
+claim_landing-blob() { echo "첫 페이지의 저장소 문서 링크가 없는 파일을 가리키면 운다 — 이름이 바뀌어도 조용히 깨지지 않게"; }
+break_landing-blob() { perl -0pi -e 's/blob\/main\/docs\/VERIFY\.md/blob\/main\/docs\/VERIFY-gone.md/' docs/index.html; }
+guard_landing-blob() { uv run pytest tests/docs/test_consistency.py -q -k repository_links; }
 
 # ── 에이전트 층 (A2b · DESIGN §7.10) - 첫 전체 실행에서 조용히 틀렸던 자리들 ──
 
@@ -672,6 +728,10 @@ guard_xauthor-builtin-instructions() { uv run pytest tests/scripts/test_xauthor.
 claim_xauthor-pair-leak() { echo "저자가 상자에서 읽는 하네스 소스에 claude 쌍 번호 · 이름이 없다 — venv 는 읽기 허용이다 (§7.10d 「쓰는 입력」)"; }
 break_xauthor-pair-leak() { perl -0pi -e 's/\[실측\] 두 단계 건너 부르는 가드가/[실측] D051 처럼 두 단계 건너 부르는 가드가/' src/codeproof_ai/corpus/shape.py; }
 guard_xauthor-pair-leak() { uv run pytest tests/scripts/test_xauthor.py -q -k claude_pair; }
+
+claim_xauthor-pair-leak-readme() { echo "README 도 저자 상자에서 읽힌다(wheel METADATA) — claude 쌍 번호가 들어가면 운다 (§7.10d)"; }
+break_xauthor-pair-leak-readme() { perl -0pi -e 's/^# CodeProof AI/# CodeProof AI D051/' README.md; }
+guard_xauthor-pair-leak-readme() { uv run pytest tests/scripts/test_xauthor.py -q -k claude_pair; }
 
 claim_xauthor-run-credit() { echo "크레딧으로 끊긴 세션은 시도로 세지 않는다 — 못 보면 끊긴 시도가 쌍을 버리게 한다 (§7.10d 「시도 · 렌즈」)"; }
 break_xauthor-run-credit() { perl -0pi -e 's/CREDITS = "out of credits"/CREDITS = "credits exhausted"/' "$_XR"; }

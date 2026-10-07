@@ -23,11 +23,13 @@ from typing import TYPE_CHECKING
 from codeproof_ai.eval.figures import (
     Estimate,
     PairCounts,
+    PairRung,
     Spread,
     agents_svg,
     pairs_svg,
     spread_svg,
 )
+from codeproof_ai.eval.grading.injected import InjectedDefectGrader
 from codeproof_ai.eval.grading.safety import ProvableSafetyGrader
 from codeproof_ai.eval.metrics import credibility_warning
 from codeproof_ai.eval.mix import Axis, mix_sensitivity
@@ -47,6 +49,7 @@ from codeproof_ai.eval.pairing import (
     pair_summary,
     score_pairs,
 )
+from codeproof_ai.eval.runner import regrade_view
 from codeproof_ai.eval.sensitivity import DEFAULT_SWEEP, sweep_views
 from codeproof_ai.eval.spread import compute_spread
 
@@ -55,7 +58,7 @@ if TYPE_CHECKING:
 
     from codeproof_ai.eval.grading.base import Grader
     from codeproof_ai.eval.metrics import Proportion
-    from codeproof_ai.eval.runner import ReviewerRun
+    from codeproof_ai.eval.runner import ReviewerRun, SampleOutcome
     from codeproof_ai.eval.sample import LabeledSample
 
 BANNER = (
@@ -152,6 +155,7 @@ def render_measurements(
     widened: Sequence[LabeledSample] = (),
     *,
     selections: Sequence[Spread] = (),
+    ladder: Sequence[PairRung] = (),
 ) -> str:
     """측정값 문서 전체.
 
@@ -183,6 +187,7 @@ def render_measurements(
         _spread_section(run, graders),
         _selection_section(selections),
         _pairs_section(run),
+        _pair_ladder_section(ladder),
         _mix_section(run, samples),
         *(_agent_section(a, samples) for a in agents),
         *(
@@ -229,10 +234,14 @@ def _spread_section(run: ReviewerRun, graders: Sequence[Grader]) -> str:
 
 
 def spread_of(select: str, run: ReviewerRun, graders: Sequence[Grader]) -> Spread:
-    """룰 선택 하나의 두 정의 FP - 생성물의 편차 표와 같은 계산 (`compute_spread`)."""
+    """룰 선택 하나의 두 정의 FP - 생성물의 편차 표와 같은 계산 (`compute_spread`).
+
+    🔴 이름으로 바로 꺼낸다 - 어긋나면 KeyError 다. `.get(…, 0)` 은 이름이 어긋난 채점자를
+       「FP 0」으로 바꿔 헤드라인 그림을 뒤집어도 테스트가 통과했다 (독립 검토).
+    """
     sp = compute_spread(run.outcomes, graders, negatives_only=True)
     fp = {c.grader: c.false_positive for c in sp.columns}
-    return Spread(select, sp.findings, fp.get(HEADLINE_GRADER, 0), fp.get("injected_defect", 0))
+    return Spread(select, sp.findings, fp[HEADLINE_GRADER], fp[InjectedDefectGrader.name])
 
 
 def _selection_section(points: Sequence[Spread]) -> str:
@@ -260,8 +269,8 @@ def _selection_section(points: Sequence[Spread]) -> str:
     return "\n".join(lines)
 
 
-def pair_counts(run: ReviewerRun, grader: str) -> PairCounts | None:
-    pairs = score_pairs(run.outcomes, grader)
+def _pair_counts(outcomes: Sequence[SampleOutcome], grader: str) -> PairCounts | None:
+    pairs = score_pairs(outcomes, grader)
     if not pairs:
         return None
     c = pair_summary(pairs)
@@ -269,6 +278,65 @@ def pair_counts(run: ReviewerRun, grader: str) -> PairCounts | None:
         grader, c[PairVerdict.CORRECT], c[PairVerdict.OVER_FLAG],
         c[PairVerdict.UNDER_FLAG], c[PairVerdict.REVERSED],
     )
+
+
+def pair_ladder(
+    selections: Mapping[str, ReviewerRun], samples: Sequence[LabeledSample]
+) -> list[PairRung]:
+    """짝 판정의 slack 사다리 - 지적은 그대로 두고 **채점만** 다시 한다 (A2a).
+
+    🔴 막대 하나(slack 0)로는 그 판정이 정의의 것인지 매칭 정책의 것인지 모른다.
+       [실측 · 150쌍] `injected_defect`(정확한 줄 일치)의 「역전」은 slack 0 에서만 다수이고
+       2줄부터 「과잉지적」이 다수다 - Ruff 가 결함을 결함 줄 옆에 보고하는 관례가 갈라 놓은 것이다.
+       생성물의 표와 짝 그림이 이 목록 하나에서 나온다.
+    """
+    rungs: list[PairRung] = []
+    for sel in ("ALL", "S"):
+        if sel not in selections:
+            continue
+        for slack in DEFAULT_SWEEP:
+            graders: list[Grader] = [
+                ProvableSafetyGrader(overlap_slack=slack), InjectedDefectGrader(line_slack=slack)
+            ]
+            outcomes = regrade_view(selections[sel].outcomes, samples, graders, at_least=1)
+            rungs += [
+                PairRung(sel, g, slack, c)
+                for g in (HEADLINE_GRADER, InjectedDefectGrader.name)
+                if (c := _pair_counts(outcomes, g)) is not None
+            ]
+    return rungs
+
+
+def _pair_ladder_section(ladder: Sequence[PairRung]) -> str:
+    if not ladder:
+        return ""
+    rows: dict[tuple[str, str], list[PairRung]] = {}
+    for r in ladder:
+        rows.setdefault((r.select, r.grader), []).append(r)
+    lines = [
+        "## 짝 판정 사다리 — 채점 정의 x 룰 선택 x slack",
+        "",
+        "지적은 그대로 두고 **채점만** slack 을 바꿔 다시 했다 (A2a). "
+        "짝 그림의 막대는 slack 0 이다.",
+        "",
+        "| 룰 선택 | 채점 정의 | slack | P-C 구별 | P-V 과잉지적 | P-B 미탐지 | P-R 역전 |",
+        "|---|---|---:|---:|---:|---:|---:|",
+    ]
+    notes = []
+    for (sel, grader), rs in rows.items():
+        lines += [
+            f"| `{sel}` | `{grader}` | {r.slack} | {r.counts.correct} | {r.counts.over_flag} | "
+            f"{r.counts.under_flag} | {r.counts.reversed_} |"
+            for r in rs
+        ]
+        tops = list(dict.fromkeys(r.counts.dominant for r in rs))
+        notes.append(
+            f"- 🔴 `{grader}` · `{sel}` — 가장 많은 판정이 slack 에 따라 {' → '.join(tops)} 로 "
+            "바뀐다. 그 판정은 매칭 정책의 산물이다."
+            if len(tops) > 1
+            else f"- o `{grader}` · `{sel}` — 사다리 전체에서 {tops[0]} 다. 안정."
+        )
+    return "\n".join([*lines, "", *notes, ""])
 
 
 def _reviewer_pair(agents: Sequence[AgentSection]) -> tuple[AgentSection, AgentSection] | None:
@@ -279,9 +347,13 @@ def _reviewer_pair(agents: Sequence[AgentSection]) -> tuple[AgentSection, AgentS
     )
 
 
-def _estimate(label: str, point: float | None, interval: tuple[float, float] | None) -> Estimate:
-    lo, hi = interval if interval is not None else (0.0, 0.0)
-    return Estimate(label, point or 0.0, lo, hi)
+def _estimate(
+    label: str, point: float | None, interval: tuple[float, float] | None
+) -> Estimate | None:
+    """값이 없으면 None - 0 으로 그리지 않는다 (생성물의 표는 그 행을 건너뛴다)."""
+    if point is None or interval is None:
+        return None
+    return Estimate(label, point, *interval)
 
 
 def render_figures(
@@ -289,6 +361,8 @@ def render_figures(
     graders: Sequence[Grader],
     samples: Sequence[LabeledSample],
     agents: Sequence[AgentSection] = (),
+    *,
+    ladder: Sequence[PairRung] = (),
 ) -> dict[str, str]:
     """그림 이름 → SVG. 생성물(측정값 문서)과 같은 실행 · 같은 계산에서 그린다."""
     negatives = sum(1 for s in samples if s.is_proven_safe)
@@ -298,26 +372,28 @@ def render_figures(
             negatives,
         ),
     }
-    groups = [
-        (sel, [c for g in (HEADLINE_GRADER, "injected_defect")
-               if (c := pair_counts(selections[sel], g)) is not None])
-        for sel in ("ALL", "S") if sel in selections
-    ]
-    figures["pairs.svg"] = pairs_svg(groups)
+    if ladder:
+        figures["pairs.svg"] = pairs_svg(ladder)
     if (pair := _reviewer_pair(agents)) is not None:
         a, b = pair
         grader = next(g for g in a.graders if g.name == HEADLINE_GRADER)
-        rates = []
-        for sec in (a, b):
-            e = expectation(sec.run.outcomes, samples, grader)
-            rates.append(_estimate(sec.run.reviewer, e.point, e.interval))
-        ladder = []
+        rates = [
+            (sec.run.reviewer, expectation(sec.run.outcomes, samples, grader).point)
+            for sec in (a, b)
+        ]
+        diffs = []
         for slack in DEFAULT_SWEEP:
             d = difference(
                 a.run.outcomes, b.run.outcomes, samples, ProvableSafetyGrader(overlap_slack=slack)
             )
-            ladder.append((slack, _estimate(f"slack {slack}", d.point, d.interval)))
-        figures["agents.svg"] = agents_svg(rates, ladder)
+            if (e := _estimate(f"slack {slack}", d.point, d.interval)) is not None:
+                diffs.append((slack, e))
+        points = [(label, p) for label, p in rates if p is not None]
+        if diffs and len(points) == len(rates):
+            figures["agents.svg"] = agents_svg(
+                points, diffs, pairs=len(score_pairs(a.run.outcomes, HEADLINE_GRADER)),
+                runs=(a.run.manifest.sample_n, b.run.manifest.sample_n),
+            )
     return figures
 
 
@@ -332,7 +408,7 @@ def _pairs_section(run: ReviewerRun) -> str:
         "",
         f"**구별 성공 {hit}/{total}** — 안전한 쪽과 터지는 쪽을 갈라낸 경우다. "
         f"채점자는 `{HEADLINE_GRADER}` 다 — 구별 성공률은 (리뷰어 x 채점자)의 성질이라 "
-        "같은 실행도 정의마다 다른 숫자가 나온다 (README 결과 3).",
+        "같은 실행도 정의마다 다른 숫자가 나온다 (docs/RESULTS.md 결과 3).",
         "",
         "| 판정 | 건수 | 뜻 |",
         "|---|---:|---|",

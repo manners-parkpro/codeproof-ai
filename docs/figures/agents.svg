@@ -19,21 +19,20 @@ text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
 </style>
 <rect class="bg" width="760" height="332" rx="8"/>
 <text x="20" y="30" class="title" text-anchor="start">에이전트 비교 — 같은 짝 위의 차이로 낸다</text>
-<text x="20" y="50" class="muted" text-anchor="start">provable_safety · 단일 실행 기대값 · 짝 부트스트랩 95% 구간</text>
+<text x="20" y="50" class="muted" text-anchor="start">구별 성공(P-C) 비율 · provable_safety · 단일 실행 기대값 (slack 0) · 150쌍 · 샘플당 3회 · 차이는 짝 부트스트랩 95% 구간</text>
 <line class="grid" x1="200" y1="68" x2="200" y2="128"/>
 <text x="200" y="142" class="muted" text-anchor="middle">0%</text>
 <line class="grid" x1="400" y1="68" x2="400" y2="128"/>
 <text x="400" y="142" class="muted" text-anchor="middle">50%</text>
 <line class="grid" x1="600" y1="68" x2="600" y2="128"/>
 <text x="600" y="142" class="muted" text-anchor="middle">100%</text>
+<text x="740" y="142" class="muted" text-anchor="end">비교는 아래의 차이로</text>
 <text x="20" y="88" text-anchor="start">claude-code-neutral</text>
-<line class="whisker" x1="430.2" y1="84" x2="488" y2="84"/>
 <circle class="claude" cx="458.7" cy="84" r="6"/>
-<text x="740" y="88" text-anchor="end">64.7% [57.6, 72.0]</text>
+<text x="740" y="88" text-anchor="end">64.7%</text>
 <text x="20" y="116" text-anchor="start">codex-cli-neutral</text>
-<line class="whisker" x1="355.6" y1="112" x2="418.7" y2="112"/>
 <circle class="codex" cx="387.6" cy="112" r="6"/>
-<text x="740" y="116" text-anchor="end">46.9% [38.9, 54.7]</text>
+<text x="740" y="116" text-anchor="end">46.9%</text>
 <text x="20" y="180" class="strong" text-anchor="start">차이 (claude-code-neutral - codex-cli-neutral) · slack 사다리</text>
 <text x="20" y="206" text-anchor="start">slack 0</text>
 <line class="whisker" x1="368.9" y1="202" x2="479.1" y2="202"/>

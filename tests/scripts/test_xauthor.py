@@ -323,7 +323,13 @@ class TestNothingOfClaudePairsInTheBox:
     def test_what_the_author_can_read_names_no_claude_pair(self) -> None:
         names = _claude_names()
         readable = [
-            *(REPO / "src" / "codeproof_ai").rglob("*.py"),
+            # 🔴 .py 만이 아니다 - 패키지 데이터(프롬프트)도 wheel 에 들고,
+            #    README 는 wheel METADATA 의 본문이 된다.
+            #    [실측 · 독립 검토] README 에 쌍 번호를 넣어도 예전 범위로는 통과했다.
+            *(p for p in (REPO / "src" / "codeproof_ai").rglob("*")
+              if p.is_file() and "__pycache__" not in p.parts),
+            REPO / "README.md",
+            REPO / "scripts" / "xauthor_run.py",  # 저자에게 가는 과제 문구가 여기서 나온다
             *(p for p in (REPO / "corpus" / "decoys" / "_TEMPLATE").rglob("*") if p.is_file()),
             REPO / "results" / "xauthor" / "author_prompt.md",  # 저자 상자에 고정 문서로 들어간다
             REPO / "results" / "xauthor" / "audit_head.md",

@@ -171,25 +171,140 @@ class TestProseDoesNotContradictTheGeneratedFile:
         산문이 거기 적힌 수를 인용하는지만 보면 된다.
         """
         generated = MEASUREMENTS.read_text(encoding="utf-8")
+        # 🔴 헤드라인 절의 표에서만 읽는다 - [실측] 짝 판정 사다리 표를 더하자 행 가운데의
+        #    `| \`provable_safety\` | 10 | 2 |` 와 맞아 정답을 「2」로 읽었다.
+        headline = generated.split("## 채점 기준 편차", 1)[-1].split("\n## ", 1)[0]
         # | `provable_safety` | 0 | 7 | 231 | o |   ->   FP 는 세 번째 칸
         truth = {
             m.group("grader"): m.group("fp")
             for m in re.finditer(
-                r"\|\s*`(?P<grader>\w+)`\s*\|\s*\d+\s*\|\s*(?P<fp>\d+)\s*\|",
-                generated,
+                r"^\|\s*`(?P<grader>\w+)`\s*\|\s*\d+\s*\|\s*(?P<fp>\d+)\s*\|", headline, re.M
             )
         }
         assert truth, "생성물에서 편차 표를 읽지 못했다"
         assert len(truth) >= 2, f"채점자가 하나뿐이면 대조가 공허하다: {truth}"
 
+        matched = 0
         wrong: list[str] = []
         for name in PROSE:
             for grader, fp in truth.items():
                 for m in re.finditer(rf"^{grader}\s+\d+\s+(\d+)\s", _text(name), re.M):
+                    matched += 1
                     if m.group(1) != fp:
                         wrong.append(f"{grader}: {name} {m.group(1)} vs 생성물 {fp}")
+        # 🔴 산문 쪽 형식이 바뀌면 읽는 행이 0 이 되어 공허하게 통과한다 (독립 검토)
+        assert matched >= len(truth), (
+            f"산문에서 대조한 채점자 행이 {matched}개뿐이다 (생성물 {len(truth)}개) - "
+            "형식이 바뀌었다"
+        )
         assert not wrong, (
             "산문의 FP 수가 생성물과 다르다 - "
+            "`uv run codeproof report` 를 보고 고친다:\n  " + "\n  ".join(wrong)
+        )
+
+    def test_the_selection_table_repeats_the_headline_run(self) -> None:
+        """🔴 「룰 선택 손잡이」의 기본 선택 행은 헤드라인 표와 같은 실행이다 - FP 가 같아야 한다.
+
+        [실측 · 독립 검토] 그림이 쓰는 `spread_of` 가 채점자 이름을 `.get(…, 0)` 으로 꺼낼 때
+        이름이 어긋나면 표 · 그림이 「0 대 0 · 일치」가 됐는데 테스트 · `--check` 가 모두 통과했다.
+        """
+        generated = MEASUREMENTS.read_text(encoding="utf-8")
+        select = re.search(r"select=((?:[A-Z]+,)*[A-Z]+)", generated)  # 다음 인자는 소문자다
+        assert select, "생성물 머리에서 룰 선택을 못 읽었다"
+        headline = generated.split("## 채점 기준 편차", 1)[-1].split("\n## ", 1)[0]
+        fp = dict(re.findall(r"^\|\s*`(\w+)`\s*\|\s*\d+\s*\|\s*(\d+)\s*\|", headline, re.M))
+        row = re.search(
+            rf"^\|\s*`{re.escape(select[1])}`\s*\|\s*\d+\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|",
+            generated,
+            re.M,
+        )
+        assert row, f"「룰 선택 손잡이」에 `{select[1]}` 행이 없다"
+        assert (row[1], row[2]) == (fp["provable_safety"], fp["injected_defect"])
+
+    def test_rule_selection_numbers_match_the_generated_file(self) -> None:
+        """🔴 룰 선택 표와 「N 대 M」 인용이 생성물의 「룰 선택 손잡이」와 같아야 한다.
+
+        [실측] RESULTS 는 「표는 생성물에서 같은 계산으로 다시 나온다」고 적었지만 그것을 보는
+        검사가 없었다 - README 첫 화면의 「17 대 777 — 45.7배」도. 위의 대조는 코드 블록의
+        채점자 행만 읽는다.
+        """
+        row = (
+            r"^\|\s*`(?P<sel>[A-Z][A-Z,]*)`\s*\|\s*(?P<n>\d+)\s*\|\s*(?P<safe>\d+)\s*\|"
+            r"\s*(?P<inj>\d+)\s*\|\s*(?P<verdict>[^|\n]*?)\s*\|"
+        )
+        truth = {
+            m["sel"]: m.groupdict()
+            for m in re.finditer(row, MEASUREMENTS.read_text(encoding="utf-8"), re.M)
+        }
+        assert {"S", "ALL"} <= truth.keys(), f"생성물의 룰 선택 표를 못 읽었다: {sorted(truth)}"
+        verdicts = {(t["safe"], t["inj"]): t["verdict"] for t in truth.values()}
+
+        quoted = 0
+        wrong: list[str] = []
+        for name in PROSE:
+            text = _text(name).replace("**", "")
+            for m in re.finditer(row, text, re.M):
+                quoted += 1
+                if m.groupdict() != truth.get(m["sel"]):
+                    wrong.append(f"{name}: 표 {m.groupdict()} vs 생성물 {truth.get(m['sel'])}")
+            for m in re.finditer(r"(\d+) 대 (\d+)(?: — (\S+배))?", text):
+                quoted += 1
+                verdict = verdicts.get((m[1], m[2]))
+                if verdict is None or m[3] not in (None, verdict):
+                    wrong.append(f"{name}: 「{m[0]}」 - 생성물에 없는 조합이다")
+        assert quoted >= 3, f"대조한 인용이 {quoted}곳뿐이다 - 대조가 공허하다"
+        assert not wrong, (
+            "산문의 룰 선택 숫자가 생성물과 다르다 - "
+            "`uv run codeproof report` 를 보고 고친다:\n  " + "\n  ".join(wrong)
+        )
+
+    def test_pair_verdicts_match_the_generated_ladder(self) -> None:
+        """🔴 산문의 짝 판정 수가 생성물의 「짝 판정 사다리」와 같아야 한다.
+
+        [실측 · 독립 검토] 결과 3 의 표 · S 문장 · 결과 5 의 사다리는 손으로 옮긴 숫자였고, 바꿔도
+        산문 가드가 전부 통과했다. 읽는 꼴 셋 - 결과 3 표 행(`ALL` · slack 0), 「구별 성공 a · 과잉
+        b · 미탐지 c · 역전 d」(`S` · slack 0), `[매칭 민감도] … ruff SEL · GRADER` 코드 블록의 행.
+        """
+        rung = (
+            r"^\|\s*`(?P<sel>[A-Z]+)`\s*\|\s*`(?P<grader>\w+)`\s*\|\s*(?P<slack>\d+)\s*\|"
+            r"\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|"
+        )
+        truth = {
+            (m["sel"], m["grader"], int(m["slack"])): m.groups()[3:]
+            for m in re.finditer(rung, MEASUREMENTS.read_text(encoding="utf-8"), re.M)
+        }
+        assert ("ALL", "injected_defect", 10) in truth, "생성물의 짝 판정 사다리를 못 읽었다"
+
+        row = (
+            r"^\|\s*`(?P<grader>\w+)`[^|\n]*\|"
+            r"\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*$"
+        )
+        sentence = r"구별 성공 (\d+) · 과잉 (\d+) · 미탐지 (\d+) · 역전 (\d+)"
+        block = r"\[매칭 민감도\][^\n]*ruff (\w+) · (\w+)\]([^`]*)"
+        line = r"^\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s*$"
+        quoted = 0
+        wrong: list[str] = []
+        for name in PROSE:
+            text = _text(name).replace("**", "")
+            seen: list[tuple[tuple[str, str, int], tuple[str, ...]]] = [
+                (("ALL", m["grader"], 0), m.groups()[1:]) for m in re.finditer(row, text, re.M)
+            ]
+            seen += [
+                (("S", "provable_safety", 0), m.groups())
+                for m in re.finditer(sentence, text)
+            ]
+            for b in re.finditer(block, text):
+                sel, grader, body = b.groups()
+                seen += [
+                    ((sel, grader, int(m[1])), m.groups()[1:])
+                    for m in re.finditer(line, body, re.M)
+                ]
+            quoted += len(seen)
+            wrong += [f"{name}: {key} {got} vs 생성물 {truth.get(key)}"
+                      for key, got in seen if truth.get(key) != got]
+        assert quoted >= 6, f"대조한 인용이 {quoted}곳뿐이다 - 대조가 공허하다"
+        assert not wrong, (
+            "산문의 짝 판정 수가 생성물과 다르다 - "
             "`uv run codeproof report` 를 보고 고친다:\n  " + "\n  ".join(wrong)
         )
 
@@ -507,7 +622,7 @@ class TestCountedStructuresMatchTheCode:
 
 
 class TestMeasuredClaimsAreLabelled:
-    """🔴 실측값과 추정을 섞지 않는다 - jupiter 의 [실측] 규율과 같은 원칙."""
+    """🔴 실측값과 추정을 섞지 않는다 - 산문의 [실측] 표시 규율과 같은 원칙."""
 
     MARKERS = ("[실측]", "[소스", "실측", "목표")
 
@@ -551,3 +666,17 @@ class TestTheLandingPage:
         assert not re.findall(r'src="https?://', html)
         assert "<script" not in html
         assert not re.findall(r'<link[^>]+href="https?://', html)
+        # 손으로 쓰는 페이지에 가장 흔히 들어오는 바깥 자원 - 웹 폰트 (독립 검토)
+        assert "@import" not in html
+        assert not re.findall(r"url\(\s*['\"]?https?://", html)
+
+    def test_its_repository_links_point_at_files_that_exist(self) -> None:
+        """저장소 문서 링크(blob/main/…)는 바깥 주소라 위 검사가 보지 않는다.
+
+        문서 이름이 바뀌면 페이지 링크가 조용히 깨진다 (독립 검토).
+        """
+        html = self.PAGE.read_text(encoding="utf-8")
+        paths = re.findall(r"github\.com/manners-parkpro/codeproof-ai/blob/main/([^\"#]+)", html)
+        assert paths, "저장소 문서 링크가 하나도 없다 - 대조가 공허하다"
+        missing = [p for p in paths if not (ROOT / p).is_file()]
+        assert not missing, f"페이지가 없는 저장소 파일을 가리킨다: {missing}"

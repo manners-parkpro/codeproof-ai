@@ -24,6 +24,7 @@ from codeproof_ai.corpus.mutants import breaks, load_mutants, mutant_alias
 from codeproof_ai.domain.reviewer import ReviewerKind
 from codeproof_ai.eval.bait import BaitStatus, measure
 from codeproof_ai.eval.export import DOCSTRING_MODES, export_for_agent, sample_digest
+from codeproof_ai.eval.figures import BANNER as FIGURE_BANNER
 from codeproof_ai.eval.gate import RACE_RUNS, gate
 from codeproof_ai.eval.grading.corroboration import StaticCorroborationGrader
 from codeproof_ai.eval.grading.injected import InjectedDefectGrader
@@ -43,6 +44,7 @@ from codeproof_ai.eval.report import (
     RULE_SELECTIONS,
     SETUP_KEYS,
     AgentSection,
+    pair_ladder,
     render_figures,
     render_measurements,
     spread_of,
@@ -77,7 +79,7 @@ from codeproof_ai.reviewers.wrap import AnalyzerReviewer, ProviderReviewer
 from codeproof_ai.store.sqlite import ReproCheck, Store
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Sequence
+    from collections.abc import Callable, Mapping, Sequence
 
     from codeproof_ai.analysis.base import Analyzer
     from codeproof_ai.domain.reviewer import Reviewer
@@ -1345,12 +1347,38 @@ def _cmd_report(
     # 보조 ③ - twin 정답 구간을 넓힌 라벨. 에이전트 비교에서만 쓴다 (DESIGN §7.10c).
     widened = load_decoy_samples(corpus, widen_twin=True) if sections else []
     spreads = [spread_of(sel, r, graders) for sel, r in selections.items()]
-    body = render_measurements(run, samples, graders, sections, widened, selections=spreads)
+    # 짝 판정 사다리 - 측정값 문서의 표와 짝 그림이 같은 목록을 쓴다 (A2a)
+    ladder = pair_ladder(selections, samples)
+    body = render_measurements(
+        run, samples, graders, sections, widened, selections=spreads, ladder=ladder
+    )
     if out == "-" or not selections:
         return _emit_generated(body, out, check=check)
-    drawn = render_figures(selections, graders, samples, sections)
+    drawn = render_figures(selections, graders, samples, sections, ladder=ladder)
     outputs = {out: body, **{str(figures / name): svg for name, svg in drawn.items()}}
-    return max(_emit_generated(text, path, check=check) for path, text in outputs.items())
+    codes = [_emit_generated(text, path, check=check) for path, text in outputs.items()]
+    return max(*codes, _stale_figures(figures, drawn, check=check))
+
+
+def _stale_figures(figures: Path, drawn: Mapping[str, str], *, check: bool) -> int:
+    """🔴 더는 만들지 않는 그림을 남기지 않는다 - 남으면 문서가 옛 숫자를 계속 싣는다.
+
+    [실측] 에이전트 비교를 하지 않게 된 뒤에도 옛 agents.svg 가 남아 `--check` 가 통과했다.
+    생성물 표시(첫 줄)가 있는 그림만 본다 - `--figures` 가 가리키는 곳의 다른 그림은
+    건드리지 않는다.
+    """
+    stale = sorted(
+        p for p in figures.glob("*.svg")
+        if p.name not in drawn and p.read_text(encoding="utf-8").startswith(FIGURE_BANNER)
+    )
+    for p in stale:
+        if check:
+            print(f"{p} 는 더는 만들지 않는 그림이다 - `uv run codeproof report` 로 지운다",
+                  file=sys.stderr)
+        else:
+            p.unlink()
+            print(f"{p} 를 지웠다 - 더는 만들지 않는 그림이다")
+    return int(check and bool(stale))
 
 
 def _emit_generated(body: str, out: str, *, check: bool) -> int:

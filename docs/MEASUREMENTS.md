@@ -35,7 +35,7 @@
 
 ## 짝 채점 (PrimeVul) — `provable_safety`
 
-**구별 성공 1/150** — 안전한 쪽과 터지는 쪽을 갈라낸 경우다. 채점자는 `provable_safety` 다 — 구별 성공률은 (리뷰어 x 채점자)의 성질이라 같은 실행도 정의마다 다른 숫자가 나온다 (README 결과 3).
+**구별 성공 1/150** — 안전한 쪽과 터지는 쪽을 갈라낸 경우다. 채점자는 `provable_safety` 다 — 구별 성공률은 (리뷰어 x 채점자)의 성질이라 같은 실행도 정의마다 다른 숫자가 나온다 (docs/RESULTS.md 결과 3).
 
 | 판정 | 건수 | 뜻 |
 |---|---:|---|
@@ -45,6 +45,34 @@
 | P-R 역전 | 10 | **음성만** 지적 — 거꾸로다 |
 
 > 지적 단위로만 보면 이 사실이 보이지 않는다. twin 쪽만 세면 Precision 이 높게 나오는데, 그 TP 는 안전한 쪽에도 똑같이 낸 지적이 우연히 결함 자리에 걸린 것이다.
+
+## 짝 판정 사다리 — 채점 정의 x 룰 선택 x slack
+
+지적은 그대로 두고 **채점만** slack 을 바꿔 다시 했다 (A2a). 짝 그림의 막대는 slack 0 이다.
+
+| 룰 선택 | 채점 정의 | slack | P-C 구별 | P-V 과잉지적 | P-B 미탐지 | P-R 역전 |
+|---|---|---:|---:|---:|---:|---:|
+| `ALL` | `provable_safety` | 0 | 1 | 5 | 134 | 10 |
+| `ALL` | `provable_safety` | 2 | 3 | 7 | 132 | 8 |
+| `ALL` | `provable_safety` | 5 | 6 | 10 | 128 | 6 |
+| `ALL` | `provable_safety` | 10 | 7 | 14 | 127 | 2 |
+| `ALL` | `injected_defect` | 0 | 0 | 26 | 0 | 124 |
+| `ALL` | `injected_defect` | 2 | 0 | 109 | 0 | 41 |
+| `ALL` | `injected_defect` | 5 | 0 | 144 | 0 | 6 |
+| `ALL` | `injected_defect` | 10 | 0 | 150 | 0 | 0 |
+| `S` | `provable_safety` | 0 | 2 | 3 | 140 | 5 |
+| `S` | `provable_safety` | 2 | 2 | 5 | 140 | 3 |
+| `S` | `provable_safety` | 5 | 2 | 6 | 140 | 2 |
+| `S` | `provable_safety` | 10 | 2 | 7 | 140 | 1 |
+| `S` | `injected_defect` | 0 | 2 | 3 | 140 | 5 |
+| `S` | `injected_defect` | 2 | 2 | 5 | 140 | 3 |
+| `S` | `injected_defect` | 5 | 2 | 6 | 140 | 2 |
+| `S` | `injected_defect` | 10 | 2 | 7 | 140 | 1 |
+
+- o `provable_safety` · `ALL` — 사다리 전체에서 P-B 다. 안정.
+- 🔴 `injected_defect` · `ALL` — 가장 많은 판정이 slack 에 따라 P-R → P-V 로 바뀐다. 그 판정은 매칭 정책의 산물이다.
+- o `provable_safety` · `S` — 사다리 전체에서 P-B 다. 안정.
+- o `injected_defect` · `S` — 사다리 전체에서 P-B 다. 안정.
 
 ## 코퍼스 구성비 민감도
 
