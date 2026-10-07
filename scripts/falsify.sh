@@ -83,7 +83,8 @@ SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict conv
            xauthor-run-refused-resume xauthor-run-idle-cut scripts-typed xauthor-run-gate-output
            xauthor-run-gate-rc xauthor-run-timeout xauthor-run-kind-budget xauthor-run-interrupted
            xauthor-run-recheck xauthor-run-fix-gate xauthor-run-box-missing xauthor-box-help
-           xauthor-box-gate-doc xauthor-box-metadata)
+           xauthor-box-gate-doc xauthor-box-metadata xauthor-s2-accepted-briefs xauthor-s2-drop-kind
+           xauthor-s2-retry-briefs xauthor-s2-same-as xauthor-s2-window-cap)
 
 claim_layering() { echo "런타임(analysis)은 정답 라벨(eval)을 볼 수 없다 — A1"; }
 break_layering() {
@@ -900,6 +901,26 @@ guard_xauthor-box-gate-doc() { uv run pytest tests/scripts/test_xauthor.py -q -k
 claim_xauthor-box-metadata() { echo "상자용 wheel 은 README 를 METADATA 에 싣지 않는다 — README 에 가설이 적혀 있다 (§7.10d 2단계 전 보정)"; }
 break_xauthor-box-metadata() { perl -0pi -e 's/"--out-dir", str\(out\), str\(tree\)\]/"--out-dir", str(out)]/' "$_XA"; }
 guard_xauthor-box-metadata() { uv run pytest tests/scripts/test_xauthor.py -q -k long_description; }
+
+claim_xauthor-s2-accepted-briefs() { echo "2단계 쓰기 과제에는 받아들여진 쌍의 요약만 싣는다 — 버린 쌍은 주지 않는다 (§7.10d ⑩ (e))"; }
+break_xauthor-s2-accepted-briefs() { perl -0pi -e 's/    found = \(brief_of\(d\) for d in mine if outcome_of\(d\) == "accepted"\)/    found = (brief_of(d) for d in mine)/' "$_XR"; }
+guard_xauthor-s2-accepted-briefs() { uv run pytest tests/scripts/test_xauthor_run.py -q -k only_accepted_pairs; }
+
+claim_xauthor-s2-drop-kind() { echo "한 바퀴를 못 채운 분류는 이후 바퀴에서 쓰지 않는다 — 8쌍이 될 수 없는 분류에 크레딧을 쓴다 (§7.10d 2단계)"; }
+break_xauthor-s2-drop-kind() { perl -0pi -e 's/    return all\(/    return True or all(/' "$_XR"; }
+guard_xauthor-s2-drop-kind() { uv run pytest tests/scripts/test_xauthor_run.py -q -k kind_that_misses_a_round; }
+
+claim_xauthor-s2-retry-briefs() { echo "앞 쌍 요약은 재시도 과제에도 싣는다 — 시도마다 새 세션이라 없으면 같은 기전을 다시 쓴다 (§7.10d 2단계 시작 전 보정)"; }
+break_xauthor-s2-retry-briefs() { perl -0pi -e 's/        f"\{_prior_block\(prior\)\}\\n"\n//' "$_XR"; }
+guard_xauthor-s2-retry-briefs() { uv run pytest tests/scripts/test_xauthor_run.py -q -k every_attempt_carries; }
+
+claim_xauthor-s2-same-as() { echo "2단계는 실행을 가르는 항목이 1단계와 같아야 시작한다 — 「같은 방식으로」 (§7.10d 2단계)"; }
+break_xauthor-s2-same-as() { perl -0pi -e 's/    if diffs := \[k for k in SIGNED if prior\.get\(k\) != fields\[k\]\]:/    if diffs := []:/' "$_XR"; }
+guard_xauthor-s2-same-as() { uv run pytest tests/scripts/test_xauthor_run.py -q -k settings_that_differ; }
+
+claim_xauthor-s2-window-cap() { echo "2단계는 크레딧 창 스무 개를 넘게 쓰면 멈추고 묻는다 — 승인한 예산의 상한 (§7.10d 2단계 시작 전 보정)"; }
+break_xauthor-s2-window-cap() { perl -0pi -e 's/        if windows_used\(out\) > STAGE2_MAX_WINDOWS:/        if False:/' "$_XR"; }
+guard_xauthor-s2-window-cap() { uv run pytest tests/scripts/test_xauthor_run.py -q -k past_its_window_budget; }
 
 claim_xauthor-audit-schema() { echo "감사 exec 은 저자 exec 에 스키마 하나만 더한다 — 감사 카나리가 감사 인자 그대로를 본다 (§7.10d 상자)"; }
 break_xauthor-audit-schema() { perl -0pi -e 's/        args \+= \["--output-schema", str\(schema\)\]\n/        args += ["--output-schema", str(schema), "--skip-git-repo-check"]\n/' "$_XA"; }
