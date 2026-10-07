@@ -65,7 +65,9 @@ SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict conv
            ruff-target mypy-python mutant-weakening mutant-safe mutant-stale report-digests pack-records-digests
            proof-optimize pack-measured-code runner-measured-code
            pair-discovery mutant-alias template-kinds lint-exclude
-           gate-directions gate-survivor gate-neutral gate-prose gate-docstring gate-twin-docstring gate-plan)
+           gate-directions gate-survivor gate-neutral gate-prose gate-docstring gate-twin-docstring gate-plan
+           xauthor-login-shell xauthor-silent-probe xauthor-unrun xauthor-probe-collision xauthor-vacuous-loop
+           xauthor-input-roles xauthor-var-tmp xauthor-verbatim)
 
 claim_layering() { echo "런타임(analysis)은 정답 라벨(eval)을 볼 수 없다 — A1"; }
 break_layering() {
@@ -599,6 +601,40 @@ guard_gate-twin-docstring() { uv run pytest tests/eval/test_gate.py -q -k twin_a
 claim_gate-plan() { echo "관문은 분류가 정한 칸 밖의 가드 위치를 거부한다 — 이름만 그 분류인 쌍이다 (corpus/plan.py)"; }
 break_gate-plan() { perl -0pi -e 's/    if shape in cells:/    if True:  # falsify.sh/' "$_GATE"; }
 guard_gate-plan() { uv run pytest tests/eval/test_gate.py -q -k test_plan; }
+
+_XA=scripts/xauthor.py
+
+claim_xauthor-login-shell() { echo "저자 exec 는 로그인 셸을 끈다 — path_helper 가 venv 를 /usr/bin 뒤로 밀어 python3 가 시스템 판이 된다 (§7.10d 수집 전 수정 ⑤)"; }
+break_xauthor-login-shell() { perl -0pi -e 's/        "-c", "allow_login_shell=false",\n//' "$_XA"; }
+guard_xauthor-login-shell() { uv run pytest tests/scripts/test_xauthor.py -q -k login_shell; }
+
+claim_xauthor-silent-probe() { echo "점검표 항목이 아무것도 찍지 않으면 통과가 아니다 — 막힌 것과 안 돈 것이 같아 보인다 (§7.10d 상자)"; }
+break_xauthor-silent-probe() { perl -0pi -e 's/return "OK" if f"CANARY-OK-\{name\}" in lines and /return "OK" if /' "$_XA"; }
+guard_xauthor-silent-probe() { uv run pytest tests/scripts/test_xauthor.py -q -k "TestJudgeCheck or marker_in_the_command"; }
+
+claim_xauthor-unrun() { echo "카나리에서 시킨 명령이 보이지 않으면 「안 돌림」이다 — 건너뛰거나 고친 명령을 「막혔다」로 읽지 않는다 (§7.10d 상자)"; }
+break_xauthor-unrun() { perl -0pi -e 's/verdict_of\(name, out\) if mine else "안 돌림"/verdict_of(name, out) if mine else "OK"/' "$_XA"; }
+guard_xauthor-unrun() { uv run pytest tests/scripts/test_xauthor.py -q -k skipped_command; }
+
+claim_xauthor-probe-collision() { echo "카나리는 명령을 표지로도 가른다 — ls <홈> 은 ls <홈>/.codex 안에도 있어 남의 출력을 읽는다 (§7.10d 상자)"; }
+break_xauthor-probe-collision() { perl -0pi -e 's/ and marker\.search\(cmd\)/  # falsify.sh/' "$_XA"; }
+guard_xauthor-probe-collision() { uv run pytest tests/scripts/test_xauthor.py -q -k inside_another_command; }
+
+claim_xauthor-vacuous-loop() { echo "쓰기 가능 폴더를 하나도 시도하지 않은 점검은 성립하지 않는다 — 시도 0 은 「쓴 곳 없음」과 같아 보인다 (§7.10d 상자)"; }
+break_xauthor-vacuous-loop() { perl -0pi -e 's/ and w == 0 and n > 0/ and w == 0/' "$_XA"; }
+guard_xauthor-vacuous-loop() { uv run pytest tests/scripts/test_xauthor.py -q -k "tried-nothing or loop-did-not-run"; }
+
+claim_xauthor-input-roles() { echo "카나리는 developer 입력의 흔적도 센다 — 기억 · 지시 파일은 그 자리로 들어온다 (§7.10d 상자)"; }
+break_xauthor-input-roles() { perl -0pi -e 's/\("developer", "user", "system"\)/("user", "system")/' "$_XA"; }
+guard_xauthor-input-roles() { uv run pytest tests/scripts/test_xauthor.py -q -k developer_input; }
+
+claim_xauthor-var-tmp() { echo "프로필은 /private/var/tmp 를 막는다 — 빼면 그곳만 쓰기 · 읽기가 됐다 (§7.10d 상자)"; }
+break_xauthor-var-tmp() { perl -0pi -e 's/\x27"\/private\/var\/tmp"="none"\}\x27/\x27}\x27/' "$_XA"; }
+guard_xauthor-var-tmp() { uv run pytest tests/scripts/test_xauthor.py -q -k declared_allowlist; }
+
+claim_xauthor-verbatim() { echo "점검표에는 따옴표 · \$ 가 없다 — codex 가 그대로 보고하는 것을 본 모양은 홑따옴표로 감싼 명령뿐이다 (§7.10d 상자)"; }
+break_xauthor-verbatim() { perl -0pi -e 's/\("BOX-WRITE", "touch probe\.txt", True\)/("BOX-WRITE", "touch \$TMPDIR\/probe.txt", True)/' "$_XA"; }
+guard_xauthor-verbatim() { uv run pytest tests/scripts/test_xauthor.py -q -k no_quotes; }
 
 # ── 하네스 ─────────────────────────────────────────────────────────────────
 
