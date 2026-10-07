@@ -90,6 +90,12 @@ class TestTheBox:
         args = xa.exec_args(BOX, VENV, "p", tmp_path / "last.txt", ephemeral=True)
         assert args[args.index("allow_login_shell=false") - 1] == "-c"
 
+    def test_no_sandbox_flag_overrides_the_profile(self, tmp_path: Path) -> None:
+        """🔴 `--sandbox` 를 주면 프로필 대신 옛 workspace-write 가 걸린다 (수집 전 수정 ⑥)."""
+        args = xa.exec_args(BOX, VENV, "p", tmp_path / "last.txt", ephemeral=True)
+        assert not {"--sandbox", "-s"} & set(args)
+        assert args[args.index('default_permissions="box"') - 1] == "-c"
+
 
 class TestProbes:
     def test_it_checks_both_directions(self) -> None:
@@ -215,6 +221,21 @@ class TestModelInputTraces:
             self._message("assistant", "codeproof"),
         ])
         assert not any(xa.model_input_traces(rollout, nonce).values())
+
+    def test_the_inventory_lists_input_outside_our_prompt(self, tmp_path: Path) -> None:
+        """선언 「상자」 행 - 카나리 지시 밖의 입력을 경로를 가려 한 줄씩 싣는다."""
+        nonce = "xauthor-canary-1"
+        rollout = self._rollout(tmp_path / "r.jsonl", [
+            {"type": "turn_context", "payload": {"cwd": "/Users/Shared/xauthor-box-test"}},
+            self._message("developer", "sandbox notes"),
+            self._message("user", f"{nonce} commands"),
+            self._message("assistant", "DONE"),
+        ])
+        lines = xa.input_inventory(rollout, nonce, {str(BOX): "<box>"})
+        assert len(lines) == 2
+        assert lines[0].startswith("turn_context") and "<box>" in lines[0]
+        assert str(BOX) not in lines[0]
+        assert lines[1].startswith("developer")
 
     def test_a_trace_in_developer_input_counts(self, tmp_path: Path) -> None:
         rollout = self._rollout(tmp_path / "r.jsonl", [

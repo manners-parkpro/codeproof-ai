@@ -62,10 +62,12 @@ def exec_args(box: Path, venv: Path, prompt: str, last: Path, *, ephemeral: bool
 
     로그인 셸을 끈다 (수집 전 수정 ⑤) - codex 는 명령을 `zsh -lc` 로 돌리고 [실측 · 원본 426건],
     로그인 셸의 path_helper 가 venv 를 /usr/bin 뒤로 밀어 `python3` 가 시스템 판이 된다 [실측].
+    🔴 `--sandbox` 를 주지 않는다 (수집 전 수정 ⑥) - 주면 프로필 대신 옛 workspace-write 가 걸린다
+    [실측: 머리말 `[workdir, /tmp, $TMPDIR]` · 빼면 `[workdir]`]. 오류도 경고도 없다.
     """
     args = [
         str(CODEX), "exec", "--ignore-user-config", "--ignore-rules", "--skip-git-repo-check",
-        "--sandbox", "workspace-write", "--color", "never", "-C", str(box),
+        "--color", "never", "-C", str(box),
         "-m", MODEL, "-c", f'model_reasoning_effort="{EFFORT}"', "-c", 'approval_policy="never"',
         "-c", "allow_login_shell=false",
         "-c", 'default_permissions="box"', "-c", f"permissions.box.filesystem={profile(venv)}",
@@ -311,14 +313,12 @@ def _rollout(nonce: str, since: float) -> Path | None:
     return None
 
 
-def model_input_traces(rollout: Path, nonce: str) -> dict[str, int]:
-    """모델이 받은 입력 중 우리 지시(표지가 든 메시지) 밖에 이 저장소의 흔적이 몇 번 있는가.
+def _inputs(rollout: Path) -> list[tuple[str, str]]:
+    """모델이 받은 입력 - (종류, 내용). session_meta · turn_context · developer/user/system 메시지.
 
-    입력은 session_meta · turn_context · developer/user/system 메시지다. 도구 출력은 우리
-    명령의 결과라 뺀다 (막힌 경로를 적은 오류문에 저장소 이름이 들어간다).
+    도구 출력은 우리 명령의 결과라 뺀다 (막힌 경로를 적은 오류문에 저장소 이름이 들어간다).
     """
-    words = ("codeproof", "decoy", "twin", "memor")
-    counts = dict.fromkeys(words, 0)
+    found = []
     for raw in rollout.read_text(encoding="utf-8", errors="replace").split("\n"):
         try:
             rec = json.loads(raw)
@@ -328,16 +328,40 @@ def model_input_traces(rollout: Path, nonce: str) -> dict[str, int]:
             continue
         kind = rec.get("type")
         payload = rec.get("payload") if isinstance(rec.get("payload"), dict) else {}
-        is_input = kind in ("session_meta", "turn_context") or (
+        role = payload.get("role")
+        if kind in ("session_meta", "turn_context"):
+            found.append((str(kind), json.dumps(payload, ensure_ascii=False)))
+        elif (
             kind == "response_item"
             and payload.get("type") == "message"
-            and payload.get("role") in ("developer", "user", "system")
-        )
-        text = json.dumps(payload, ensure_ascii=False).lower()
-        if not is_input or nonce in text:
+            and role in ("developer", "user", "system")
+        ):
+            found.append((str(role), json.dumps(payload, ensure_ascii=False)))
+    return found
+
+
+def input_inventory(rollout: Path, nonce: str, hide: dict[str, str]) -> list[str]:
+    """카나리 지시 밖의 입력마다 한 줄 - 경로를 가려 공개 요약에 싣는다 (선언 「상자」 행)."""
+    lines = []
+    for kind, text in _inputs(rollout):
+        if nonce in text:
+            continue
+        shown = text
+        for real, mask in hide.items():
+            shown = shown.replace(real, mask)
+        lines.append(f"{kind} ({len(shown)}자): {shown[:160]}")
+    return lines
+
+
+def model_input_traces(rollout: Path, nonce: str) -> dict[str, int]:
+    """모델이 받은 입력 중 우리 지시(표지가 든 메시지) 밖에 이 저장소의 흔적이 몇 번 있는가."""
+    words = ("codeproof", "decoy", "twin", "memor")
+    counts = dict.fromkeys(words, 0)
+    for _kind, text in _inputs(rollout):
+        if nonce in text:
             continue
         for w in words:
-            counts[w] += text.count(w)
+            counts[w] += text.lower().count(w)
     return counts
 
 
@@ -350,7 +374,7 @@ def canary(out: Path) -> int:
     before = {p for p in OUTSIDE if p.exists()}
     with tempfile.TemporaryDirectory() as build:
         box, venv = make_box("canary", wheel=build_wheel(Path(build)))
-    rc, verdict, rollout, traces = -1, {}, None, None
+    rc, verdict, rollout, traces, inventory = -1, {}, None, None, []
     try:
         seed_gate_pair(box)
         table = probes(box, venv)
@@ -368,14 +392,17 @@ def canary(out: Path) -> int:
             ).returncode
         verdict = judge_canary(out / "canary.jsonl", table)
         rollout = _rollout(nonce, started - 5)
-        traces = model_input_traces(rollout, nonce) if rollout else None
+        if rollout:
+            traces = model_input_traces(rollout, nonce)
+            hide = {str(box): "<box>", str(venv): "<venv>", str(Path.home()): "~"}
+            inventory = input_inventory(rollout, nonce, hide)
     finally:
         remove(box, venv)
         _remove_outside(before)
     home = str(Path.home())
     summary = {
         "codex": CODEX_VERSION, "model": MODEL, "effort": EFFORT, "rc": rc,
-        "verdict": verdict, "model_input_traces": traces,
+        "verdict": verdict, "model_input_traces": traces, "model_input": inventory,
         "rollout": str(rollout).replace(home, "~") if rollout else None,
     }
     text = json.dumps(summary, ensure_ascii=False, indent=2) + "\n"

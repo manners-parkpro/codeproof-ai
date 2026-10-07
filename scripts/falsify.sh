@@ -67,7 +67,7 @@ SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict conv
            pair-discovery mutant-alias template-kinds lint-exclude
            gate-directions gate-survivor gate-neutral gate-prose gate-docstring gate-twin-docstring gate-plan
            xauthor-login-shell xauthor-silent-probe xauthor-unrun xauthor-probe-collision xauthor-vacuous-loop
-           xauthor-input-roles xauthor-var-tmp xauthor-verbatim)
+           xauthor-input-roles xauthor-var-tmp xauthor-verbatim xauthor-sandbox-flag)
 
 claim_layering() { echo "런타임(analysis)은 정답 라벨(eval)을 볼 수 없다 — A1"; }
 break_layering() {
@@ -635,6 +635,10 @@ guard_xauthor-var-tmp() { uv run pytest tests/scripts/test_xauthor.py -q -k decl
 claim_xauthor-verbatim() { echo "점검표에는 따옴표 · \$ 가 없다 — codex 가 그대로 보고하는 것을 본 모양은 홑따옴표로 감싼 명령뿐이다 (§7.10d 상자)"; }
 break_xauthor-verbatim() { perl -0pi -e 's/\("BOX-WRITE", "touch probe\.txt", True\)/("BOX-WRITE", "touch \$TMPDIR\/probe.txt", True)/' "$_XA"; }
 guard_xauthor-verbatim() { uv run pytest tests/scripts/test_xauthor.py -q -k no_quotes; }
+
+claim_xauthor-sandbox-flag() { echo "저자 exec 에 --sandbox 를 주지 않는다 — 주면 프로필 대신 옛 workspace-write 가 조용히 걸린다 (§7.10d 수집 전 수정 ⑥)"; }
+break_xauthor-sandbox-flag() { perl -0pi -e 's/        "--color", "never", "-C", str\(box\),/        "--sandbox", "workspace-write", "--color", "never", "-C", str(box),/' "$_XA"; }
+guard_xauthor-sandbox-flag() { uv run pytest tests/scripts/test_xauthor.py -q -k sandbox_flag; }
 
 # ── 하네스 ─────────────────────────────────────────────────────────────────
 
