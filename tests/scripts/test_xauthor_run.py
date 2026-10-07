@@ -11,7 +11,7 @@ import importlib.util
 import json
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
@@ -278,3 +278,124 @@ class TestSummary:
         assert s["totals"]["audit"]["sessions"] == 1
         assert [r["attempts"] for r in s["pairs"]] == [1, 3, 1]
         assert s["pairs"][2]["outcome"] == "진행 중"
+
+
+# ── 흐름 - 가짜 codex 로 세션 → 관문 → 감사 → 재현 → 마무리를 돈다 (유료 호출 없음) ──────────────
+
+FAKE_CODEX = r'''#!/usr/bin/env python3
+"""가짜 codex - exec 은 쌍을 복사하거나 감사 답을 쓰고, sandbox 는 명령을 그대로 돈다."""
+import json, re, shutil, subprocess, sys
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+conf_path = HERE / "fake.json"
+conf = json.loads(conf_path.read_text())
+args = sys.argv[1:]
+if args[:1] == ["sandbox"]:
+    cmd = args[args.index("--") + 1:]
+    sys.exit(subprocess.run(cmd, cwd=args[args.index("-C") + 1]).returncode)
+box, last, prompt = Path(args[args.index("-C") + 1]), Path(args[args.index("-o") + 1]), args[-1]
+n = conf["calls"]
+conf["calls"] = n + 1
+if conf.get("cut_at") == n:
+    conf_path.write_text(json.dumps(conf))
+    (box / "stray.txt").write_text("half-written")
+    print(json.dumps({"type": "error", "message": "Your workspace is out of credits."}))
+    sys.exit(1)
+if "--output-schema" in args:
+    last.write_text(json.dumps({"findings": conf["audits"].pop(0) if conf["audits"] else []}))
+else:
+    pid = re.search(r"쌍 식별자: `(XC\d{3})`", prompt)[1]
+    dest = box / "corpus" / f"{pid}-fake"
+    if not dest.exists():
+        shutil.copytree(conf["source"], dest, ignore=shutil.ignore_patterns("__pycache__"))
+        meta = dest / "meta.toml"
+        text = re.sub(r'decoy_id = ".*"', f'decoy_id = "{dest.name}"', meta.read_text())
+        if conf.get("wrong_kind"):
+            text = re.sub(r'trap_kind = ".*"', 'trap_kind = "bounded_input"', text)
+        meta.write_text(text)
+    if "감사가 재현한 문제" in prompt:
+        (box / "response.md").write_text("1. 고쳤다")
+    last.write_text(dest.name)
+conf_path.write_text(json.dumps(conf))
+print(json.dumps({"type": "thread.started"}))
+usage = {"input_tokens": 100, "cached_input_tokens": 40}
+print(json.dumps({"type": "turn.completed", "usage": usage}))
+'''
+GATE_PAIR = next((SCRIPT.parents[1] / "corpus" / "decoys").glob("D115-*"))
+GATE_KIND = "unreachable_branch"
+
+
+class TestFlowWithAFakeCodex:
+    """판정이 맞아도 흐름이 틀리면 첫 유료 세션 뒤에 드러난다 - 가짜 codex 로 먼저 돈다."""
+
+    @pytest.fixture
+    def pair(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
+        fake = tmp_path / "codex"
+        fake.write_text(FAKE_CODEX, encoding="utf-8")
+        fake.chmod(0o755)
+        monkeypatch.setattr(xr.xa, "CODEX", fake)
+        monkeypatch.setattr(xr.xa, "SHARED", tmp_path / "shared")
+        (tmp_path / "shared").mkdir()
+        out = tmp_path / "out"
+        (out / "XC001").mkdir(parents=True)
+        (out / "XC001" / "pair.json").write_text(json.dumps({"kind": GATE_KIND}), encoding="utf-8")
+        venv = Path(sys.executable).parent.parent  # 저장소의 .venv - 진짜 관문을 돈다
+        return xr.Pair(out=out, kind=GATE_KIND, pid="XC001", venv=venv)
+
+    @staticmethod
+    def _configure(p: Any, **conf: object) -> None:
+        body = {"calls": 0, "source": str(GATE_PAIR), "audits": [], **conf}
+        (p.out.parent / "fake.json").write_text(json.dumps(body), encoding="utf-8")
+
+    @staticmethod
+    def _finding(stdout_word: str) -> dict[str, str]:
+        return {**FINDING, "repro": f"print({stdout_word!r})"}
+
+    def test_a_pair_the_audit_cannot_break_is_accepted(self, pair: Any) -> None:
+        self._configure(pair, audits=[[self._finding("NOT REPRODUCED")]])
+        xr.run_pair(pair)
+        outcome = json.loads((pair.d / "outcome.json").read_text(encoding="utf-8"))
+        assert outcome["outcome"] == "accepted"
+        assert sorted(p.name for p in (pair.d / "final" / "XC001-fake").iterdir()) == sorted(
+            xr.PAIR_FILES
+        )
+        assert not pair.box.exists() and not pair.snap.exists()
+        assert not (pair.d / "fix.json").exists()
+        repro = json.loads((pair.d / "audit.repro.json").read_text(encoding="utf-8"))
+        assert [f["reproduced"] for f in repro] == [False]
+
+    def test_a_reproduced_problem_goes_through_fix_and_recheck(self, pair: Any) -> None:
+        self._configure(pair, audits=[[self._finding("REPRODUCED")], []])
+        xr.run_pair(pair)
+        assert json.loads((pair.d / "outcome.json").read_text(encoding="utf-8"))["outcome"] == (
+            "accepted"
+        )
+        assert "감사가 재현한 문제" in (pair.d / "fix.prompt.txt").read_text(encoding="utf-8")
+        assert (pair.d / "recheck.json").exists()
+        assert (pair.d / "response.md").exists()
+
+    def test_a_credit_cut_is_not_counted_and_the_run_resumes(self, pair: Any) -> None:
+        self._configure(pair, cut_at=0, audits=[[]])
+        with pytest.raises(xr.Stop) as stop:
+            xr.run_pair(pair)
+        assert stop.value.rc == xr.CUT
+        reason = (pair.d / "cut" / "01-write-1.reason").read_text(encoding="utf-8")
+        assert reason.strip() == "credits"
+        assert not (pair.box / "stray.txt").exists()
+        assert not list((pair.box / "corpus").glob("XC001-*"))
+        xr.run_pair(pair)
+        s = xr.summarize(pair.out)
+        assert s["pairs"][0]["outcome"] == "accepted"
+        assert s["pairs"][0]["attempts"] == 1
+        assert s["pairs"][0]["not_counted"] == ["credits"]
+        assert s["windows_used"] == 2
+
+    def test_a_wrong_kind_fails_the_gate_three_times(self, pair: Any) -> None:
+        self._configure(pair, wrong_kind=True)
+        xr.run_pair(pair)
+        outcome = json.loads((pair.d / "outcome.json").read_text(encoding="utf-8"))
+        assert outcome["outcome"] == "failed"
+        assert [(pair.d / f"gate-{a}.json").exists() for a in (1, 2, 3)] == [True] * 3
+        retry = (pair.d / "write-2.prompt.txt").read_text(encoding="utf-8")
+        assert "trap_kind 는 unreachable_branch 여야 한다" in retry

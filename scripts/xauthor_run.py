@@ -232,8 +232,8 @@ def task_write(pid: str, kind: str, attempt: int, gate_out: str | None) -> str:
 
 def task_fix(pid: str, kind: str, problems: list[dict[str, Any]]) -> str:
     parts = [
-        "## 이번 과제 — 감사가 재현한 문제\n\n"
-        f"쌍 `{pid}` (분류 `{kind}`)은 관문을 넘었다. 다른 문맥의 감사가 아래 문제를 냈고, "
+        f"## 이번 과제 — 감사가 재현한 문제\n\n{_task_head(pid, kind)}\n"
+        "이 쌍은 관문을 넘었다. 다른 문맥의 감사가 아래 문제를 냈고, "
         "하네스가 재현 스크립트를 같은 권한 아래서 돌려 재현됐다.\n"
         "이 세션 안에 문제마다 하나를 한다 — "
         "고친다 · 주장을 좁힌다 · 위협 모델 밖이라는 이유를 적는다. "
