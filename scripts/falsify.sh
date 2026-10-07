@@ -79,7 +79,9 @@ SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict conv
            xauthor-inventory-ids xauthor-builtin-instructions xauthor-pair-leak xauthor-pair-leak-readme
            xauthor-run-credit xauthor-run-repro xauthor-run-kind xauthor-run-budget xauthor-run-frozen
            xauthor-run-restore xauthor-audit-schema xauthor-run-refused xauthor-run-refused-kind
-           xauthor-run-refused-resume xauthor-run-idle-cut scripts-typed)
+           xauthor-run-refused-resume xauthor-run-idle-cut scripts-typed xauthor-run-gate-output
+           xauthor-run-gate-rc xauthor-run-timeout xauthor-run-kind-budget xauthor-run-interrupted
+           xauthor-run-recheck xauthor-run-fix-gate xauthor-run-box-missing)
 
 claim_layering() { echo "런타임(analysis)은 정답 라벨(eval)을 볼 수 없다 — A1"; }
 break_layering() {
@@ -833,6 +835,38 @@ guard_xauthor-run-idle-cut() { uv run pytest tests/scripts/test_xauthor_run.py -
 claim_scripts-typed() { echo "scripts/ 도 타입 검사를 받는다 — 빠지면 외부 출력을 읽는 실행기의 None · 비목록 경로가 조용히 산다"; }
 break_scripts-typed() { perl -0pi -e 's/def windows_used\(out: Path\) -> int:/def windows_used(out: Path) -> str:/' "$_XR"; }
 guard_scripts-typed() { uv run mypy; }
+
+claim_xauthor-run-gate-output() { echo "관문은 검사 출력이 끝까지 찍혀야 통과다 — 종료 코드만 보면 쌍의 코드가 SystemExit(0) 으로 끝낸 관문이 통과한다 (§7.10d 관문)"; }
+break_xauthor-run-gate-output() { perl -0pi -e 's/            elif rc == 0 and not gate_output_ok\(stdout\):/            elif False:/' "$_XR"; }
+guard_xauthor-run-gate-output() { uv run pytest tests/scripts/test_xauthor_run.py -q -k ends_the_gate_early; }
+
+claim_xauthor-run-gate-rc() { echo "관문이 실패한 시도는 실패다 — rc 를 안 보면 관문을 못 넘은 쌍이 감사로 간다 (§7.10d 「시도 · 렌즈」)"; }
+break_xauthor-run-gate-rc() { perl -0pi -e 's/_json\(record, \{"pass": not problems and rc == 0,/_json(record, {"pass": not problems,/' "$_XR"; }
+guard_xauthor-run-gate-rc() { uv run pytest tests/scripts/test_xauthor_run.py -q -k failing_the_gate_three_times; }
+
+claim_xauthor-run-timeout() { echo "시간 상한으로 끊긴 세션은 시도로 센다 — 크레딧 끊김처럼 되돌리면 공짜 재시도가 된다 (§7.10d 「시도 · 렌즈」)"; }
+break_xauthor-run-timeout() { perl -0pi -e 's/    if s\.cut:\n/    if s.cut or s.timed_out:\n/' "$_XR"; }
+guard_xauthor-run-timeout() { uv run pytest tests/scripts/test_xauthor_run.py -q -k time_limit; }
+
+claim_xauthor-run-kind-budget() { echo "분류마다 실패한 쌍은 넷까지다 — 넘기면 한 분류에 크레딧을 쏟는다 (§7.10d 「시도 · 렌즈」)"; }
+break_xauthor-run-kind-budget() { perl -0pi -e 's/outcomes\.count\("failed"\) >= FAILED_PER_KIND/outcomes.count("failed") > FAILED_PER_KIND/' "$_XR"; }
+guard_xauthor-run-kind-budget() { uv run pytest tests/scripts/test_xauthor_run.py -q -k four_failed; }
+
+claim_xauthor-run-interrupted() { echo "하네스가 중단한 세션은 세지 않고 그 전 상자로 다시 돈다 — 안 되돌리면 반쯤 쓴 파일 위에서 다시 쓴다 (§7.10d ⑩ (c))"; }
+break_xauthor-run-interrupted() { perl -0pi -e 's/        abandon\(d, step, "interrupted", box, snap\)\n//' "$_XR"; }
+guard_xauthor-run-interrupted() { uv run pytest tests/scripts/test_xauthor_run.py -q -k interrupted_session; }
+
+claim_xauthor-run-recheck() { echo "재확인에서 재현되는 문제가 남으면 그 쌍은 실패다 (§7.10d 「시도 · 렌즈」)"; }
+break_xauthor-run-recheck() { perl -0pi -e 's/    elif audit\(p, "recheck"\):/    elif False:/' "$_XR"; }
+guard_xauthor-run-recheck() { uv run pytest tests/scripts/test_xauthor_run.py -q -k left_at_the_recheck; }
+
+claim_xauthor-run-fix-gate() { echo "고친 뒤 관문을 넘지 못하면 그 쌍은 실패다 (§7.10d 「시도 · 렌즈」)"; }
+break_xauthor-run-fix-gate() { perl -0pi -e 's/    if not gate\(p, "gate-fix"\):/    if not gate(p, "gate-fix") and False:/' "$_XR"; }
+guard_xauthor-run-fix-gate() { uv run pytest tests/scripts/test_xauthor_run.py -q -k breaks_the_gate; }
+
+claim_xauthor-run-box-missing() { echo "쓴 기록이 있는데 상자가 없으면 사람을 부른다 — 새 상자로 이어 쓰면 앞 시도를 잃는다 (rc 4)"; }
+break_xauthor-run-box-missing() { perl -0pi -e 's/            raise Stop\(HUMAN, f"\{p\.pid\} 의 상자가 없다 - \{p\.box\}"\)/            pass/' "$_XR"; }
+guard_xauthor-run-box-missing() { uv run pytest tests/scripts/test_xauthor_run.py -q -k missing_box; }
 
 claim_xauthor-audit-schema() { echo "감사 exec 은 저자 exec 에 스키마 하나만 더한다 — 감사 카나리가 감사 인자 그대로를 본다 (§7.10d 상자)"; }
 break_xauthor-audit-schema() { perl -0pi -e 's/        args \+= \["--output-schema", str\(schema\)\]\n/        args += ["--output-schema", str(schema), "--skip-git-repo-check"]\n/' "$_XA"; }
