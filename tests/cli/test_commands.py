@@ -420,6 +420,18 @@ class TestDecoyCommands:
         assert main(["decoy", "mutants", "D115", "--race-runs", "0"]) == 0
         assert "기대와 다름 0" in capsys.readouterr().out
 
+    def test_mutants_refuses_a_prefix_that_matches_no_pair(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """없는 접두사를 「변이 0개 · 기대와 다름 0」 으로 통과시키지 않는다.
+
+        하나만 틀려도 거절한다 - 맞는 쌍만 돌고 끝나면 오타가 조용히 빠진다 (독립 검토).
+        """
+        assert main(["decoy", "mutants", "D115", "NOPE999", "--race-runs", "0"]) == 2
+        assert "없는 쌍: NOPE999" in capsys.readouterr().err
+        assert main(["decoy", "gate", "NOPE999"]) == 2
+        assert "없는 쌍: NOPE999" in capsys.readouterr().err
+
     def test_mutants_fails_when_a_weakening_survives(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:

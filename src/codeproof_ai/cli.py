@@ -118,7 +118,7 @@ def _add_decoy_parsers(sub: argparse._SubParsersAction[argparse.ArgumentParser])
         default=30,
         help="경쟁 변이를 몇 번 돌릴지 (0 이면 건너뛴다) - 약화는 매번 깨져야 한다",
     )
-    dmu.add_argument("pairs", nargs="*", help="쌍 접두사 (예: XC001) - 없으면 전부")
+    dmu.add_argument("pairs", nargs="*", help="쌍 접두사 (폴더 이름의 앞부분) - 없으면 전부")
 
     dg = decoy_sub.add_parser(
         "gate", help="codex 가 쓴 쌍의 관문 - 기계로 보는 것만 (DESIGN §7.10d)"
@@ -382,9 +382,8 @@ def _cmd_decoy_gate(corpus: Path, race_runs: int, prefixes: Sequence[str]) -> in
     if race_runs < 1:
         print("--race-runs 는 1 이상이다 - 관문은 경쟁 약화를 건너뛰지 않는다", file=sys.stderr)
         return 2
-    pairs = [d for d in pair_dirs(corpus) if not prefixes or d.name.split("-")[0] in prefixes]
-    if not pairs:
-        print(f"쌍이 없다: {corpus}", file=sys.stderr)
+    pairs = _pick_pairs(corpus, prefixes)
+    if pairs is None:
         return 2
     failed = 0
     with tempfile.TemporaryDirectory(prefix="codeproof-gate-") as tmp:
@@ -398,6 +397,23 @@ def _cmd_decoy_gate(corpus: Path, race_runs: int, prefixes: Sequence[str]) -> in
     return 1 if failed else 0
 
 
+def _pick_pairs(corpus: Path, prefixes: Sequence[str]) -> list[Path] | None:
+    """접두사로 쌍을 고른다 - 없는 접두사가 있거나 고른 쌍이 없으면 알리고 None.
+
+    🔴 맞는 쌍이 0개인데 「변이 0개 · 기대와 다름 0」 으로 통과하면 공허하다 (독립 검토).
+    """
+    dirs = pair_dirs(corpus)
+    names = {d.name.split("-")[0] for d in dirs}
+    if unknown := [p for p in prefixes if p not in names]:
+        print(f"없는 쌍: {' '.join(unknown)} ({corpus})", file=sys.stderr)
+        return None
+    pairs = [d for d in dirs if not prefixes or d.name.split("-")[0] in prefixes]
+    if not pairs:
+        print(f"쌍이 없다: {corpus}", file=sys.stderr)
+        return None
+    return pairs
+
+
 def _cmd_decoy_mutants(corpus: Path, race_runs: int, prefixes: Sequence[str]) -> int:
     """쌍의 mutants.py 를 돌린다 - 결정적 변이는 한 번, 경쟁 변이(RACY)는 race_runs 번.
 
@@ -407,7 +423,9 @@ def _cmd_decoy_mutants(corpus: Path, race_runs: int, prefixes: Sequence[str]) ->
     if race_runs < 0:
         print("--race-runs 는 0 이상이다", file=sys.stderr)
         return 2
-    pairs = [d for d in pair_dirs(corpus) if not prefixes or d.name.split("-")[0] in prefixes]
+    pairs = _pick_pairs(corpus, prefixes)
+    if pairs is None:
+        return 2
     wrong: list[str] = []
     counted = 0
     with tempfile.TemporaryDirectory(prefix="codeproof-mutants-") as tmp:

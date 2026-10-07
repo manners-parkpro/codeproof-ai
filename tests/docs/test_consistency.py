@@ -670,6 +670,18 @@ class TestTheLandingPage:
         assert "@import" not in html
         assert not re.findall(r"url\(\s*['\"]?https?://", html)
 
+    def test_its_prose_quotes_no_numbers(self) -> None:
+        """숫자는 그림(생성물)이 든다.
+
+        손으로 쓴 문장 · 캡션의 숫자는 코퍼스가 바뀌면 조용히 낡는다 (누락 점검).
+        """
+        page = self.PAGE.read_text(encoding="utf-8")
+        html = re.sub(r"<(style|pre|code)\b.*?</\1>", "", page, flags=re.S)
+        texts = re.findall(r"<(p|li|figcaption|h[1-6])\b[^>]*>(.*?)</\1>", html, re.S)
+        assert len(texts) >= 5, "본문을 못 읽었다 - 대조가 공허하다"
+        quoted = [t for _, t in texts if re.search(r"\d", re.sub(r"<[^>]+>", "", t))]
+        assert not quoted, f"페이지 문장에 숫자가 있다: {quoted}"
+
     def test_its_repository_links_point_at_files_that_exist(self) -> None:
         """저장소 문서 링크(blob/main/…)는 바깥 주소라 위 검사가 보지 않는다.
 

@@ -50,7 +50,7 @@ PASS=0; FAIL=0; FAILED_NAMES=()
 #   break_X   그 불변식을 깨는 최소 변경
 #   guard_X   가드. 깨끗한 트리에서 **통과**하고 깨뜨린 뒤 **실패**해야 한다.
 
-SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict convention docs-tree docs-results-prose selection-headline selection-table selection-repeats fp-counts-floor pair-table pair-sentence pair-block generated figures-generated figures-beside stale-figure out-dash pairs-ladder-label pair-ladder-note agents-points landing-page landing-css landing-blob
+SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict convention docs-tree docs-results-prose selection-headline selection-table selection-repeats fp-counts-floor pair-table pair-sentence pair-block generated figures-generated figures-beside stale-figure out-dash pairs-ladder-label pair-ladder-note agents-points landing-page landing-css landing-blob landing-numbers mutants-unknown
            agent-contract span-match llm-symbol import-format import-manifest import-rejected
            signed-runner pack-first-runs bundle-separators pair-difference model-pin
            docstring-neutral signed-docstrings resume-docstrings runner-docstrings compare-one-axis
@@ -266,6 +266,14 @@ guard_landing-css() { uv run pytest tests/docs/test_consistency.py -q -k 'TheLan
 claim_landing-blob() { echo "첫 페이지의 저장소 문서 링크가 없는 파일을 가리키면 운다 — 이름이 바뀌어도 조용히 깨지지 않게"; }
 break_landing-blob() { perl -0pi -e 's/blob\/main\/docs\/VERIFY\.md/blob\/main\/docs\/VERIFY-gone.md/' docs/index.html; }
 guard_landing-blob() { uv run pytest tests/docs/test_consistency.py -q -k repository_links; }
+
+claim_landing-numbers() { echo "첫 페이지의 손으로 쓴 문장에는 숫자가 없다 — 숫자는 생성 그림이 든다 (F5b)"; }
+break_landing-numbers() { perl -0pi -e 's/편차도 설정의 함수다\./편차도 설정의 함수다 (45.7배)./' docs/index.html; }
+guard_landing-numbers() { uv run pytest tests/docs/test_consistency.py -q -k quotes_no_numbers; }
+
+claim_mutants-unknown() { echo "decoy mutants 는 없는 쌍 접두사를 거절한다 — 맞는 쌍 0개로 공허하게 통과하지 않게"; }
+break_mutants-unknown() { perl -0pi -e 's/if unknown := \[p for p in prefixes if p not in names\]:/if unknown := []:/' src/codeproof_ai/cli.py; }
+guard_mutants-unknown() { uv run pytest tests/cli/test_commands.py -q -k matches_no_pair; }
 
 # ── 에이전트 층 (A2b · DESIGN §7.10) - 첫 전체 실행에서 조용히 틀렸던 자리들 ──
 
