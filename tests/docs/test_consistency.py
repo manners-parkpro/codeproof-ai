@@ -34,7 +34,14 @@ DOCS = {
     # 🔴 검증 프로토콜도 여기 든다. 베껴 쓰는 사람이 바로 막히는 문서라
     #    낡은 명령·깨진 링크가 특히 나쁘다.
     "docs/VERIFY.md": ROOT / "docs" / "VERIFY.md",
+    "docs/RESULTS.md": ROOT / "docs" / "RESULTS.md",
+    "docs/AI-WORKFLOW.md": ROOT / "docs" / "AI-WORKFLOW.md",
 }
+PROSE = ("README.md", "docs/RESULTS.md", "docs/AI-WORKFLOW.md")
+"""결과를 산문으로 옮겨 적는 문서 - README 는 안내판이고 자세한 판은 RESULTS 다.
+
+🔴 아래 대조는 이 셋을 모두 본다. README 만 보면 결과를 옮긴 문서에서 같은 오류가 산다.
+"""
 
 
 def _text(name: str) -> str:
@@ -175,12 +182,12 @@ class TestProseDoesNotContradictTheGeneratedFile:
         assert truth, "생성물에서 편차 표를 읽지 못했다"
         assert len(truth) >= 2, f"채점자가 하나뿐이면 대조가 공허하다: {truth}"
 
-        readme = _text("README.md")
         wrong: list[str] = []
-        for grader, fp in truth.items():
-            for m in re.finditer(rf"^{grader}\s+\d+\s+(\d+)\s", readme, re.M):
-                if m.group(1) != fp:
-                    wrong.append(f"{grader}: README {m.group(1)} vs 생성물 {fp}")
+        for name in PROSE:
+            for grader, fp in truth.items():
+                for m in re.finditer(rf"^{grader}\s+\d+\s+(\d+)\s", _text(name), re.M):
+                    if m.group(1) != fp:
+                        wrong.append(f"{grader}: {name} {m.group(1)} vs 생성물 {fp}")
         assert not wrong, (
             "산문의 FP 수가 생성물과 다르다 - "
             "`uv run codeproof report` 를 보고 고친다:\n  " + "\n  ".join(wrong)
@@ -188,16 +195,17 @@ class TestProseDoesNotContradictTheGeneratedFile:
 
     def test_prose_does_not_quote_a_bare_discrimination_rate(self) -> None:
         """산문의 구별 성공 숫자는 **채점자 이름과 같은 문단**에 있어야 한다."""
-        readme = _text("README.md")
         offenders: list[str] = []
-        for m in re.finditer(r"구별 성공[^\n]*?(\d+/\d+)", readme):
-            window = readme[max(0, m.start() - 400) : m.end() + 400]
-            named = any(
-                g in window
-                for g in ("provable_safety", "injected_defect", "채점 정의", "채점자")
-            )
-            if not named:
-                offenders.append(m.group(0).strip())
+        for name in PROSE:
+            text = _text(name)
+            for m in re.finditer(r"구별 성공[^\n]*?(\d+/\d+)", text):
+                window = text[max(0, m.start() - 400) : m.end() + 400]
+                named = any(
+                    g in window
+                    for g in ("provable_safety", "injected_defect", "채점 정의", "채점자")
+                )
+                if not named:
+                    offenders.append(f"{name}: {m.group(0).strip()}")
         assert not offenders, (
             "채점자를 밝히지 않은 구별 성공률이 있다 - "
             f"정의마다 다른 숫자가 나온다: {offenders}"
@@ -218,16 +226,16 @@ class TestProseDoesNotContradictTheGeneratedFile:
         「구별 성공률은 (리뷰어 x 채점자)」를 배웠는데, 같은 규율을 룰 선택에는
         적용하지 않고 있었다. 축이 하나 남아 있으면 그 축으로 다시 틀린다.
         """
-        readme = _text("README.md")
-        sites = list(re.finditer(r"injected_defect", readme))
+        sites = [(name, m) for name in PROSE for m in re.finditer(r"injected_defect", _text(name))]
         assert len(sites) >= 3, (
             f"채점자 비교 지점이 {len(sites)}곳뿐이다 - 대조가 공허하다"
         )
         offenders: list[str] = []
-        for m in sites:
-            window = readme[max(0, m.start() - 700) : m.end() + 700]
+        for name, m in sites:
+            text = _text(name)
+            window = text[max(0, m.start() - 700) : m.end() + 700]
             if "ALL" not in window:
-                offenders.append(window[650:790].replace("\n", " ").strip())
+                offenders.append(f"{name}: " + window[650:790].replace("\n", " ").strip())
         assert not offenders, (
             "룰 선택을 밝히지 않은 채점자 비교가 있다 - "
             "`S` 로 좁히면 두 정의가 일치해 편차가 사라진다:\n  "

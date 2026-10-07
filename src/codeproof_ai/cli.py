@@ -109,7 +109,7 @@ def _add_decoy_parsers(sub: argparse._SubParsersAction[argparse.ArgumentParser])
         default=30,
         help="경쟁 변이를 몇 번 돌릴지 (0 이면 건너뛴다) - 약화는 매번 깨져야 한다",
     )
-    dmu.add_argument("pairs", nargs="*", help="쌍 접두사 (예: D104) - 없으면 전부")
+    dmu.add_argument("pairs", nargs="*", help="쌍 접두사 (예: XC001) - 없으면 전부")
 
     dg = decoy_sub.add_parser(
         "gate", help="codex 가 쓴 쌍의 관문 - 기계로 보는 것만 (DESIGN §7.10d)"
@@ -124,7 +124,7 @@ def _add_decoy_parsers(sub: argparse._SubParsersAction[argparse.ArgumentParser])
     dg.add_argument("pairs", nargs="*", help="쌍 접두사 (예: XC001) - 없으면 전부")
 
     dn = decoy_sub.add_parser("new", help="템플릿에서 새 decoy 를 만든다")
-    dn.add_argument("decoy_id", help="예: D003-caller-held-lock")
+    dn.add_argument("decoy_id", help="예: D00X-짧은-설명")
     dn.add_argument("--corpus", default="corpus/decoys")
 
 

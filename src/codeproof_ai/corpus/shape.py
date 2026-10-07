@@ -38,8 +38,8 @@ class GuardShape(StrEnum):
     CALLER = "caller"
     """이 함수를 **부르는** 쪽에 있다. 호출부를 거슬러 올라가야 한다.
 
-    🔴 전이적이다. [실측] D051 은 `run` -> `_drain` -> `_accumulate` 로 두 단계
-    건너인데, 직접 호출만 보던 때는 OTHER 로 떨어졌다. 깊이가 달라도
+    🔴 전이적이다. [실측] 두 단계 건너 부르는 가드가 직접 호출만 보던 때는
+    OTHER 로 떨어졌다. 깊이가 달라도
     **어느 방향을 봐야 하는가**는 같으므로 한 분류로 둔다.
     """
 
@@ -52,7 +52,7 @@ class GuardShape(StrEnum):
     MODULE = "module"
     """함수 밖 - 모듈 상수 · 타입 선택 · 클래스 불변식. 함수 본문을 벗어나야 보인다.
 
-    [실측] `__post_init__` 이 생성 시점에 거부하는 D018 이 처음엔 OTHER 로
+    [실측] 생성 시점에 거부하는 클래스 불변식이 처음엔 OTHER 로
     떨어졌다. 그것도 「함수 밖을 봐야 한다」이므로 여기에 속한다 -
     OTHER 가 분류의 구멍을 짚어 준 사례다.
     """
@@ -194,8 +194,8 @@ def _class_owners(tree: ast.Module) -> dict[str, str]:
 def _calls(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> frozenset[str]:
     """그 함수 본문이 **부르거나 넘기는** 이름들.
 
-    🔴 호출식만 보면 콜백을 놓친다. [실측] D051 의 `run` 은 `_drain` 을
-       부르지 않고 `Thread(target=_drain)` 으로 **넘긴다** - 그래도 리뷰어는
+    🔴 호출식만 보면 콜백을 놓친다. [실측] 가드 함수를 부르지 않고
+       `Thread(target=...)` 로 **넘기는** 쌍이 있었다 - 그래도 리뷰어는
        그 함수를 따라가야 하므로 같은 방향의 간선이다.
        threading · 콜백 등록 · 데코레이터에서 흔한 모양이다.
 

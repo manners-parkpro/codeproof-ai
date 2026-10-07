@@ -50,7 +50,7 @@ PASS=0; FAIL=0; FAILED_NAMES=()
 #   break_X   그 불변식을 깨는 최소 변경
 #   guard_X   가드. 깨끗한 트리에서 **통과**하고 깨뜨린 뒤 **실패**해야 한다.
 
-SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict convention docs-tree generated
+SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict convention docs-tree docs-results-prose generated
            agent-contract span-match llm-symbol import-format import-manifest import-rejected
            signed-runner pack-first-runs bundle-separators pair-difference model-pin
            docstring-neutral signed-docstrings resume-docstrings runner-docstrings compare-one-axis
@@ -68,7 +68,7 @@ SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict conv
            gate-directions gate-survivor gate-neutral gate-prose gate-docstring gate-twin-docstring gate-plan
            xauthor-login-shell xauthor-silent-probe xauthor-unrun xauthor-probe-collision xauthor-vacuous-loop
            xauthor-input-roles xauthor-var-tmp xauthor-verbatim xauthor-sandbox-flag
-           xauthor-inventory-ids xauthor-builtin-instructions)
+           xauthor-inventory-ids xauthor-builtin-instructions xauthor-pair-leak)
 
 claim_layering() { echo "런타임(analysis)은 정답 라벨(eval)을 볼 수 없다 — A1"; }
 break_layering() {
@@ -188,6 +188,10 @@ guard_corpus-strict() { uv run pytest tests/corpus/test_decoy_validator.py -q -k
 claim_docs-tree() { echo "DESIGN 의 패키지 트리가 실제 모듈을 전부 싣는다 — F5b"; }
 break_docs-tree() { perl -0pi -e 's/^.*mix\.py.*\n//m' docs/DESIGN.md; }
 guard_docs-tree() { uv run pytest tests/docs/test_consistency.py -q -k package_tree; }
+
+claim_docs-results-prose() { echo "결과를 옮겨 적은 문서(RESULTS · AI-WORKFLOW)도 README 와 같은 대조를 받는다 — 구별 성공률 옆에 채점자를 적는다 (F5)"; }
+break_docs-results-prose() { perl -0pi -e 's/`provable_safety` 의 「구별 성공 11\/60」/「구별 성공 11\/60」/' docs/AI-WORKFLOW.md; }
+guard_docs-results-prose() { uv run pytest tests/docs/test_consistency.py -q -k bare_discrimination; }
 
 claim_generated() { echo "생성물을 손으로 고치면 --check 가 잡는다 — F5b"; }
 break_generated() { perl -0pi -e 's/코퍼스 \*\*(\d+)쌍\*\*/코퍼스 **999쌍**/' docs/MEASUREMENTS.md; }
@@ -649,6 +653,10 @@ guard_xauthor-inventory-ids() { uv run pytest tests/scripts/test_xauthor.py -q -
 claim_xauthor-builtin-instructions() { echo "카나리 흔적 집계는 codex 내장 지시만 뺀다 — session_meta 를 통째로 빼면 그 밖의 흔적을 놓친다 (§7.10d 수집 전 수정 ⑦)"; }
 break_xauthor-builtin-instructions() { perl -0pi -e 's/rest = \{k: v for k, v in payload\.items\(\) if k != "base_instructions"\}/rest = {}/' "$_XA"; }
 guard_xauthor-builtin-instructions() { uv run pytest tests/scripts/test_xauthor.py -q -k builtin_instructions; }
+
+claim_xauthor-pair-leak() { echo "저자가 상자에서 읽는 하네스 소스에 claude 쌍 번호 · 이름이 없다 — venv 는 읽기 허용이다 (§7.10d 「쓰는 입력」)"; }
+break_xauthor-pair-leak() { perl -0pi -e 's/\[실측\] 두 단계 건너 부르는 가드가/[실측] D051 처럼 두 단계 건너 부르는 가드가/' src/codeproof_ai/corpus/shape.py; }
+guard_xauthor-pair-leak() { uv run pytest tests/scripts/test_xauthor.py -q -k claude_pair; }
 
 # ── 하네스 ─────────────────────────────────────────────────────────────────
 

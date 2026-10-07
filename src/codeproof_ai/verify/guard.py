@@ -14,7 +14,7 @@
 ⚠ **보지 못하는 것 - 데이터흐름 가드.**
   "이 위험한 호출의 인자가 모듈 상수라서 외부 입력이 닿지 않는다" 같은 방어는
   제어흐름이 아니라 오염 추적(taint analysis)이 필요하다. 이 검증자는 못 본다.
-  [실측] D002(constant_only_sink)에서 안전한 쪽과 취약한 쪽에 같은 결과를 냈다.
+  [실측] constant_only_sink 쌍에서 안전한 쪽과 취약한 쪽에 같은 결과를 냈다.
 """
 
 from __future__ import annotations
