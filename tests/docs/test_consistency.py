@@ -810,6 +810,15 @@ class TestTheLandingPage:
         digest = hashlib.sha256(glue.read_bytes()).hexdigest()
         assert digest == "8a90aec3c47c6d0b06a0930d2ff7be0b584e15fc7c09768f74717fc8b5103d0e"
 
+    def test_the_browser_ruff_counts_syntax_errors_apart(self) -> None:
+        """⚠ 브라우저 Ruff 도 구문 오류를 `invalid-syntax` 코드로 준다 (null 이 아니다) [실측].
+
+        화면이 그 코드를 생성 데이터(`ruff.js` 의 `syntax`)로 가르지 않으면 자바 코드나 코드 조각을
+        붙였을 때 구문 오류가 전부 「결함 주장」으로 세어진다 (독립 검토).
+        """
+        app = self.APP.read_text(encoding="utf-8")
+        assert "d.code === RULES.syntax" in app
+
     def test_its_highlights_are_generated(self) -> None:
         """첫 화면의 핵심 발견은 생성 구간이다 - 표시가 사라지면 report 가 채우기를 멈춘다."""
         html = self.PAGE.read_text(encoding="utf-8")

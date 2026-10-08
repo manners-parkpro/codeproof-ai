@@ -112,7 +112,7 @@ class _Handler(SimpleHTTPRequestHandler):
         self._send_json(HTTPStatus.OK, {"report": review_dict(report)})
 
     def _refusal(self) -> tuple[HTTPStatus, str] | None:
-        """받지 않는 요청 - 다른 사이트에서 온 것 · JSON 이 아닌 것 · 너무 큰 것."""
+        """받지 않는 요청 - 다른 사이트에서 온 것 · JSON 이 아닌 것 · 길이가 없거나 너무 큰 것."""
         if self.path != "/api/review":
             return HTTPStatus.NOT_FOUND, "없는 경로다"
         if not self._host_ok():
@@ -122,10 +122,16 @@ class _Handler(SimpleHTTPRequestHandler):
             return HTTPStatus.FORBIDDEN, "다른 출처의 요청은 받지 않는다"
         if not self.headers.get("Content-Type", "").startswith("application/json"):
             return HTTPStatus.UNSUPPORTED_MEDIA_TYPE, "JSON 으로 보낸다"
-        length = self.headers.get("Content-Length", "")
-        if not length.isdigit() or not 0 < int(length) <= MAX_BODY:
-            return HTTPStatus.REQUEST_ENTITY_TOO_LARGE, f"본문은 {MAX_BODY} 바이트까지다"
-        return None
+        return _length_refusal(self.headers.get("Content-Length", ""))
+
+
+def _length_refusal(length: str) -> tuple[HTTPStatus, str] | None:
+    """본문 길이 - 읽기 전에 본다. isdigit 이 아니다 - 「²」도 참이라 int() 가 터졌다."""
+    if not length.isdecimal():
+        return HTTPStatus.LENGTH_REQUIRED, "본문 길이(Content-Length)를 보낸다"
+    if not 0 < int(length) <= MAX_BODY:
+        return HTTPStatus.REQUEST_ENTITY_TOO_LARGE, f"본문은 1 ~ {MAX_BODY} 바이트다"
+    return None
 
 
 def _request(body: object) -> tuple[str, str | None, str | None]:

@@ -507,7 +507,7 @@ def render_highlights(spreads: Sequence[Spread], found: Glance | None) -> str:
        다시 잰 뒤 방향이 바뀌어도 문장이 남는다.
     """
     picked = {s.select: s for s in spreads}
-    lines = _headline(found, picked.get("ALL")) if found is not None else []
+    lines = _headline(found) if found is not None else []
     cards = [_spread_card(picked["ALL"], picked.get("S"))] if "ALL" in picked else []
     if found is not None:
         cards += _agent_cards(found)
@@ -524,35 +524,36 @@ def render_highlights(spreads: Sequence[Spread], found: Glance | None) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _headline(found: Glance, spread: Spread | None) -> list[str]:
-    """주 지표 카드 - 수집 전에 선언한 하나 (DESIGN §7.10b). 답 문장 · 막대 · 차이와 구간."""
+def _headline(found: Glance) -> list[str]:
+    """주 지표 카드 - 수집 전에 선언한 하나 (DESIGN §7.10b). 답 문장 · 막대 · 차이와 구간 · 조건.
+
+    🔴 답은 두 AI 의 비교만 말한다 - 린터(Ruff)를 잰 채점 규칙 카드와 한 문장에 묶으면 린터의 값이
+       AI 의 값으로 읽힌다 (F3 · 독립 검토). 숫자는 바로 옆 막대가 든다.
+    """
     board = found.board
     a, b = (escape(n) for n in board.names)
     row = next(r for r in board.rows if r.primary)
-    loose = f"{row.a.loose:.1%} 대 {row.b.loose:.1%}"
     leader = a if row.diff.point > 0 else b
     if not row.distinguishable:
-        claim = "두 리뷰어가 버그만 정확히 짚은 비율은 구별되지 않았다."
+        claim = "두 AI 를 같은 짝으로 비교하면 버그만 정확히 짚은 비율은 구별되지 않았다."
     elif row.stable:
         claim = (
-            f"버그만 정확히 짚은 비율은 {leader} 가 앞섰고, 지적 위치를 결함 근처 "
-            f"{board.slacks[-1]}줄까지 넓혀 세도 차이가 남았다 ({loose})."
+            f"두 AI 를 같은 짝으로 비교하면 버그만 정확히 짚은 비율은 {leader} 가 앞섰고, "
+            f"지적 위치를 결함 근처 {board.slacks[-1]}줄까지 넓혀 세도 차이가 남았다."
         )
     else:
         claim = (
-            f"버그만 정확히 짚은 비율은 {leader} 가 앞섰지만, 세는 규칙에 따라 판정이 바뀌어 "
-            "순위를 주장하지 않는다."
-        )
-    if spread is not None and spread.safety_fp != spread.injected_fp:
-        claim = (
-            f"채점 규칙만 바꿔도 같은 경고의 헛경고 수가 {spread.verdict} 갈렸다. 그래도 " + claim
+            f"두 AI 를 같은 짝으로 비교하면 버그만 정확히 짚은 비율은 {leader} 가 앞섰지만, "
+            "세는 규칙에 따라 판정이 바뀌어 순위를 주장하지 않는다."
         )
     lo, hi = row.diff.lo * 100, row.diff.hi * 100
     reading = (
-        "0 을 포함하지 않는다 — 우연으로 보기 어렵다" if row.distinguishable
+        f"0 을 포함하지 않는다 — 이 {board.pairs}쌍에서는 우연으로 보기 어렵다"
+        if row.distinguishable
         else "0 을 포함한다 — 이 표본으로는 구별되지 않는다"
     )
     runs = board.runs[0] if board.runs[0] == board.runs[1] else f"{board.runs[0]} · {board.runs[1]}"
+    models = " · ".join(escape(m) for m in board.models)
     return [
         f'  <p class="answer"><b>답</b> {claim}</p>',
         '  <div class="headline">',
@@ -565,26 +566,32 @@ def _headline(found: Glance, spread: Spread | None) -> list[str]:
         ),
         f'    <p class="diff"><b>{row.diff.point * 100:+.1f}%p</b> 95% 구간 {lo:+.1f} ~ {hi:+.1f}%p'
         f" · {reading}</p>",
-        f'    <p class="note">짝 {board.pairs}쌍 · 짝마다 {runs}번 리뷰 · 한 번 리뷰했을 때 '
-        f"기대할 수 있는 비율 · {escape(CAVEAT)}</p>",
+        f'    <p class="note">파이썬 짝 {board.pairs}쌍 · 짝마다 {runs}번 리뷰 · 한 번 리뷰했을 때 '
+        f"기대할 수 있는 비율 · 모델 {models} · {escape(board.conditions)}</p>",
+        f'    <p class="note">한계 — 차이에는 모델과 제품(도구 · 권한)이 함께 들어 있다. '
+        f"{escape(CAVEAT)}</p>",
         "  </div>",
     ]
 
 
 def _spread_card(spread: Spread, security: Spread | None) -> tuple[str, str, str]:
-    """채점 규칙 카드 - 두 정의에 이름을 붙인다 (기존 벤치마크 방식 · 이 저장소 방식)."""
+    """채점 규칙 카드 - 린터(Ruff)를 잰 값이다. 두 정의에 이름을 붙인다 (Qodo 벤치마크 · 이 저장소).
+
+    🔴 AI 리뷰어의 값이 아니다 - 눈썹 글에 린터라고 적는다. 린터는 같은 코드에 늘 같은 경고를 내서
+       차이가 전부 채점 규칙에서 나온다 - 채점 규칙의 몫을 린터로 잰 이유다.
+    """
     big = spread.verdict if spread.verdict.endswith("배") else (
         f"{spread.injected_fp} 대 {spread.safety_fp}"
     )
     text = (
-        "같은 Ruff 경고를 기존 벤치마크처럼 「버그 없는 코드의 경고는 전부 오답」으로 세면 "
-        f"<b>{spread.injected_fp}건</b>, 「안전하다고 증명한 바로 그 줄을 버그라 한 것」만 세면 "
-        f"<b>{spread.safety_fp}건</b>이다 (전체 규칙)."
+        "린터는 같은 코드에 늘 같은 경고를 낸다 — 그 경고를 Qodo 벤치마크처럼 「결함 없는 코드의 "
+        f"경고는 전부 헛경고」로 세면 <b>{spread.injected_fp}건</b>, 「안전하다고 증명한 범위 안을 "
+        f"버그라 한 것」만 세면 <b>{spread.safety_fp}건</b>이다 (전체 규칙)."
     )
     if security is not None:
         same = "로 같다" if security.safety_fp == security.injected_fp else "이다"
         text += f" 보안 규칙만 고르면 {security.injected_fp} 대 {security.safety_fp}{same}."
-    return "채점 규칙 하나로", big, text
+    return "린터(Ruff) 경고를 두 채점 규칙으로 세면", big, text
 
 
 def _agent_cards(found: Glance) -> list[tuple[str, str, str]]:
@@ -608,14 +615,16 @@ def _agent_cards(found: Glance) -> list[tuple[str, str, str]]:
             f" 예: {short} 에서 {who} 는 {board.runs[found.near.side]}회 모두 결함 근처를 "
             f"가리켰지만 「놓침」으로 셌다 — {found.near.slack}줄만 넓혀도 「짚음」이다."
         )
-    cards = [("버그를 짚은 비율은 「몇 줄 차이까지 같은 지적인가」에 따라", big, text)]
+    eyebrow = "버그를 짚은 비율(헛경고는 따지지 않음)은 몇 줄 차이까지 같은 지적으로 치느냐에 따라"
+    cards = [(eyebrow, big, text)]
     more = a if alarm.a.strict > alarm.b.strict else b
     caught_more = a if caught.a.strict > caught.b.strict else b
+    said = "안전하다고 증명한 범위를 버그라 한 비율은"
     if alarm.a.strict == alarm.b.strict:
-        eyebrow, note = "헛경고는", "안전한 코드에 「버그가 있다」고 한 비율은 같았다."
+        eyebrow, note = "헛경고는", f"{said} 같았다."
     else:
         eyebrow = "대신 헛경고는" if more == caught_more else "헛경고는"
-        note = f"안전한 코드에 「버그가 있다」고 한 비율은 {more} 가 더 높았다."
+        note = f"{said} {more} 가 더 높았다."
         if more == caught_more:
             note += " 많이 짚는 쪽이 헛경고도 더 냈다."
     cards.append((eyebrow, f"{alarm.a.strict:.1%} 대 {alarm.b.strict:.1%}", note))

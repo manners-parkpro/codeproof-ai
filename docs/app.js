@@ -12,17 +12,17 @@
   var RUFF_WASM = "https://cdn.jsdelivr.net/npm/@astral-sh/ruff-wasm-web@0.16.8/ruff_wasm_bg.wasm";
   var RUFF_SRI = "sha384-dKPj/bI0rt0iEb/aCeqvSNf9M6AFqPC32sLBK7M/HeRSX5OD78u4M3wZQOjAZbPJ";
 
+  // 짝 판정은 결함 쪽 지적과 증명 범위 안의 헛경고만으로 정한다 - 범위 밖 지적은 판정에 들지 않는다
   var VERDICTS = {
-    "P-C": ["구별 성공 — 버그 코드만 짚음", "ok"],
-    "P-V": ["둘 다 지적 — 구별 못 함", "warn"],
+    "P-C": ["구별 성공 — 결함을 짚고 헛경고 없음", "ok"],
+    "P-V": ["결함도 짚었지만 헛경고도 냄", "warn"],
     "P-B": ["결함을 놓침", "none"],
-    "P-R": ["거꾸로 — 안전한 코드만 지적", "bad"],
+    "P-R": ["거꾸로 — 헛경고를 내고 결함은 놓침", "bad"],
   };
   var MARKS = {
     tp: ["결함 자리를 짚음", "tp"],
     fp: ["헛경고 — 안전하다고 증명한 범위를 짚음", "fp"],
     style: ["관례 주장 — 결함 주장이 아니라 채점하지 않음", ""],
-    out: { safe: ["증명 범위 밖 — 채점하지 않음", ""], buggy: ["결함 자리 밖 — 정답 라벨이 없어 채점하지 않음", ""] },
   };
   var SIDE_NAMES = { safe: "안전한 코드", buggy: "버그 코드" };
 
@@ -49,6 +49,15 @@
 
   function span(lines) { return lines[0] === lines[1] ? "L" + lines[0] : "L" + lines[0] + "–" + lines[1]; }
 
+  // 채점하지 않은 결함 주장 - 정답 구간에서 몇 줄 떨어졌는지 보인다 (선언한 규칙은 겹친 지적만 센다)
+  function outside(f, side, src) {
+    var ref = side === "safe" ? src.covered : src.defect;
+    var gap = f[1] < ref[0] ? ref[0] - f[1] : f[0] - ref[1];
+    return side === "safe"
+      ? "증명 범위(" + span(ref) + ")에서 " + gap + "줄 떨어짐 — 범위 밖이라 채점하지 않음"
+      : "결함 자리(" + span(ref) + ")에서 " + gap + "줄 떨어짐 — 선언한 규칙은 겹친 지적만 센다";
+  }
+
   // ── 탭 ──────────────────────────────────────────────────────────────────
   function selectTab(which) {
     ["records", "code"].forEach(function (name) {
@@ -65,8 +74,10 @@
     tabs.forEach(function (tab, i) {
       tab.addEventListener("click", function () { selectTab(tab.id.slice(4)); });
       tab.addEventListener("keydown", function (e) {
-        if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
-        var next = tabs[(i + (e.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length];
+        var to = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: tabs.length - 1 }[e.key];
+        if (to === undefined) return;
+        e.preventDefault();
+        var next = tabs[(to + tabs.length) % tabs.length];
         selectTab(next.id.slice(4));
         next.focus();
       });
@@ -131,10 +142,22 @@
         seg.appendChild(b);
       })(r);
     }
-    var first = (R.featured || []).map(function (id) {
+    var featured = (R.featured || []).map(function (id) {
       return R.pairs.findIndex(function (p) { return p.id === id; });
-    }).filter(function (i) { return i >= 0; })[0];
-    state.pair = first === undefined ? order[0] : first;
+    }).filter(function (i) { return i >= 0; });
+    // 예시 바로가기 - 점수판의 규칙이 고른 짝 (손으로 고르지 않는다)
+    if (featured.length) {
+      var picks = el("div", { cls: "seg", role: "group", "aria-label": "예시 짝" });
+      featured.forEach(function (i) {
+        var pair = R.pairs[i];
+        var won = correct(pair, 0) > correct(pair, 1) ? 0 : 1;
+        var b = el("button", { type: "button", text: "예시 " + pair.id.split("-")[0] + " · " + R.reviewers[won].name.split(" ")[0] + " 만 구별" });
+        b.addEventListener("click", function () { state.pair = i; renderPair(); });
+        picks.appendChild(b);
+      });
+      $("examples").appendChild(picks);
+    }
+    state.pair = featured.length ? featured[0] : order[0];
   }
 
   function step(delta) {
@@ -173,24 +196,28 @@
     });
     src.code.replace(/\n$/, "").split("\n").forEach(function (line, i) {
       var n = i + 1;
-      var cls = "ln";
+      // 색으로만 가르지 않는다 - 화면 낭독기에는 줄의 뜻을 글로 준다
+      var cls = "ln", what = "";
       if (state.side === "safe") {
-        if (within(src.guard, n)) cls += " guard";
-        else if (within(src.covered, n)) cls += " cover";
+        if (within(src.guard, n)) { cls += " guard"; what = "안전장치"; }
+        else if (within(src.covered, n)) { cls += " cover"; what = "덮는 범위"; }
       } else if (within(src.defect, n)) {
-        cls += " defect";
+        cls += " defect"; what = "결함";
       }
       var dots = el("span", { cls: "marks" });
       [0, 1].forEach(function (who) {
-        if (marks[n] && marks[n][who]) dots.appendChild(el("i", { cls: "dot " + (who ? "b" : "a"), title: R.reviewers[who].name }));
+        var name = R.reviewers[who].name + " 지적";
+        if (marks[n] && marks[n][who]) dots.appendChild(el("i", { cls: "dot " + (who ? "b" : "a"), role: "img", "aria-label": name, title: name }));
       });
-      view.appendChild(el("div", { cls: cls }, el("span", { cls: "no", text: String(n) }), dots, el("span", { text: line || " " })));
+      view.appendChild(el("div", { cls: cls },
+        el("span", { cls: "no", text: String(n) }, what ? el("span", { cls: "sr", text: " " + what }) : null),
+        dots, el("span", { text: line || " " })));
     });
     var legend = $("legend");
     clear(legend);
     var items = state.side === "safe"
-      ? [["k-guard", "안전장치"], ["k-cover", "안전 근거가 덮는 범위 — 여기를 결함이라 하면 헛경고"]]
-      : [["k-defect", "안전장치를 지운 자리 — 결함"]];
+      ? [["k-guard", "안전장치 (덮는 범위 안)"], ["k-cover", "안전 근거가 덮는 범위 — 여기를 결함이라 하면 헛경고"]]
+      : [["k-defect", "안전장치를 지우거나 바꾼 자리 — 결함"]];
     items.push(["k-a", R.reviewers[0].name + " 지적"], ["k-b", R.reviewers[1].name + " 지적"]);
     items.forEach(function (it) { legend.appendChild(el("span", null, el("i", { cls: it[0] }), it[1])); });
   }
@@ -213,7 +240,7 @@
         var shown = run[state.side];
         if (!shown.length) card.appendChild(el("p", { cls: "quiet", text: SIDE_NAMES[state.side] + "에는 지적이 없었다." }));
         shown.forEach(function (f) {
-          var mark = f[3] === "out" ? MARKS.out[state.side] : MARKS[f[3]];
+          var mark = f[3] === "out" ? [outside(f, state.side, pair[state.side]), ""] : MARKS[f[3]];
           card.appendChild(el("p", { cls: "finding" },
             el("span", { cls: "meta " + mark[1], text: span(f) + " · " + mark[0] }),
             f[4]));
@@ -248,6 +275,7 @@
 
   function setupRecords() {
     if (!R || !R.pairs || !R.pairs.length) {
+      Array.prototype.forEach.call($("panel-records").querySelectorAll(".controls, .story, .pane"), function (n) { n.hidden = true; });
       $("panel-records").appendChild(el("p", { cls: "quiet", text: "기록 데이터를 읽지 못했다 (data/reviews.js)." }));
       return;
     }
@@ -291,11 +319,12 @@
     var rows = diags.slice().sort(function (x, y) {
       return x.start_location.row - y.start_location.row || x.start_location.column - y.start_location.column;
     }).map(function (d) {
-      var kind = d.code === null ? "syntax" : convention.has(d.code) ? "style" : "defect";
+      // 구문 오류는 룰이 아니다 - Ruff 는 null 이 아니라 이 코드로 준다 [실측]
+      var kind = d.code === RULES.syntax ? "syntax" : convention.has(d.code) ? "style" : "defect";
       counts[kind]++;
-      var tag = kind === "syntax" ? "구문 오류" : kind === "style" ? "관례(형식) 주장" : "결함 주장";
+      var tag = kind === "syntax" ? "구문 오류 — 파이썬으로 읽지 못함" : kind === "style" ? "관례(형식) 주장" : "결함 주장";
       return el("p", { cls: "finding" },
-        el("span", { cls: "meta" + (kind === "defect" ? " fp" : ""), text: "L" + d.start_location.row + " · " + (d.code || "syntax") + " · " + tag }),
+        el("span", { cls: "meta" + (kind === "defect" ? " fp" : ""), text: "L" + d.start_location.row + " · " + d.code + " · " + tag }),
         d.message);
     });
     var version = glue.Workspace.version();
@@ -306,18 +335,29 @@
     box.appendChild(el("p", { cls: "sum", text: diags.length
       ? "지적 " + diags.length + "건 — 결함 주장 " + counts.defect + " · 관례(형식) 주장 " + counts.style + (counts.syntax ? " · 구문 오류 " + counts.syntax : "")
       : "지적 없음" }));
+    if (counts.syntax) {
+      box.appendChild(el("p", { cls: "callout", text: "구문 오류가 있다 — 이 화면은 파이썬 코드만 분석한다. 자바 같은 다른 언어나 잘린 코드 조각은 읽지 못한다." }));
+    }
     rows.forEach(function (r) { box.appendChild(r); });
-    var note = "린터가 결함 주장을 내지 않아도 결함이 없다는 뜻은 아니다 — 안전장치가 빠진 논리 결함은 대부분 린터 규칙 밖이다." +
-      " 파일 경로가 필요한 규칙(INP001 등)은 브라우저에서 돌지 않는다.";
+    // 예시 코드면 같은 코드에 두 AI 가 낸 결과를 나란히 - 린터와 AI 가 보는 것의 차이가 이 화면의 요점이다
     var pair = R && R.pairs.find(function (p) { return p.buggy.code === code; });
     if (pair) {
-      note += " 이 코드는 " + pair.id + " 의 버그 코드다 — " + pair.bug.trim() + " 같은 코드를 " +
+      box.appendChild(el("p", { cls: "callout", text: "이 코드는 " + pair.id + " 의 버그 코드다 — " + pair.bug.trim() + " 같은 코드를 " +
         R.reviewers.map(function (rv, who) {
           var hit = pair.reviews[who].filter(function (r) { return r.verdict === "P-C" || r.verdict === "P-V"; }).length;
           return rv.name + " 는 " + pair.reviews[who].length + "번 중 " + hit + "번";
-        }).join(", ") + " 결함 자리를 짚었다.";
+        }).join(", ") + " 결함 자리를 짚었다." }));
     }
-    box.appendChild(el("p", { cls: "hint", text: note }));
+    box.appendChild(el("p", { cls: "hint", text: "린터가 결함 주장을 내지 않아도 결함이 없다는 뜻은 아니다 — 안전장치가 빠진 논리 결함은 대부분 린터 규칙 밖이다." +
+      " 파일 경로가 필요한 규칙(INP001 등)은 브라우저에서 돌지 않는다." }));
+  }
+
+  function showRuffError(what, err) {
+    var box = $("ruff-result");
+    clear(box);
+    box.appendChild(el("h3", { text: "Ruff 를 돌리지 못했다" }));
+    box.appendChild(el("p", { cls: "quiet", text: what }));
+    box.appendChild(el("p", { cls: "hint", text: "원문: " + String(err && err.message ? err.message : err) }));
   }
 
   function setupRuff() {
@@ -341,12 +381,14 @@
       var label = button.textContent;
       button.textContent = ruff ? "분석 중…" : "Ruff 를 받는 중…";
       loadRuff().then(function (glue) {
-        renderRuff(glue, runRuff(glue, code), code);
-      }).catch(function (err) {
-        var box = $("ruff-result");
-        clear(box);
-        box.appendChild(el("h3", { text: "Ruff 를 돌리지 못했다" }));
-        box.appendChild(el("p", { cls: "quiet", text: String(err && err.message ? err.message : err) }));
+        try {
+          renderRuff(glue, runRuff(glue, code), code);
+        } catch (err) {
+          showRuffError("Ruff 가 이 코드를 분석하다 멈췄다 — 다른 코드로 다시 해 본다.", err);
+        }
+      }, function (err) {
+        showRuffError("Ruff(WebAssembly)를 받지 못했다 — 네트워크에서 jsDelivr 에 닿지 못했거나, 받은 파일의 해시가 " +
+          "고정한 값과 달라 브라우저가 실행을 막았다. 브라우저 콘솔에 자세한 이유가 남는다.", err);
       }).then(function () {
         button.disabled = false;
         button.textContent = label;
@@ -367,8 +409,8 @@
       var agent = el("input", { type: "checkbox", id: "use-agent" });
       var model = el("input", { type: "text", id: "ollama-model", placeholder: "예: qwen3:4b", size: "14" });
       var useOllama = el("input", { type: "checkbox", id: "use-ollama" });
-      box.appendChild(el("p", null, agent, " ", el("label", { "for": "use-agent", text: "Claude Code 도 리뷰 (구독 로그인 · 분 단위)" })));
-      box.appendChild(el("p", null, useOllama, " ", el("label", { "for": "use-ollama", text: "로컬 Ollama 모델도 리뷰" }), " ", model));
+      box.appendChild(el("p", null, agent, " ", el("label", { "for": "use-agent", text: "Claude Code 도 리뷰 — 코드를 Anthropic 으로 보낸다 (구독 로그인 · 분 단위)" })));
+      box.appendChild(el("p", null, useOllama, " ", el("label", { "for": "use-ollama", text: "로컬 Ollama 모델도 리뷰 — 이 컴퓨터 안에서 돈다" }), " ", model));
       var go = el("button", { type: "button", cls: "btn primary", text: "이 컴퓨터에서 리뷰" });
       var out = el("div", { cls: "result", "aria-live": "polite" });
       box.appendChild(el("div", { cls: "row" }, go));
@@ -405,6 +447,8 @@
     }
     var rep = body.report;
     out.appendChild(el("h3", { text: "지적 " + rep.entries.length + "건 · " + rep.reviewers.join(" · ") }));
+    out.appendChild(el("p", { cls: "hint" }, "도구 설정 — ", el("code", { text: rep.settings.join(" · ") }),
+      ". 브라우저 Ruff 는 전체 규칙(ALL)이라 지적 수가 다를 수 있다."));
     if (!rep.entries.length) {
       out.appendChild(el("p", { cls: "quiet", text: "리뷰어가 짚은 것이 없다 — 결함이 없다는 뜻은 아니다." }));
     }

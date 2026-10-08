@@ -297,7 +297,7 @@ uv run codeproof history --limit 5                          # 저장된 실행
 uv run codeproof history --repro <config-hash>              # 같은 설정끼리 재현성
 
 # ── 측정값 문서 ─────────────────────────────────────────
-uv run codeproof report                  # docs/MEASUREMENTS.md 와 그림(docs/figures)을 만든다
+uv run codeproof report                  # docs/MEASUREMENTS.md · 그림(docs/figures) · 대시보드 데이터(docs/data) · 첫 페이지의 생성 구간
 uv run codeproof report --check          # 낡았으면 exit 1 (CI 용)
 
 # ── 코퍼스 ──────────────────────────────────────────────
@@ -310,6 +310,7 @@ uv run pytest tests/corpus/test_proofs.py  # 안전 근거가 참인지 — 쌍�
 uv run codeproof review 파일.py                    # Ruff · mypy (자격증명 불필요)
 uv run codeproof review 파일.py --ollama qwen3:4b  # + 로컬 Ollama 모델 (계정 · 키 없음 · ollama pull 로 받아 둔다)
 uv run codeproof review 파일.py --agent claude     # + 에이전트 (CLI 로그인 필요)
+uv run codeproof serve                             # 대시보드를 127.0.0.1 에 열고 붙여 넣은 코드를 review 와 같은 경로로
 
 # ── 외부 리뷰어 가져오기 (자격증명 불필요) ──────────────
 uv run codeproof import --from out --name semgrep --identity "1.2.3"           # SARIF

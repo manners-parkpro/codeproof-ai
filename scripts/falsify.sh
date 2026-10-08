@@ -101,7 +101,8 @@ SCENARIOS=(layering runner registry registry-derived sdk-lazy falsify-shard proo
            explorer-said-run explorer-verdict-check explorer-marks explorer-every-pair data-stale
            ruff-rules-empty highlights-leader highlights-shaky highlights-trade landing-ruff-pin
            landing-ruff-sri landing-inline-script serve-origin serve-host serve-json serve-one-at-a-time
-           serve-unknown-agent)
+           serve-unknown-agent serve-origin-null serve-body-cap serve-length ruff-syntax-adapter
+           ruff-syntax-data ruff-syntax-js highlights-ai-only explorer-out-range)
 
 claim_layering() { echo "런타임(analysis)은 정답 라벨(eval)을 볼 수 없다 — A1"; }
 break_layering() {
@@ -1224,6 +1225,38 @@ guard_serve-one-at-a-time() { uv run pytest "$_SVT" -q -k second_review; }
 claim_serve-unknown-agent() { echo "로컬 서버는 모르는 에이전트 · 모델 이름을 거절한다 — 실행기 인자로 넘어간다"; }
 break_serve-unknown-agent() { perl -0pi -e 's/if agent is not None and agent not in AGENTS:/if False:/' "$_SV"; }
 guard_serve-unknown-agent() { uv run pytest "$_SVT" -q -k unknown_values; }
+
+claim_serve-origin-null() { echo "로컬 서버는 Origin 이 null 인 요청을 받지 않는다 — 샌드박스 iframe · data: 문서는 같은 출처가 아니다"; }
+break_serve-origin-null() { perl -0pi -e 's/if origin is not None and origin\.removeprefix/if origin not in (None, "null") and origin.removeprefix/' "$_SV"; }
+guard_serve-origin-null() { uv run pytest "$_SVT" -q -k origin_of_null; }
+
+claim_serve-body-cap() { echo "로컬 서버는 상한보다 큰 본문을 읽기 전에 거절한다 — 파일 하나를 리뷰하는 화면이다"; }
+break_serve-body-cap() { perl -0pi -e 's/if not 0 < int\(length\) <= MAX_BODY:/if not 0 < int(length):/' "$_SV"; }
+guard_serve-body-cap() { uv run pytest "$_SVT" -q -k over_the_cap; }
+
+claim_serve-length() { echo "로컬 서버는 숫자가 아닌 본문 길이를 411 로 거절한다 — 「²」는 isdigit 이 참이라 처리기 밖에서 터졌다"; }
+break_serve-length() { perl -0pi -e 's/if not length\.isdecimal\(\):/if not length.isdigit():/' "$_SV"; }
+guard_serve-length() { uv run pytest "$_SVT" -q -k not_a_number; }
+
+claim_ruff-syntax-adapter() { echo "Ruff 의 구문 오류 코드는 어댑터 상수와 같다 — 대시보드가 그 값으로 구문 오류를 가른다"; }
+break_ruff-syntax-adapter() { perl -0pi -e 's/^SYNTAX_ERROR = "invalid-syntax"/SYNTAX_ERROR = "syntax-error"/m' src/codeproof_ai/analysis/python/ruff.py; }
+guard_ruff-syntax-adapter() { uv run pytest tests/analysis/test_adapters.py -q -k syntax_code; }
+
+claim_ruff-syntax-data() { echo "브라우저 Ruff 의 분류 데이터는 구문 오류 코드를 싣는다 — 없으면 구문 오류가 결함 주장으로 세어진다"; }
+break_ruff-syntax-data() { perl -0pi -e 's/\n        "syntax": SYNTAX_ERROR,//' "$_EX"; }
+guard_ruff-syntax-data() { uv run pytest "$_EXT" -q -k syntax_code_is_the_adapters; }
+
+claim_ruff-syntax-js() { echo "브라우저 Ruff 화면은 구문 오류를 생성 데이터의 코드로 가른다 — Ruff 는 null 이 아니라 invalid-syntax 를 준다"; }
+break_ruff-syntax-js() { perl -0pi -e 's/d\.code === RULES\.syntax/d.code === null/' docs/app.js; }
+guard_ruff-syntax-js() { uv run pytest tests/docs/test_consistency.py -q -k syntax_errors_apart; }
+
+claim_highlights-ai-only() { echo "첫 화면의 답은 두 AI 의 비교만 말한다 — 린터 측정과 한 문장에 묶으면 린터 값이 AI 값으로 읽힌다"; }
+break_highlights-ai-only() { perl -0pi -e 's/<b>답<\/b> \{claim\}/<b>답<\/b> 린터 경고는 채점 규칙만 바꿔도 갈렸다. {claim}/' src/codeproof_ai/eval/report.py; }
+guard_highlights-ai-only() { uv run pytest "$_HLT" -q -k speaks_only_of_the_two_ais; }
+
+claim_explorer-out-range() { echo "기록된 리뷰의 채점하지 않은 결함 주장은 정답 구간과 겹치지 않는다 — 화면이 그 거리를 적는다"; }
+break_explorer-out-range() { perl -0pi -e 's/"buggy":\[\[\d+,\d+,("[a-z_]+","out")/"buggy":[[1,999,$1/' docs/data/reviews.js; }
+guard_explorer-out-range() { uv run pytest "$_EXT" -q -k outside_the_labeled_range; }
 
 # ── 하네스 ─────────────────────────────────────────────────────────────────
 

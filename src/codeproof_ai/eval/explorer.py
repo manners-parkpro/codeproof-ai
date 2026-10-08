@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any
 
+from codeproof_ai.analysis.python.ruff import SYNTAX_ERROR
 from codeproof_ai.analysis.python.version import TARGET_PYTHON
 from codeproof_ai.corpus.decoy import TrapKind
 from codeproof_ai.domain.observation import ObservedFinding
@@ -191,6 +192,7 @@ def ruff_rules(version: str, categories: Mapping[str, Category]) -> str:
 
     🔴 분류는 도구에 묻는다 (C2 · F4a) - 접두사로 짐작하지 않는다. 결함 주장이 아닌 룰만 싣는다.
        도구가 분류를 주지 않았으면 만들지 않는다 - 빈 표는 「전부 결함 주장」으로 읽힌다.
+    ⚠ 구문 오류 코드도 싣는다 - 룰이 아니라 화면이 따로 센다 (어댑터와 같은 값).
     """
     if not categories:
         msg = "Ruff 가 룰 분류를 주지 않았다 - 빈 표는 모든 지적을 결함 주장으로 보이게 한다"
@@ -198,6 +200,7 @@ def ruff_rules(version: str, categories: Mapping[str, Category]) -> str:
     head = {
         "version": version,
         "target": f"py{TARGET_PYTHON[0]}{TARGET_PYTHON[1]}",
+        "syntax": SYNTAX_ERROR,
     }
     convention = sorted(code for code, cat in categories.items() if not cat.is_defect_claim)
     return _with_rows("CODEPROOF_RUFF", head, "convention", convention)

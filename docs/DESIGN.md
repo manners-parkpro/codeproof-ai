@@ -1759,11 +1759,12 @@ README 에 **반드시** 들어가야 한다 — README 에는 한 줄씩(「재
 | `analysis` | Ruff · mypy 어댑터 · AST 심볼 인덱스 · **일괄 분석** · **호스트 격리** |
 | `reviewers` | **통합 Reviewer 층** · SARIF/bandit/native 가져오기 |
 | `verify` | citation · guard(callee 포함) · corroboration · reachability · confidence |
-| `eval` | 채점자 **4종** · **편차** · **짝 채점** · **민감도** · **미끼 측정** · **다회 실행 관점**(기대값 · k-임계) · **짝 차이** · Wilson CI |
+| `eval` | 채점자 **4종** · **편차** · **짝 채점** · **민감도** · **미끼 측정** · **다회 실행 관점**(기대값 · k-임계) · **짝 차이** · Wilson CI · **대시보드 데이터**(기록된 리뷰 · 브라우저 Ruff 분류 — `explorer`) |
 | `store` | SQLite · 매니페스트 없는 결과를 외래키가 거부 (F1) · `config_hash` 재현성 검사 |
 | `corpus` | decoy 템플릿 · 검증기 **13규칙** · 실행 반증(`proof.py`) · 분류 14종 × 가드 위치 4종 (쌍 수는 [MEASUREMENTS](MEASUREMENTS.md)) |
 | `llm` | 스키마 · 프롬프트 · 파서 · replay · **Anthropic/OpenAI 어댑터** · **Ollama 어댑터** (로컬 서버 · 계정 · 키 없음) |
 | `review` | 정답 없는 파일 하나의 지적 + 근거 — 채점하지 않는다. Ruff · mypy · `--agent claude`(측정과 같은 실행기) · `--ollama MODEL`(로컬 · model_api 층) |
+| `serve` | 대시보드(`docs/`)를 127.0.0.1 에 열고 붙여 넣은 코드를 `review` 와 같은 경로로 리뷰 — Host · Origin · JSON · 본문 길이를 보고, 리뷰는 한 번에 하나 |
 | `cli` | `measure` · `eval` · `import` · `export` · `pack` · `report` · `xauthor-report` · `review` · `serve` · `doctor` · `history` · `decoy` |
 | 테스트 | 지금 수는 CI 기록이 든다 (push 마다 Linux · macOS) |
 

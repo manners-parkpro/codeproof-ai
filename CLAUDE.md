@@ -23,7 +23,7 @@ uv run codeproof doctor          # 자격증명·도구 준비 상태
 uv run codeproof measure         # 정적분석기로 채점 기준 편차 측정 (API 불필요)
 uv run codeproof review <파일.py> [--agent claude] [--ollama MODEL]  # 정답 없는 코드 - 지적과 근거만 (채점하지 않는다)
 uv run codeproof history         # 저장된 실행 · 재현성 확인
-uv run codeproof report          # docs/MEASUREMENTS.md · docs/figures/*.svg 생성 (--check 로 최신 확인)
+uv run codeproof report          # docs/MEASUREMENTS.md · figures/*.svg · data/*.js · index.html 생성 구간 (--check 로 최신 확인)
 uv run codeproof serve           # 대시보드(docs/)를 127.0.0.1 에 열고 붙여 넣은 코드를 review 와 같은 경로로 리뷰
 uv run codeproof xauthor-report  # results/xauthor/MEASUREMENTS.md — codex 가 쓴 쌍의 선언한 분석 (DESIGN §7.10d · 묶음이 없으면 쓰지 않는다)
 uv run codeproof pack --from <실행기 출력> --out results/agent/<이름> [--runs N]  # 에이전트 묶음 (N = 수집 전에 선언한 회차 수)
@@ -474,7 +474,7 @@ D층 집계 FPR 은 「도구의 오탐률」이 아니라 **「내가 고른 �
 ### F5b. 변동하는 측정값을 산문에 베끼지 않는다 🔴
 
 ```bash
-uv run codeproof report            # docs/MEASUREMENTS.md · docs/figures/*.svg 생성
+uv run codeproof report            # docs/MEASUREMENTS.md · figures/*.svg · data/*.js · index.html 생성 구간
 uv run codeproof report --check    # 낡았으면 exit 1
 ```
 
@@ -485,7 +485,8 @@ uv run codeproof report --check    # 낡았으면 exit 1
   숫자와 표본이 붙어 다니면 **스스로 날짜를 밝히므로** 나중에도 읽힌다.
 - 🔴 생성물에 **시각·run_id 를 넣지 않는다.** 넣으면 코퍼스가 그대로여도
   매번 달라져 「최신인가」를 물을 수 없다. 재현 정보는 `config_hash` 로 충분하다.
-- 생성물은 손으로 고치지 않는다. 파일 첫 줄이 그렇게 말하고 테스트가 강제한다.
+- 생성물은 손으로 고치지 않는다. 파일 첫 줄이 그렇게 말하고 테스트가 강제한다 — 손으로 쓰는 `index.html` 은
+  생성 구간 표시(주석 두 줄) 사이만 생성물이다.
 
 ### F4a. 관례 주장을 거짓 경보로 세지 않는다 🔴
 

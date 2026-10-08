@@ -29,6 +29,9 @@ if TYPE_CHECKING:
 # 🔴 대상 판을 정한다 - 없으면 Ruff 는 3.10 으로 본다 (version.py)
 _TARGET = f"py{TARGET_PYTHON[0]}{TARGET_PYTHON[1]}"
 
+SYNTAX_ERROR = "invalid-syntax"
+"""⚠ Ruff 의 구문 오류 코드 - 룰 코드가 아니다. 브라우저 Ruff(WebAssembly)도 같은 값을 준다."""
+
 # Ruff severity -> 내부 규약
 _SEVERITY: dict[str, Severity] = {
     "info": Severity.INFO,
@@ -216,8 +219,7 @@ class RuffAnalyzer:
         out: list[Finding] = []
         for item in payload:
             code = str(item.get("code") or "")
-            # ⚠ 구문 오류는 code == "invalid-syntax" 로 온다 - 룰 코드가 아니다.
-            is_syntax = code == "invalid-syntax"
+            is_syntax = code == SYNTAX_ERROR
 
             src = target.match_file(str(item.get("filename", "")))
             if src is None:

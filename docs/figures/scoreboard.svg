@@ -36,13 +36,13 @@ text.guard { fill: #0969da; } text.bug { fill: #cf222e; } text.small { font-size
 <rect class="codex" x="215" y="160" width="188.8" height="16" rx="2"/>
 <text x="409.8" y="172" text-anchor="start">52.4%</text>
 <text x="20" y="210" class="strong" text-anchor="start">안전한 코드에 헛경고</text>
-<text x="20" y="228" class="muted small" text-anchor="start">안전한 코드에 결함이 있다고 함</text>
+<text x="20" y="228" class="muted small" text-anchor="start">안전하다고 증명한 범위를 결함이라 함</text>
 <rect class="claude" x="215" y="198" width="25.6" height="16" rx="2"/>
 <text x="246.6" y="210" text-anchor="start">7.1%</text>
 <rect class="codex" x="215" y="220" width="7.2" height="16" rx="2"/>
 <text x="228.2" y="232" text-anchor="start">2.0%</text>
 <text x="20" y="270" class="strong" text-anchor="start">버그만 정확히 짚었다 (핵심)</text>
-<text x="20" y="288" class="muted small" text-anchor="start">안전한 코드는 통과, 버그만 지적</text>
+<text x="20" y="288" class="muted small" text-anchor="start">헛경고 없이 결함을 짚음</text>
 <rect class="claude" x="215" y="258" width="232.8" height="16" rx="2"/>
 <text x="453.8" y="270" text-anchor="start">64.7%</text>
 <rect class="codex" x="215" y="280" width="168.8" height="16" rx="2"/>

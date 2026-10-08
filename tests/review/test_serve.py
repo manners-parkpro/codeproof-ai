@@ -53,6 +53,21 @@ def _call(
     return resp.status, json.loads(raw) if is_json else {}
 
 
+def _without_body(srv: serve.ReviewServer, length: str | None) -> int:
+    """머리만 보낸다 - 길이만 보고 거절하는지 본다 (읽지 않은 본문이 연결을 끊지 않게)."""
+    port = srv.server_address[1]
+    conn = http.client.HTTPConnection(serve.HOST, port, timeout=5)
+    conn.putrequest("POST", "/api/review", skip_host=True)
+    conn.putheader("Host", f"{serve.HOST}:{port}")
+    conn.putheader("Content-Type", "application/json")
+    if length is not None:
+        conn.putheader("Content-Length", length)
+    conn.endheaders()
+    status = conn.getresponse().status
+    conn.close()
+    return status
+
+
 def test_pasted_code_is_reviewed_with_evidence(server: serve.ReviewServer) -> None:
     status, body = _call(server, "POST", "/api/review", {"code": CODE})
     assert status == 200
@@ -78,6 +93,22 @@ class TestRequestsItDoesNotTake:
         bad = _call(server, "POST", "/api/review", {"code": CODE},
                     {"Origin": "https://evil.example"})
         assert (ok[0], bad[0]) == (200, 403)
+
+    def test_an_origin_of_null(self, server: serve.ReviewServer) -> None:
+        """샌드박스 iframe · data: 문서는 Origin 을 `null` 로 보낸다 - 같은 출처가 아니다."""
+        bad = _call(server, "POST", "/api/review", {"code": CODE}, {"Origin": "null"})
+        assert bad[0] == 403
+
+    def test_a_body_over_the_cap(self, server: serve.ReviewServer) -> None:
+        """본문 상한 - 길이만 보고 읽기 전에 거절한다 (파일 하나를 리뷰하는 화면이다)."""
+        assert _without_body(server, str(serve.MAX_BODY + 1)) == 413
+
+    @pytest.mark.parametrize("length", [None, "\N{SUPERSCRIPT TWO}"])
+    def test_a_length_that_is_not_a_number(
+        self, server: serve.ReviewServer, length: str | None
+    ) -> None:
+        """「²」는 isdigit 이 참이라 int() 가 처리기 밖에서 터져 연결이 끊겼다 (독립 검토)."""
+        assert _without_body(server, length) == 411
 
     def test_another_host_name(self, server: serve.ReviewServer) -> None:
         """🔴 DNS rebinding - 다른 이름이 127.0.0.1 을 가리키게 해서 같은 출처인 척한다."""

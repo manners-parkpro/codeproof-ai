@@ -6,6 +6,9 @@
 <title>CodeProof AI</title>
 <link rel="icon" href="data:,">
 <meta name="description" content="AI 코드 리뷰어의 점수 중 얼마가 모델 실력이고 얼마가 채점 방식 때문인가 — 재 본 결과와, 두 AI 가 남긴 실제 리뷰를 한 페이지에.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="CodeProof AI — AI 코드 리뷰어의 점수, 얼마가 실력이고 얼마가 채점 방식일까?">
+<meta property="og:description" content="안전한 코드와 안전장치 하나만 다른 버그 코드를 짝으로 만들어 Claude Code 와 Codex 에게 리뷰시켰다 — 결과와 두 AI 가 남긴 실제 리뷰를 한 페이지에.">
 <style>
   :root {
     --bg: #f6f6f3; --surface: #ffffff; --soft: #f3f4f8; --fg: #16181d; --text: #2b303b; --muted: #555b69;
@@ -13,8 +16,8 @@
     --a: #5b47e0; --a-text: #4b39c7; --b: #d9730d; --b-text: #a9540a; --track: #eeeff3;
     --ok: #1a7f37; --ok-bg: #dafbe1; --warn: #9a6700; --warn-bg: #fff8c5; --bad: #cf222e; --bad-bg: #ffebe9;
     --none: #57606a; --none-bg: #eaeef2;
-    --code-bg: #12141a; --code-fg: #e6e8ee; --code-muted: #6b7280; --code-guard: #1f3a2a; --code-cover: #1b2433;
-    --code-defect: #4a1d24;
+    --code-bg: #12141a; --code-fg: #e6e8ee; --code-muted: #9aa1ae; --code-guard: #1f4430; --code-cover: #24324c;
+    --code-defect: #5a2029; --code-a: #a99dff; --code-b: #ffa657;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
@@ -33,6 +36,8 @@
     --none: #9198a1; --none-bg: #21262d;
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   html { scroll-behavior: smooth; scroll-padding-top: 72px; }
   body {
     margin: 0; background: var(--bg); color: var(--fg); word-break: keep-all; overflow-wrap: break-word;
@@ -77,6 +82,7 @@
   .headline .diff { margin: 16px 0 8px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 14px; color: var(--muted); }
   .headline .diff b { display: block; font-size: 30px; color: var(--fg); line-height: 1.2; }
   .headline .note { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.6; }
+  .headline .note + .note { margin-top: 6px; }
   .cards { grid-area: cards; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 8px; }
   .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 20px 22px; }
   .card p { margin: 0; font-size: 15px; line-height: 1.65; color: var(--text); }
@@ -104,6 +110,7 @@
   .seg button + button { border-left: 1px solid var(--line-strong); }
   .seg button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
   .spacer { flex: 1 1 auto; }
+  .picks { margin: -4px 0 12px; }
   .story { margin: 0 0 14px; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 15px; color: var(--text); }
   .story dt { font-weight: 600; color: var(--fg); }
   .story dd { margin: 0; }
@@ -114,21 +121,23 @@
   .code .no { color: var(--code-muted); text-align: right; padding-right: 10px; user-select: none; }
   .code .marks { display: flex; gap: 2px; align-items: center; }
   .code .dot { width: 8px; height: 8px; border-radius: 4px; }
-  .code .dot.a { background: var(--a); } .code .dot.b { background: var(--b); }
+  .code .dot.a { background: var(--code-a); } .code .dot.b { background: var(--code-b); }
   .code .ln.cover { background: var(--code-cover); }
   .code .ln.guard { background: var(--code-guard); }
   .code .ln.defect { background: var(--code-defect); }
-  .legend { display: flex; flex-wrap: wrap; gap: 14px; margin: 8px 0 0; font-size: 13px; color: var(--muted); }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 0 0 8px; font-size: 13px; color: var(--muted); }
   .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+  .legend .k-guard, .legend .k-cover, .legend .k-defect { border: 1px solid var(--muted); }
   .legend .k-guard { background: var(--code-guard); } .legend .k-cover { background: var(--code-cover); }
-  .legend .k-defect { background: var(--code-defect); } .legend .k-a { background: var(--a); border-radius: 6px; }
-  .legend .k-b { background: var(--b); border-radius: 6px; }
+  .legend .k-defect { background: var(--code-defect); }
+  .legend .k-a { background: var(--code-a); border: 1px solid var(--a); border-radius: 6px; }
+  .legend .k-b { background: var(--code-b); border: 1px solid var(--b); border-radius: 6px; }
   .reviews { display: flex; flex-direction: column; gap: 12px; }
   .review { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; background: var(--soft); }
-  .review header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .review header { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-bottom: 6px; }
   .review .swatch { width: 10px; height: 10px; border-radius: 5px; }
-  .review .name { font-weight: 700; }
-  .review .model { font-size: 13px; color: var(--muted); }
+  .review .name { font-weight: 700; white-space: nowrap; }
+  .review .model { font-size: 13px; color: var(--muted); white-space: nowrap; }
   .badge { margin-left: auto; font-size: 13px; font-weight: 700; padding: 3px 10px; border-radius: 999px; white-space: nowrap; }
   .badge.ok { color: var(--ok); background: var(--ok-bg); } .badge.warn { color: var(--warn); background: var(--warn-bg); }
   .badge.bad { color: var(--bad); background: var(--bad-bg); } .badge.none { color: var(--none); background: var(--none-bg); }
@@ -150,10 +159,12 @@
   .result { border: 1px solid var(--line); border-radius: 12px; padding: 16px; background: var(--soft); min-height: 120px; }
   .result h3 { margin: 0 0 8px; font-size: 16px; }
   .result .sum { margin: 0 0 8px; font-size: 15px; color: var(--text); }
+  .callout { margin: 12px 0 0; padding: 10px 12px; border-left: 3px solid var(--accent); border-radius: 6px;
+             background: var(--surface); font-size: 14.5px; line-height: 1.6; color: var(--fg); }
   .local { margin-top: 14px; border: 1px dashed var(--line-strong); border-radius: 12px; padding: 14px 16px; }
   .local h3 { margin: 0 0 6px; font-size: 15px; }
   .local p { margin: 0 0 8px; font-size: 14px; color: var(--text); }
-  .local pre { margin: 0; font-size: 13px; white-space: pre-wrap; word-break: break-all; }
+  .local pre { margin: 0; font-size: 13px; white-space: pre; overflow-x: auto; }
 
   .principles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin: 0 0 18px; padding: 0; list-style: none; }
   .principles li { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; font-size: 15px; color: var(--text); }
@@ -199,7 +210,7 @@
       <a href="#how">AI 와 만든 방식</a>
       <a href="#verify">직접 검증</a>
     </nav>
-    <a class="btn primary" href="#try" data-open="code">코드 넣어 보기</a>
+    <a class="btn primary" href="#try" data-open="code">내 코드 넣어 보기</a>
   </div>
 </header>
 
@@ -208,37 +219,38 @@
   <div class="hero-text">
     <p class="eyebrow">실무 Spring 백엔드에서 Claude Code 와 Codex 를 매일 쓰다가 생긴 질문</p>
     <h1>AI 코드 리뷰어의 점수,<br>얼마가 실력이고 얼마가 채점 방식일까?</h1>
-    <p class="lead">안전한 코드와, 거기서 안전장치 한 줄만 지운 버그 코드를 짝으로 만들어 두 AI 에게 리뷰시켰다. 버그 쪽만 짚어야 정답이다.</p>
+    <p class="lead">안전한 파이썬 코드와, 거기서 안전장치 하나를 지우거나 우회한 버그 코드를 짝으로 만들어 두 AI 에게 리뷰시켰다. 버그 쪽만 짚어야 정답이다.</p>
   </div>
-  <p class="cta"><a class="btn primary" href="#try" data-open="code">직접 코드 넣어 보기</a> <a class="btn" href="#try" data-open="records">실제 AI 리뷰 보기</a> <a class="btn" href="https://github.com/manners-parkpro/codeproof-ai">GitHub 저장소</a></p>
+  <p class="cta"><a class="btn primary" href="#try" data-open="records">두 AI 의 실제 리뷰 보기</a> <a class="btn" href="#try" data-open="code">내 코드 넣어 보기</a> <a class="btn" href="https://github.com/manners-parkpro/codeproof-ai">GitHub 저장소</a></p>
   <!-- 생성물: 핵심 발견 - `uv run codeproof report` 가 채운다. 손으로 고치지 않는다. -->
-  <p class="answer"><b>답</b> 채점 규칙만 바꿔도 같은 경고의 헛경고 수가 45.7배 갈렸다. 그래도 버그만 정확히 짚은 비율은 Claude Code 가 앞섰고, 지적 위치를 결함 근처 10줄까지 넓혀 세도 차이가 남았다 (78.4% 대 66.4%).</p>
+  <p class="answer"><b>답</b> 두 AI 를 같은 짝으로 비교하면 버그만 정확히 짚은 비율은 Claude Code 가 앞섰고, 지적 위치를 결함 근처 10줄까지 넓혀 세도 차이가 남았다.</p>
   <div class="headline">
-    <p class="label">버그만 정확히 짚었다 — 안전한 코드는 통과, 버그만 지적</p>
+    <p class="label">버그만 정확히 짚었다 — 헛경고 없이 결함을 짚음</p>
     <div class="bar"><span class="who">Claude Code</span><b>64.7%</b><span class="track"><i class="fill a" style="width:64.7%"></i></span></div>
     <div class="bar"><span class="who">Codex CLI</span><b>46.9%</b><span class="track"><i class="fill b" style="width:46.9%"></i></span></div>
-    <p class="diff"><b>+17.8%p</b> 95% 구간 +11.1 ~ +24.9%p · 0 을 포함하지 않는다 — 우연으로 보기 어렵다</p>
-    <p class="note">짝 150쌍 · 짝마다 3번 리뷰 · 한 번 리뷰했을 때 기대할 수 있는 비율 · 짝은 Claude 와 함께 만들었다 — Claude 에 유리할 수 있어 Codex 가 설계한 짝으로 다시 재고 있다.</p>
+    <p class="diff"><b>+17.8%p</b> 95% 구간 +11.1 ~ +24.9%p · 0 을 포함하지 않는다 — 이 150쌍에서는 우연으로 보기 어렵다</p>
+    <p class="note">파이썬 짝 150쌍 · 짝마다 3번 리뷰 · 한 번 리뷰했을 때 기대할 수 있는 비율 · 모델 claude-fable-5-1 · gpt-6-astra · 추론 강도(effort) low · 같은 프롬프트 · 주석 속 힌트를 지운 코드</p>
+    <p class="note">한계 — 차이에는 모델과 제품(도구 · 권한)이 함께 들어 있다. 짝은 Claude 와 함께 만들었다 — Claude 에 유리할 수 있어 Codex 가 설계한 짝으로 다시 재고 있다.</p>
   </div>
   <div class="cards">
     <div class="card">
-      <p class="eyebrow">채점 규칙 하나로</p>
+      <p class="eyebrow">린터(Ruff) 경고를 두 채점 규칙으로 세면</p>
       <p class="big">45.7배</p>
-      <p>같은 Ruff 경고를 기존 벤치마크처럼 「버그 없는 코드의 경고는 전부 오답」으로 세면 <b>777건</b>, 「안전하다고 증명한 바로 그 줄을 버그라 한 것」만 세면 <b>17건</b>이다 (전체 규칙). 보안 규칙만 고르면 8 대 8로 같다.</p>
+      <p>린터는 같은 코드에 늘 같은 경고를 낸다 — 그 경고를 Qodo 벤치마크처럼 「결함 없는 코드의 경고는 전부 헛경고」로 세면 <b>777건</b>, 「안전하다고 증명한 범위 안을 버그라 한 것」만 세면 <b>17건</b>이다 (전체 규칙). 보안 규칙만 고르면 8 대 8로 같다.</p>
     </div>
     <div class="card">
-      <p class="eyebrow">버그를 짚은 비율은 「몇 줄 차이까지 같은 지적인가」에 따라</p>
+      <p class="eyebrow">버그를 짚은 비율(헛경고는 따지지 않음)은 몇 줄 차이까지 같은 지적으로 치느냐에 따라</p>
       <p class="big">둘 다 오르고, 차이는 남는다</p>
       <p>결함 줄과 겹친 지적만 인정하면 Claude Code 69.6% · Codex CLI 47.6%, 근처 10줄까지 인정하면 Claude Code 88.4% · Codex CLI 70.0%. 예: D140 에서 Codex CLI 는 3회 모두 결함 근처를 가리켰지만 「놓침」으로 셌다 — 2줄만 넓혀도 「짚음」이다.</p>
     </div>
     <div class="card">
       <p class="eyebrow">대신 헛경고는</p>
       <p class="big">7.1% 대 2.0%</p>
-      <p>안전한 코드에 「버그가 있다」고 한 비율은 Claude Code 가 더 높았다. 많이 짚는 쪽이 헛경고도 더 냈다.</p>
+      <p>안전하다고 증명한 범위를 버그라 한 비율은 Claude Code 가 더 높았다. 많이 짚는 쪽이 헛경고도 더 냈다.</p>
     </div>
   </div>
   <!-- /생성물: 핵심 발견 -->
-  <p class="fineprint">주 지표는 「버그만 정확히 짚었다」 하나이고, 무엇을 주장할지와 함께 데이터를 보기 전에 정했다. 나머지 카드는 같은 판정을 다시 묶은 보조 지표다. 숫자와 문장은 <code>uv run codeproof report</code> 가 만든다 — <a href="https://github.com/manners-parkpro/codeproof-ai/blob/main/docs/RESULTS.md">결과 · 근거 · 한계</a></p>
+  <p class="fineprint">주 지표는 「버그만 정확히 짚었다」 하나이고, 무엇을 주장할지와 함께 데이터를 보기 전에 정했다. 위 카드 가운데 린터 카드는 채점 규칙의 몫을 Ruff 로 잰 값이고, 두 AI 의 카드는 같은 판정을 다시 묶은 보조 지표다. 숫자와 문장은 <code>uv run codeproof report</code> 가 만든다 — <a href="https://github.com/manners-parkpro/codeproof-ai/blob/main/docs/RESULTS.md">결과 · 근거 · 한계</a>. 이 저장소도 Claude Code 와 함께 만들었다 — <a href="#how">만든 방식</a>.</p>
 </section>
 
 <section id="try" class="band">
@@ -264,11 +276,12 @@
         </div>
         <div class="seg" role="group" aria-label="회차" id="runs"></div>
       </div>
+      <div class="picks" id="examples"></div>
       <dl class="story" id="story"></dl>
       <div class="pane">
         <div>
-          <div class="code" id="code-view" tabindex="0" aria-label="리뷰어가 본 코드"></div>
           <p class="legend" id="legend"></p>
+          <div class="code" id="code-view" tabindex="0" role="region" aria-label="리뷰어가 본 코드"></div>
         </div>
         <div class="reviews" id="reviews" aria-live="polite"></div>
       </div>
@@ -327,8 +340,8 @@ uv run codeproof serve</code></pre>
     <p class="sub">그림도 생성물이다. 예시 짝은 손으로 고르지 않았다 — 그림 아래의 규칙이 골랐다. 두 리뷰어의 점수는 맨 위 카드와 <a href="https://github.com/manners-parkpro/codeproof-ai/blob/main/docs/RESULTS.md">결과 문서</a>에 있다.</p>
     <div class="figs">
       <figure class="wide">
-        <img src="figures/examples.svg" alt="예시 짝 — 안전장치 한 줄만 다른 안전한 코드와 버그 코드, 두 리뷰어의 결과">
-        <figcaption>무엇을 리뷰시켰나 — 안전한 코드와 버그 코드는 안전장치 한 줄만 다르다.</figcaption>
+        <img src="figures/examples.svg" alt="예시 짝 — 안전장치 하나만 다른 안전한 코드와 버그 코드, 두 리뷰어의 결과">
+        <figcaption>무엇을 리뷰시켰나 — 안전한 코드와 버그 코드는 안전장치 하나만 다르다. 버그 코드는 그 안전장치를 지우거나 우회했다.</figcaption>
       </figure>
       <figure class="wide">
         <img src="figures/spread.svg" alt="같은 경고를 두 채점 규칙으로 센 헛경고 수 — 규칙 선택별">

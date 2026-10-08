@@ -2,6 +2,7 @@
 window.CODEPROOF_RUFF = {
  "version": "0.16.8",
  "target": "py314",
+ "syntax": "invalid-syntax",
  "convention": [
 "A001",
 "A002",

@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
+from codeproof_ai.analysis.python.ruff import SYNTAX_ERROR
 from codeproof_ai.corpus.decoy import TrapKind
 from codeproof_ai.domain.finding import Category, Finding, Severity
 from codeproof_ai.domain.location import Location, Position, Span
@@ -151,6 +152,11 @@ class TestRuffRules:
         ))
         assert (loaded["version"], loaded["convention"]) == ("9.9.9", ["D103"])
 
+    def test_the_syntax_code_is_the_adapters(self) -> None:
+        """구문 오류는 룰이 아니다 - 화면이 결함 주장으로 세지 않게 어댑터와 같은 코드를 싣는다."""
+        loaded = explorer.load(explorer.ruff_rules("9.9.9", {"D103": Category.STYLE}))
+        assert loaded["syntax"] == SYNTAX_ERROR
+
     def test_no_categories_is_refused(self) -> None:
         """🔴 빈 표는 브라우저의 모든 지적을 결함 주장으로 보이게 한다."""
         with pytest.raises(ValueError, match="분류"):
@@ -176,6 +182,20 @@ class TestTheShippedData:
         ids = [p["id"] for p in data["pairs"]]
         assert ids == sorted(measured)
         assert set(data["featured"]) <= set(ids)
+
+    def test_unscored_claims_lie_outside_the_labeled_range(self) -> None:
+        """화면은 채점하지 않은 결함 주장(`out`)에 정답 구간까지의 거리를 적는다 - 겹치면 그 거리가
+        거짓이다. 원문의 줄(`_lines`)이 채점자의 겹침 규칙과 같은지도 여기서 드러난다."""
+        data = self._load(explorer.REVIEWS)
+        checked = 0
+        for pair in data["pairs"]:
+            refs = {"safe": pair["safe"]["covered"], "buggy": pair["buggy"]["defect"]}
+            for run in (r for runs in pair["reviews"] for r in runs):
+                for side, ref in refs.items():
+                    for row in (row for row in run[side] if row[3] == "out"):
+                        checked += 1
+                        assert row[1] < ref[0] or row[0] > ref[1], (pair["id"], side, row[:2])
+        assert checked, "범위 밖 지적이 없다 - 대조가 공허하다"
 
     def test_rows_use_known_values(self) -> None:
         data = self._load(explorer.REVIEWS)

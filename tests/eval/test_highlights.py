@@ -2,6 +2,7 @@
 
 🔴 방향 말(「앞섰다」 · 「차이가 남았다」 · 「대신」)도 값에서 고른다. 손으로 쓰면 다시 잰 뒤
    방향이 바뀌어도 문장이 남는다 - 값을 뒤집어 문장이 따라오는지 본다.
+🔴 답은 두 AI 의 비교만 말한다 - 린터를 잰 카드와 한 문장에 묶으면 린터 값이 AI 값으로 읽힌다.
 """
 
 from __future__ import annotations
@@ -14,10 +15,10 @@ from codeproof_ai.eval.report import Glance, render_highlights
 CAUGHT = ScoreRow("버그를 짚었다", "버그 코드의 결함을 지적", ("P-C", "P-V"),
                   Share(0.696, 0.884), Share(0.476, 0.700),
                   Estimate("slack 0", 0.22, 0.156, 0.287), stable=True)
-ALARM = ScoreRow("안전한 코드에 헛경고", "안전한 코드에 결함이 있다고 함", ("P-V", "P-R"),
+ALARM = ScoreRow("안전한 코드에 헛경고", "안전하다고 증명한 범위를 결함이라 함", ("P-V", "P-R"),
                  Share(0.071, 0.100), Share(0.020, 0.036),
                  Estimate("slack 0", 0.051, 0.011, 0.093), stable=True)
-PRIMARY = ScoreRow("버그만 정확히 짚었다", "안전한 코드는 통과, 버그만 지적", ("P-C",),
+PRIMARY = ScoreRow("버그만 정확히 짚었다", "헛경고 없이 결함을 짚음", ("P-C",),
                    Share(0.647, 0.784), Share(0.469, 0.664),
                    Estimate("slack 0", 0.178, 0.111, 0.249), stable=True, primary=True)
 ALL = Spread("ALL", 900, 17, 777)
@@ -46,9 +47,15 @@ class TestTheAnswerFollowsTheValues:
         page = render_highlights([ALL, SECURITY], _glance(CAUGHT, ALARM, PRIMARY))
         answer = _answer(page)
         assert "Claude Code 가 앞섰고" in answer
-        assert "근처 10줄까지 넓혀 세도 차이가 남았다 (78.4% 대 66.4%)" in answer
-        assert "45.7배 갈렸다" in answer
-        assert "0 을 포함하지 않는다" in page
+        assert "근처 10줄까지 넓혀 세도 차이가 남았다." in answer
+        assert "0 을 포함하지 않는다 — 이 150쌍에서는 우연으로 보기 어렵다" in page
+
+    def test_the_answer_speaks_only_of_the_two_ais(self) -> None:
+        """🔴 45.7배는 린터(Ruff)를 잰 값이다 - 답에 섞으면 AI 의 헛경고가 갈린 것으로 읽힌다."""
+        page = render_highlights([ALL, SECURITY], _glance(CAUGHT, ALARM, PRIMARY))
+        answer = _answer(page)
+        assert not any(word in answer for word in ("Ruff", "린터", "배", "%"))
+        assert '<p class="eyebrow">린터(Ruff) 경고를 두 채점 규칙으로 세면</p>' in page
 
     def test_the_other_reviewer_leads(self) -> None:
         answer = _answer(render_highlights([ALL], _glance(CAUGHT, ALARM, _flip(PRIMARY))))
