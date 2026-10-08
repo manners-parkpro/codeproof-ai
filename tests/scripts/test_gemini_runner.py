@@ -40,7 +40,7 @@ with open(os.environ["FAKE_GEMINI_LOG"], "a") as log:
         "files": sorted(os.listdir(".")),
     }) + "\n")
 if mode == "hang":
-    time.sleep(60)
+    time.sleep(10)  # 제한(3초)보다 길다 - 끊기지 않으면 아래에서 정상 답을 내 지적이 써진다
 model = args[args.index("-m") + 1]
 def emit(**e): print(json.dumps(e))
 emit(type="init", session_id="s", model=model)
@@ -226,7 +226,10 @@ class TestGeminiRunner:
         assert [f["message"] for f in out["findings"]] == ["m"]
 
     def test_the_fallback_still_ends_a_hung_call(self, tmp_path: Path) -> None:
-        """대체 경로도 제한시간을 지킨다 - 60초 멈추는 호출 둘이 실행 전체를 40초 안에 놓아준다."""
+        """대체 경로도 제한시간을 지킨다 - 10초 걸리는 호출이 3초에 끊겨 지적을 쓰지 못한다.
+
+        상한이 없으면 호출이 끝나 지적이 써진다 - 깨진 경우를 시간 초과까지 기다리지 않고 잡는다.
+        """
         r, log = _run(tmp_path, mode="hang", without_timeout=True, limit_s=3)
         assert _reviews(log) == len(SAMPLES), "호출은 시작됐다 - 부르기 전에 실패한 것이 아니다"
         assert not (tmp_path / "out" / "S1.0.json").exists()

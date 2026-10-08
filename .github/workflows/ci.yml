@@ -49,19 +49,23 @@ jobs:
   # verify.sh 는 따로 돈다 — 한 작업에 두면 ubuntu 에서 pytest 약 15분 + 가드 반증 약 7분이 제한(20분)을 넘었다
   # [실측 · 097c370 · run 37197934394 취소]. 같은 명령을 그대로 돌고 나눠 동시에 돌 뿐이다.
   verify:
-    name: verify (${{ matrix.os }})
+    name: verify (${{ matrix.os }} · ${{ matrix.shard }})
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
+        shard: ["1/2", "2/2"]
     runs-on: ${{ matrix.os }}
     # 가드 반증이 늘면서 ubuntu 15~17분이 됐고 느린 러너에서 20분에 두 번 끊겼다 — 같은 커밋을 다시 돌면
     # 17분 08초에 통과했다 [실측 · 2026-10-08 · 가드 153개 · run 37648226421]. 멈춤은 여전히 잡는다.
     # 그 뒤 main 에서 25분 28초 (가드 반증 22.7분) [실측 · 2026-10-08 · 가드 160개 · run 37704426652] —
     # 여기서 더 잘리면 한도를 올리지 말고 가드 반증을 matrix 로 나눈다 (가드는 H3 에 따라 계속 는다).
+    # 25분 넘김이 되풀이돼 [실측 · 11c693b 27분 29초 · 가드 192개 · run 37736474729] 가드 반증을 조각 둘로 나눴다 —
+    # verify.sh 는 그대로 돌고 그 안의 falsify.sh 만 FALSIFY_SHARD 조각을 돈다 (합집합 = 전체는 시험이 본다 · 교훈 #71).
     timeout-minutes: 30
     env:
       UV_LOCKED: "1"
+      FALSIFY_SHARD: ${{ matrix.shard }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
