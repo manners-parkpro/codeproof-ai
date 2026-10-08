@@ -44,12 +44,13 @@ uv run pytest           # 전체 테스트
 ./scripts/verify.sh     # 주장이 이 기계에서 재현되는지 · 가드가 공허하지 않은지 — 안 되면 exit 1
 ```
 
-내 파이썬 파일로 돌려 보려면 `uv run codeproof review 파일.py` — Ruff · mypy 의 지적마다 모은 근거(다른 도구의 동의 ·
-가드 · 도달성)를 붙여 낸다. `--agent claude` 를 붙이면 로그인된 에이전트의 리뷰도 붙고, 그 인용이 코드에 실제로 있는지까지
-본다. 정답이 없는 코드라 결함이라고 판정하지는 않는다.
+내 파이썬 파일로 돌려 보려면 `uv run codeproof review 파일.py` — Ruff · mypy 의 지적마다 모은 근거(다른 도구가 같은 자리를
+짚었는지 · 가드 · 도달성)를 붙여 낸다. 모델 리뷰도 붙일 수 있다 — `--ollama qwen3:4b` 는 로컬 Ollama 모델(계정 · 키 없음),
+`--agent claude` 는 로그인된 에이전트(측정과 같은 실행기 · 모델 기준)이고, 둘 다 인용이 코드에 실제로 있는지까지 본다.
+정답이 없는 코드라 결함이라고 판정하지는 않는다.
 
-소요는 기계마다 다르다 — 개발 기기와 macOS 러너에서 pytest 3~4분 · `verify.sh` 약 6분, Linux 러너에서는 각각 15분
-안팎이다 [실측 · 2026-10-07 · CI 기록]. 같은 검사를 GitHub Actions 가 PR 마다
+소요는 기계와 가드 수에 따라 다르다 — GitHub 러너에서 `verify.sh` 는 macOS 약 11분 · Linux 약 14분(느린 러너에서 25분),
+pytest 는 약 5분 · 10분이다 [실측 · 2026-10-08 · CI 최근 30회 중앙값 · 가드 160개]. 같은 검사를 GitHub Actions 가 PR 마다
 Linux · macOS 새 환경에서 돈다 ([실행 기록](https://github.com/manners-parkpro/codeproof-ai/actions/workflows/ci.yml)).
 공백이 든 경로와 빈 홈 디렉터리에서도 통과했다 [실측 · 2026-10-07]. Windows 는 확인하지 않았다.
 주장을 직접 무너뜨려 보는 절차는 [docs/VERIFY.md](docs/VERIFY.md) 에 있다.

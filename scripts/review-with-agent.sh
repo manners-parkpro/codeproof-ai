@@ -19,6 +19,11 @@
 #      claude  --safe-mode --strict-mcp-config --no-session-persistence
 #              --permission-mode dontAsk --tools Read,Grep,Glob
 #      codex   --ignore-user-config --ignore-rules --ephemeral --sandbox read-only
+#      gemini  샘플마다 새 HOME(로그인 파일만 연결) + 시스템 설정 파일(우선순위 최상위)로
+#              도구 read_file · grep_search · glob · 텔레메트리 · 자동 업데이트 · 추론 수준을 강제,
+#              --approval-mode plan --skip-trust (신뢰하지 않은 폴더에서는 plan 이 default 로
+#              바뀐다 [실측]). 시스템 설정은 권한이 넓은 폴더에 두면 무시된다 [실측] - 700 폴더.
+#              기억 도구가 HOME 에 쓸 수 있어 HOME 을 샘플끼리 나누지 않는다.
 #    ⚠ 권한이 비대칭이다. codex 는 read-only 샌드박스 안에서 명령을 **실행**할 수
 #      있고 claude 는 읽기 도구만 있다 - 제품의 도구가 다르다. RUN.json 에 적는다.
 #    ⚠ `--bare` 는 OAuth 를 읽지 않아 구독 로그인에서는 실패한다.
@@ -31,6 +36,8 @@
 #    (D6). --model 을 생략하면 벤더가 정한 최상위 모델이다:
 #      claude  `--model best` 로 한 번 호출해 응답의 modelUsage 에서 실제 ID
 #      codex   `codex debug models` 의 공개 모델 중 priority 최상위
+#      gemini  카탈로그 명령이 없다 - agent-models.json 의 기준(또는 --model)으로 한 번 불러
+#              그 모델이 실제로 답하는지(result 의 stats.models) 본다
 #    그 결과가 agent-models.json 에 받아들인 모델과 다르면 **멈춘다** (DESIGN §7.10) -
 #    ACCEPT_MODEL_CHANGE=1 로 기준을 옮기거나 --model 로 명시한다. 해석된 모델의
 #    설명(codex 는 카탈로그 설명)은 RUN.json 의 model_note 에 남는다.
@@ -71,9 +78,9 @@ HELPER="$HERE/agent_output.py"
 
 usage() {
   cat >&2 <<USAGE
-용법: $0 <claude|codex> <export-dir> <out-dir> --effort E [옵션]
+용법: $0 <claude|codex|gemini> <export-dir> <out-dir> --effort E [옵션]
 
-  --effort E   🔴 필수 (D4). low · medium · high · xhigh · max
+  --effort E   🔴 필수 (D4). low · medium · high · xhigh · max (gemini 는 low · high)
   --model M    모델 고정. 생략하면 벤더의 최상위 모델을 시작 때 한 번 해석한다
   --runs N     샘플당 반복 횟수 (기본 1). <sample_id>.<i>.json 으로 쓴다
   --limit N    앞에서 N개 샘플만 (파일럿용)
@@ -100,13 +107,19 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-case $AGENT in claude|codex) ;; *) die "모르는 에이전트: $AGENT (claude | codex)" ;; esac
+case $AGENT in claude|codex|gemini) ;; *) die "모르는 에이전트: $AGENT (claude | codex | gemini)" ;; esac
 [[ -n $EFFORT ]] || die "--effort 는 필수다 (D4) - 없으면 개인 설정의 effort 를 물려받는다"
 for f in PROMPT.md SCHEMA.json MANIFEST.json; do
   [[ -f "$IN/$f" ]] || die "$IN/$f 가 없다 - codeproof export 를 (다시) 돌린다"
 done
 command -v "$AGENT" > /dev/null || die "$AGENT 를 찾을 수 없다"
 command -v python3 > /dev/null || die "python3 를 찾을 수 없다"
+# 🔴 macOS 에는 GNU timeout 이 없다 [실측: CI macOS] - 없으면 perl 의 alarm 으로 같은 상한을 건다.
+#    면접관 경로(codeproof review --agent)가 이 실행기를 부르므로 coreutils 를 요구하지 않는다.
+#    alarm 은 exec 뒤에도 남아 제한시간에 그 프로세스를 SIGALRM 으로 끝낸다 [실측: bash 3.2].
+#    ⚠ GNU timeout 과 달리 그 프로세스의 자식까지 끝내지는 않는다 - 제한시간은 운영 값이다 (지문 밖).
+command -v timeout > /dev/null \
+  || timeout() { perl -e 'alarm shift; exec { $ARGV[0] } @ARGV or die "exec $ARGV[0]: $!\n"' "$@"; }
 
 IN=$(cd "$IN" && pwd)
 mkdir -p "$OUT/raw" || die "$OUT 를 만들 수 없다"
@@ -148,7 +161,33 @@ case $AGENT in
     ISOLATION="ignore-user-config,ignore-rules,ephemeral"
     PERMISSION="sandbox=read-only;exec=allowed"
     ;;
+  gemini)
+    NAME=gemini-cli
+    ISOLATION="home=per-sample(oauth-only),system-settings,skip-trust,no-telemetry,no-auto-update"
+    PERMISSION="approval=plan;tools=read_file,grep_search,glob"
+    # 로그인은 사용자의 것을 쓴다 - 파일을 복사하지 않고 링크만 건다
+    GEMINI_LOGIN="$HOME/.gemini"
+    [[ -f "$GEMINI_LOGIN/oauth_creds.json" ]] \
+      || die "gemini 에 로그인돼 있지 않다 - 터미널에서 gemini 를 한 번 실행해 Google 계정으로 로그인한다"
+    case $EFFORT in
+      low) THINK=LOW ;; high) THINK=HIGH ;;
+      *) die "gemini 의 effort 는 low · high 뿐이다 (CLI 의 thinkingLevel) - $EFFORT" ;;
+    esac
+    ;;
 esac
+
+# gemini: 샘플마다 새 HOME - 로그인 파일만 링크하고 측정 조건은 시스템 설정 하나로 강제한다
+gemini_home() {  # $1=새 HOME  $2=고정할 모델
+  local gh=$1 f
+  mkdir -p "$gh/.gemini" "$gh/system" && chmod 700 "$gh" "$gh/system" || return 1
+  for f in oauth_creds.json google_accounts.json; do
+    [[ -f "$GEMINI_LOGIN/$f" ]] && ln -s "$GEMINI_LOGIN/$f" "$gh/.gemini/$f"
+  done
+  python3 "$HELPER" gemini-settings "$2" "$THINK" > "$gh/system/settings.json"
+}
+
+# gemini 한 건 - timeout 은 셸 함수를 못 돌리므로 환경을 앞에 두고 CLI 를 직접 부른다
+GEMINI_FLAGS=(-o stream-json --approval-mode plan --skip-trust)
 
 # ── 모델 해석 (시작 때 한 번) ───────────────────────────────
 resolve_model() {
@@ -170,6 +209,19 @@ resolve_model() {
         || return 1
       python3 "$HELPER" resolve-codex "$EFFORT" ${MODEL:+"$MODEL"} < "$OUT/raw/_resolve.codex.json"
       ;;
+    gemini)
+      local want box gh
+      want=${MODEL:-$(python3 "$HELPER" accepted-model "$HERE/agent-models.json" gemini)}
+      [[ -n $want ]] || { echo "gemini 는 최상위 모델을 알려 주는 명령이 없다 - --model 로 정한다" >&2; return 1; }
+      box=$(mktemp -d); gh=$(mktemp -d)
+      printf '%s\n' "$box" > "$OUT/raw/_resolve.box"   # 감사가 상자 안 경로를 밖으로 세지 않게
+      gemini_home "$gh" "$want" || return 1
+      ( cd "$box" && HOME="$gh" GEMINI_CLI_SYSTEM_SETTINGS_PATH="$gh/system/settings.json" \
+          NO_BROWSER=true timeout 120 gemini -p 'Reply with the single word: ok' -m "$want" \
+          "${GEMINI_FLAGS[@]}" < /dev/null > "$OUT/raw/_resolve.gemini.jsonl" 2> "$OUT/raw/_resolve.err" )
+      rm -rf "$box" "$gh"
+      python3 "$HELPER" resolve-gemini "$OUT/raw/_resolve.gemini.jsonl" "$want"
+      ;;
   esac
 }
 
@@ -189,6 +241,7 @@ else
   [[ -n $RESOLVED ]] || die "모델을 해석하지 못했다 (빈 값)"
   case $AGENT in
     codex)  NOTE=$(python3 "$HELPER" describe-codex "$RESOLVED" "$OUT/raw/_resolve.codex.json") ;;
+    gemini) NOTE="${MODEL:+--model 지정}${MODEL:-기준 모델} · 카탈로그 명령 없음" ;;
     *)      NOTE="${MODEL:-best} 별칭" ;;
   esac
   # 🔴 벤더 최상위가 지난번에 받아들인 모델과 다르면 멈춘다 - 조용히 따라가지 않는다 (DESIGN §7.10).
@@ -240,6 +293,15 @@ run_agent() {  # $1=상자  $2=원본 접두사
           -m "$RESOLVED" -c "model_reasoning_effort=\"$EFFORT\"" \
           --output-schema "$SCHEMA_FILE" --json -o "$rp.last.json" \
           "$PROMPT" < /dev/null > "$rp.jsonl" 2> "$rp.err" ) ;;
+    gemini)
+      # ⚠ 출력 스키마를 강제하는 플래그가 없다 [실측: --help] - 프롬프트의 규격으로 받고
+      #   도우미가 마지막 findings 객체를 찾는다 (claude · codex 와 조건이 다르다 - RUN.json 의 permission)
+      local gh; gh=$(mktemp -d)
+      gemini_home "$gh" "$RESOLVED" || { echo "gemini HOME 을 만들지 못했다" > "$rp.err"; return; }
+      ( cd "$box" && HOME="$gh" GEMINI_CLI_SYSTEM_SETTINGS_PATH="$gh/system/settings.json" \
+          NO_BROWSER=true timeout "$TIMEOUT" gemini -p "$PROMPT" -m "$RESOLVED" \
+          "${GEMINI_FLAGS[@]}" < /dev/null > "$rp.gemini.jsonl" 2> "$rp.err" )
+      rm -rf "$gh" ;;
   esac
 }
 

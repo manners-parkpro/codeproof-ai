@@ -306,13 +306,18 @@ uv run codeproof decoy stats             # 미끼가 실제로 물리는지
 uv run codeproof decoy mutants           # 쌍마다 실린 변이로 증명을 다시 깬다 (경쟁 변이는 30번)
 uv run pytest tests/corpus/test_proofs.py  # 안전 근거가 참인지 — 쌍마다 proof.py 를 돌린다
 
+# ── 내 파일 (채점하지 않는다 · 지적과 근거만) ──────────
+uv run codeproof review 파일.py                    # Ruff · mypy (자격증명 불필요)
+uv run codeproof review 파일.py --ollama qwen3:4b  # + 로컬 Ollama 모델 (계정 · 키 없음 · ollama pull 로 받아 둔다)
+uv run codeproof review 파일.py --agent claude     # + 에이전트 (CLI 로그인 필요)
+
 # ── 외부 리뷰어 가져오기 (자격증명 불필요) ──────────────
 uv run codeproof import --from out --name semgrep --identity "1.2.3"           # SARIF
 uv run codeproof import --from out --name bandit --format bandit --identity "1.8"
 
 # ── 에이전트 (각 CLI 로그인 필요) — 격리 · 모델 고정 · 기록은 실행기가 한다 ──
 uv run codeproof export --out agent-in --docstrings neutral
-./scripts/review-with-agent.sh codex agent-in codex-out --effort low --runs 3
+./scripts/review-with-agent.sh codex agent-in codex-out --effort low --runs 3   # claude · gemini 도 같은 자리
 uv run codeproof import --from codex-out --name codex-cli --kind agent   # RUN.json 이 정본
 uv run codeproof pack --from codex-out --out results/agent/codex-cli --runs 3
 
@@ -322,8 +327,9 @@ uv run codeproof eval --providers claude,codex --effort high --samples 8
 
 반복 횟수(`--runs`)는 결과를 보기 전에 선언한다 — 실행기 · `pack` · 재생 규칙은 [DESIGN §7.10](DESIGN.md),
 에이전트 층을 다시 채점하는 절차는 [docs/VERIFY.md](VERIFY.md) T6.
-`--help` 에 올린 명령은 전부 실제로 동작하며, 테스트가 그것을 강제한다. 「PR 하나를 리뷰하는 명령」은 일부러 만들지
-않았다 — 이 저장소의 논지는 오프라인 측정 경로이고, 안 되는 것을 `--help` 에 올려 두면 쓰는 사람이 속는다.
+`--help` 에 올린 명령은 전부 실제로 동작하고, 테스트가 명령과 처리기의 짝을 강제한다. 파일 하나의 지적과 근거(`review`)는
+있지만 채점하지 않는다 — PR(diff) 단위 리뷰는 만들지 않았다. 이 저장소의 논지는 오프라인 측정 경로이고, 안 되는 것을
+`--help` 에 올려 두면 쓰는 사람이 속는다.
 
 ## 주요 참고문헌
 

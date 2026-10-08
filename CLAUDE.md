@@ -21,7 +21,7 @@ uv run mypy                      # files 설정은 pyproject 에
 
 uv run codeproof doctor          # 자격증명·도구 준비 상태
 uv run codeproof measure         # 정적분석기로 채점 기준 편차 측정 (API 불필요)
-uv run codeproof review <파일.py> [--agent claude]  # 정답 없는 코드 - 지적과 근거만 (채점하지 않는다)
+uv run codeproof review <파일.py> [--agent claude] [--ollama MODEL]  # 정답 없는 코드 - 지적과 근거만 (채점하지 않는다)
 uv run codeproof history         # 저장된 실행 · 재현성 확인
 uv run codeproof report          # docs/MEASUREMENTS.md · docs/figures/*.svg 생성 (--check 로 최신 확인)
 uv run codeproof pack --from <실행기 출력> --out results/agent/<이름> [--runs N]  # 에이전트 묶음 (N = 수집 전에 선언한 회차 수)
@@ -45,7 +45,7 @@ llm       → domain              verify    → domain          ← eval 이 없
 corpus    → domain              reviewers → domain·analysis·llm
 eval      → domain·analysis·llm·verify·corpus·reviewers
 store     → domain·eval         cli       → 전부
-review    → domain·analysis·verify·eval·reviewers   ← 정답 없는 코드 · 채점하지 않는다
+review    → domain·analysis·llm·verify·eval·reviewers   ← 정답 없는 코드 · 채점하지 않는다
 ```
 
 `domain/` 은 **stdlib 과 `typing` 만** import 한다.
@@ -99,9 +99,10 @@ TP 와 FP 를 가른다 (DESIGN §7.9).
 네 군데서 조용히 틀려 있었다.
 
 - `--effort` 없이 돌리지 않는다 (D4). 모델은 **시작 때 한 번** 해석해 고정하고 `RUN.json` 에 적는다.
-- CLI 를 호스트 설정에서 격리한다 — claude `--safe-mode`, codex `--ignore-user-config` 등 (플래그 전체는 실행기 머리말).
-  `--bare` 는 OAuth 를 읽지 않아 구독 로그인에서는 실패한다.
+- CLI 를 호스트 설정에서 격리한다 — claude `--safe-mode`, codex `--ignore-user-config`, gemini 샘플마다 새 HOME +
+  시스템 설정 등 (플래그 전체는 실행기 머리말). `--bare` 는 OAuth 를 읽지 않아 구독 로그인에서는 실패한다.
 - 출력 규격을 손으로 적지 않는다 — `review_schema()` 에서 뽑고 같은 스키마를 CLI 에 강제한다.
+  gemini 는 강제 플래그가 없어 조건이 다르다 — 측정에 넣으려면 그 차이를 선언에 적는다.
 - `import` 는 `RUN.json` 을 정본으로 읽는다. 손으로 준 identity 가 다르면 거부한다.
   실행을 가르는 항목은 전부 설정 지문(`_SIGNED`)에 싣는다 — 빠지면 다른 실행이 같은 설정으로 읽힌다 (DESIGN 교훈 #40).
 - LLM 지적에도 둘러싼 함수를 붙인다 — `run_reviewer` 한 곳에서 (E00). 없으면 짝 채점의

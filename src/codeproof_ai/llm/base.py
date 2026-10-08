@@ -73,8 +73,14 @@ class ReviewProvider(Protocol):
     """한 벤더의 리뷰 호출을 감싼다."""
 
     name: str
-    model_id: str
-    """정확한 모델 ID. 별칭 금지 (D6)."""
+
+    @property
+    def model_id(self) -> str:
+        """정확한 모델 ID. 별칭 금지 (D6).
+
+        읽기 전용 - 처음 읽을 때 정하는 구현도 있다 (Ollama 의 digest).
+        """
+        ...
 
     def review(
         self,

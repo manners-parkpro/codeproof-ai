@@ -12,6 +12,9 @@
     extract <agent> <raw-prefix> <model> <dest> <MANIFEST.json> <sample_id>
                                             원본 -> {"findings": [...]} + 잰 코드의 지문 옆 파일
     audit <out-dir>                         상자 밖 접근 흔적
+    accepted-model <agent-models.json> <agent>   받아들인 기준 모델 (없으면 빈 줄)
+    gemini-settings <model> <LOW|HIGH>      gemini 시스템 설정 - 측정 조건을 강제한다
+    resolve-gemini <probe.jsonl> <model>    그 모델이 실제로 답했는가 -> 모델 ID
 """
 
 from __future__ import annotations
@@ -287,6 +290,102 @@ def extract_claude(envelope: dict[str, object], model: str) -> tuple[dict[str, o
     return payload, meta
 
 
+GEMINI_TOOLS = ("read_file", "grep_search", "glob")
+"""claude 의 Read · Grep · Glob 과 같은 범위. 🔴 `invoke_agent` 가 없으니 하위 에이전트
+(다른 모델)가 끼지 않는다 - `--model` 은 하위 에이전트의 모델을 바꾸지 않는다 [소스: gemini-cli
+docs/cli/model.md]."""
+
+
+def gemini_settings(model: str, think: str) -> dict[str, object]:
+    """시스템 설정 파일(우선순위 최상위)로 측정 조건을 강제한다 - 사용자 설정을 읽지 않는다.
+
+    [소스: gemini-cli docs/reference/configuration.md · 0.63.0 번들] 시스템 설정은 사용자 ·
+    프로젝트 설정을 덮는다. 로그인 방식 `oauth-personal` · 추론 수준 `thinkingLevel`(LOW · HIGH).
+    """
+    if think not in {"LOW", "HIGH"}:
+        msg = f"gemini 의 thinkingLevel 은 LOW · HIGH 뿐이다: {think!r}"
+        raise ValueError(msg)
+    return {
+        "security": {"auth": {"selectedType": "oauth-personal"}, "folderTrust": {"enabled": False}},
+        "general": {"enableAutoUpdate": False, "enableAutoUpdateNotification": False,
+                    "checkpointing": {"enabled": False}},
+        "privacy": {"usageStatisticsEnabled": False},
+        "telemetry": {"enabled": False},
+        "tools": {"core": list(GEMINI_TOOLS)},
+        "skills": {"enabled": False},
+        "experimental": {"autoMemory": False, "gemmaModelRouter": {"enabled": False}},
+        "mcpServers": {},
+        "modelConfigs": {"overrides": [{
+            "match": {"model": model},
+            "modelConfig": {"generateContentConfig": {"thinkingConfig": {"thinkingLevel": think}}},
+        }]},
+    }
+
+
+def _gemini_events(events: str) -> list[dict[str, object]]:
+    out: list[dict[str, object]] = []
+    for line in events.splitlines():
+        try:
+            e = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(e, dict):
+            out.append(e)
+    return out
+
+
+def _gemini_outcome(events: list[dict[str, object]], model: str) -> dict[str, object]:
+    """마지막 `result` - 성공이고 고정한 모델이 답했어야 한다. 아니면 이유를 올린다."""
+    blocked = [str(e.get("message", "")) for e in events if e.get("type") == "error"]
+    result = next((e for e in reversed(events) if e.get("type") == "result"), None)
+    if result is None:
+        raise RefusedError(f"gemini 결과가 없다{' - ' + blocked[-1][:200] if blocked else ''}")
+    if result.get("status") != "success":
+        err = result.get("error")
+        detail = err.get("message") if isinstance(err, dict) else err
+        raise RefusedError(f"gemini 실패: {str(detail)[:200]}")
+    stats = result.get("stats")
+    models = stats.get("models") if isinstance(stats, dict) else None
+    used = models.get(model) if isinstance(models, dict) else None
+    # 🔴 다른 모델이 답했으면 측정 대상이 바뀐 것이다 (claude 와 같은 규칙 · D5 의 fallbacks)
+    if not (isinstance(used, dict) and int(used.get("output_tokens") or 0) > 0):
+        seen = sorted(models) if isinstance(models, dict) else []
+        raise RefusedError(f"고정한 모델이 답하지 않았다: 고정={model} 응답={seen}")
+    return result
+
+
+def resolve_gemini(events: str, model: str) -> str:
+    """카탈로그 명령이 없다 - 기준 모델로 한 번 불러 그 모델이 답하는지 본다."""
+    _gemini_outcome(_gemini_events(events), model)
+    return model
+
+
+def extract_gemini(events: str, model: str) -> tuple[dict[str, object], str]:
+    evs = _gemini_events(events)
+    result = _gemini_outcome(evs, model)
+    # 답은 마지막 도구 호출 뒤의 assistant 조각들이다 - 앞쪽 조각은 도구를 부르기 전의 말이다
+    last_tool = max((i for i, e in enumerate(evs) if e.get("type") in {"tool_use", "tool_result"}),
+                    default=-1)
+    text = "".join(
+        str(e.get("content", "")) for e in evs[last_tool + 1 :]
+        if e.get("type") == "message" and e.get("role") == "assistant"
+    )
+    payload = last_findings_object(text)
+    if payload is None:
+        raise RefusedError("마지막 답에서 findings 를 찾지 못했다")
+    stats = result.get("stats")
+    tools = stats.get("tool_calls") if isinstance(stats, dict) else "?"
+    return payload, f"tools={tools}"
+
+
+def _gemini_paths(events: str) -> list[str]:
+    """도구 호출의 인자 - 상자 밖 접근 감사에 쓴다."""
+    return [
+        f"{e.get('tool_name')} {json.dumps(e.get('parameters'), ensure_ascii=False)}"
+        for e in _gemini_events(events) if e.get("type") == "tool_use"
+    ]
+
+
 def extract_codex(last_message: str, events: str) -> tuple[dict[str, object], str]:
     payload: dict[str, object] | None
     try:
@@ -351,9 +450,12 @@ def audit(out_dir: Path) -> dict[str, list[str]]:
     hits: dict[str, list[str]] = {}
     raw = out_dir / "raw"
     for f in sorted(raw.glob("*.jsonl")):
-        box_file = Path(str(f)[: -len(".jsonl")] + ".box")
+        gemini = f.name.endswith(".gemini.jsonl")
+        stem = str(f)[: -len(".gemini.jsonl" if gemini else ".jsonl")]
+        box_file = Path(stem + ".box")
         box = box_file.read_text(encoding="utf-8").strip() if box_file.is_file() else ""
-        for cmd in _codex_commands(f.read_text(encoding="utf-8", errors="replace")):
+        text = f.read_text(encoding="utf-8", errors="replace")
+        for cmd in _gemini_paths(text) if gemini else _codex_commands(text):
             seen = _SHELL.sub("", cmd)
             if box:
                 # macOS 는 /var 가 /private/var 의 링크다 - 둘 다 상자다.
@@ -382,8 +484,23 @@ def _kv(args: list[str]) -> dict[str, str]:
     return out
 
 
+def _gemini_command(cmd: str, rest: list[str]) -> str:
+    """gemini 준비 명령 - 출력할 한 줄을 돌려준다. 예외는 main 이 받는다."""
+    if cmd == "accepted-model":
+        lock, agent = rest
+        data = json.loads(Path(lock).read_text(encoding="utf-8")) if Path(lock).is_file() else {}
+        prev = data.get(agent)
+        return str(prev.get("model", "")) if isinstance(prev, dict) else ""
+    if cmd == "gemini-settings":
+        return json.dumps(gemini_settings(rest[0], rest[1]), ensure_ascii=False)
+    return resolve_gemini(Path(rest[0]).read_text(encoding="utf-8"), rest[1])
+
+
 def _model_guard_command(cmd: str, rest: list[str]) -> int:
     """모델 기준 확인 명령. 모르는 명령이면 2. 예외는 main 이 받는다."""
+    if cmd in {"accepted-model", "gemini-settings", "resolve-gemini"}:
+        print(_gemini_command(cmd, rest))
+        return 0
     if cmd == "describe-codex":
         catalog = json.loads(Path(rest[1]).read_text(encoding="utf-8"))
         print(describe_codex(catalog, rest[0]))
@@ -410,6 +527,11 @@ def extract(argv: list[str]) -> str:
     if agent == "claude":
         env = json.loads(Path(prefix + ".claude.json").read_text(encoding="utf-8"))
         payload, meta = extract_claude(env, model)
+    elif agent == "gemini":
+        events_file = Path(prefix + ".gemini.jsonl")
+        payload, meta = extract_gemini(
+            events_file.read_text(encoding="utf-8") if events_file.is_file() else "", model,
+        )
     else:
         last = Path(prefix + ".last.json")
         events = Path(prefix + ".jsonl")

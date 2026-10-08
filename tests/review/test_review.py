@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import TYPE_CHECKING
 
 import pytest
@@ -21,6 +22,7 @@ from codeproof_ai.eval.runner import run_reviewer
 from codeproof_ai.eval.sample import LabeledSample, Stratum
 from codeproof_ai.review import ReviewError, render_review, review_file
 from codeproof_ai.reviewers.wrap import AnalyzerReviewer
+from tests.ollama_fake import FakeOllama
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -32,7 +34,11 @@ SHELL = (
 BOTH = "def f() -> int:\n    return undefined_name\n"
 """Ruff(F821) 와 mypy(name-defined) 가 같은 줄을 짚는다 [실측]."""
 
-CLAIMS = ("결함이 확인", "확인된 결함", "결함입니다", "버그입니다", "버그를 찾았다")
+CLAIMS = re.compile(
+    r"확인(된|한) 결함|결함(이|을)? ?확인(됐|했|되었|하였)|결함입니다|버그입니다|버그를 찾았다"
+)
+"""결함 확인처럼 읽히는 문구. [실측] 낱말 목록일 때는 「확인한 결함」이 빠져 그 문장을
+더해도 통과했다."""
 
 
 def _file(tmp_path: Path, name: str, text: str) -> Path:
@@ -91,7 +97,7 @@ class TestReview:
         assert "결함을 확인하는 보고서가 아니다" in text
         assert "확률이 아니다" in text
         assert "## 검증자가 보지 못하는 것" in text
-        assert [c for c in CLAIMS if c in text] == []
+        assert not CLAIMS.search(text), CLAIMS.search(text)
 
     def test_no_findings_is_not_no_defects(self, tmp_path: Path) -> None:
         text = render_review(review_file(_file(tmp_path, "clean.py", "x: int = 1\n")))
@@ -180,6 +186,33 @@ class TestAgent:
         with pytest.raises(ReviewError, match="답을 남기지 않았다"):
             review_file(_file(tmp_path, "shell.py", SHELL), agent="claude")
 
+    def test_an_answer_of_unknown_shape_is_an_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """지적 모양이 아닌 답을 「지적 0건」으로 접지 않는다 (F4) - 깨뜨려도 울던 시험이 없었다."""
+
+        def fake(agent: str, src: Path, out: Path) -> None:  # noqa: ARG001
+            out.mkdir(parents=True)
+            record = {"agent": agent, "identity": f"{agent}-code 9.9.9 · m-1 · effort=low"}
+            (out / "RUN.json").write_text(json.dumps(record), encoding="utf-8")
+            (out / "review.0.json").write_text(json.dumps({"result": "산문"}), encoding="utf-8")
+
+        monkeypatch.setattr(review, "run_agent", fake)
+        with pytest.raises(ReviewError, match="지적 모양이 아니다"):
+            review_file(_file(tmp_path, "shell.py", SHELL), agent="claude")
+
+    def test_agent_findings_get_their_enclosing_function(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """🔴 에이전트 지적도 run_reviewer 한 곳으로 돈다 (E00) - 그래야 둘러싼 함수가 붙는다.
+
+        [실측] run_reviewer 를 건너뛰면 지적이 `<module>` 로 남아 도달성이 「모듈 최상위」로 읽혔다.
+        """
+        _agent_says(monkeypatch, [_said("shell.py", 6, "subprocess.run(cmd, shell=True)")])
+        mine = [e for e in review_file(_file(tmp_path, "shell.py", SHELL), agent="claude").entries
+                if e.reviewer == "claude"]
+        assert mine[0].verified.finding.location.symbol == "run"
+
     def test_the_command_says_why_the_agent_failed(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
     ) -> None:
@@ -187,3 +220,107 @@ class TestAgent:
         assert main(["review", str(_file(tmp_path, "shell.py", SHELL)), "--agent", "claude"]) == 1
         assert "답을 남기지 않았다" in capsys.readouterr().err
 
+
+
+class TestTheReportSaysOnlyWhatItSaw:
+    """워크플로 재검증(2026-10-08)이 찾은 결함 - 보고서가 본 것보다 많이 말하지 않는다."""
+
+    def test_a_convention_claim_gets_no_guard_or_reachability(self, tmp_path: Path) -> None:
+        """🔴 「줄이 길다」에는 막을 실패가 없다 - 가드로 반박하지 않는다 (F4a)."""
+        long_line = "x = 1  # " + "a" * 120 + "\n"
+        report = review_file(_file(tmp_path, "style.py", long_line), reviewers=("ruff",))
+        style = [e for e in report.entries if e.verified.finding.rule_id == "E501"]
+        assert style, "대조군 - E501 이 나와야 이 시험이 공허하지 않다"
+        kinds = {ev.kind for ev in style[0].verified.evidence}
+        assert EvidenceKind.GUARD not in kinds and EvidenceKind.REACHABILITY not in kinds
+        assert "보지 않음 — 관례 주장" in render_review(report)
+
+    def test_findings_on_one_line_are_not_folded(self, tmp_path: Path) -> None:
+        """🔴 [실측] `return foo + bar` 의 F821 두 건 중 bar 가 말없이 사라졌다."""
+        path = _file(tmp_path, "two.py", "def f() -> int:\n    return foo + bar\n")
+        report = review_file(path, reviewers=("ruff",))
+        names = sorted(e.verified.finding.message for e in report.entries
+                       if e.verified.finding.rule_id == "F821")
+        assert len(names) == 2, names
+        assert any("bar" in n for n in names) and any("foo" in n for n in names)
+
+    def test_dropped_agent_findings_are_counted(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """🔴 버린 지적을 세지 않으면 「짚은 것이 없다」와 구별되지 않는다 (I)."""
+        _agent_says(monkeypatch, [_said("other.py", 6, "subprocess.run(cmd, shell=True)")])
+        path = _file(tmp_path, "clean.py", "x = 1\n")
+        report = review_file(path, reviewers=(), agent="claude")
+        assert len(report.rejected) == 1
+        text = render_review(report)
+        assert "버린 모델 지적 1건" in text
+        assert "짚은 것이 없다" not in text
+
+    def test_the_analyzer_settings_are_in_the_report(self, tmp_path: Path) -> None:
+        """사용자의 `# noqa` 가 왜 무시되는지 보고서에서 보인다 (F2)."""
+        text = render_review(review_file(_file(tmp_path, "a.py", SHELL), reviewers=("ruff",)))
+        assert "분석기 설정: `ruff(" in text and "ignore-noqa" in text
+
+    def test_a_bom_does_not_blind_the_verifiers(self, tmp_path: Path) -> None:
+        """[실측] BOM 이 남으면 검증자의 파서가 파일 전체를 못 읽고 둘러싼 함수를 잃었다."""
+        path = tmp_path / "bom.py"
+        path.write_text("﻿" + SHELL, encoding="utf-8")
+        report = review_file(path, reviewers=("ruff",))
+        s602 = next(e for e in report.entries if e.verified.finding.rule_id == "S602")
+        assert s602.verified.finding.location.symbol, "둘러싼 함수를 잃지 않는다"
+        assert not any("파싱" in ev.detail for ev in s602.verified.evidence)
+
+
+class TestCommandGuardsTheUsersFiles:
+    def test_the_report_never_overwrites_the_input(self, tmp_path: Path) -> None:
+        path = _file(tmp_path, "keep.py", SHELL)
+        assert main(["review", str(path), "--out", str(path)]) == 2
+        assert path.read_text(encoding="utf-8") == SHELL
+
+    def test_a_missing_report_folder_fails_before_reviewing(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """🔴 끝난 뒤에 실패하면 모델 리뷰가 사라진다 - 돌리기 전에 본다."""
+        # cli 가 직접 import 한 이름을 바꾼다 - review.review_file 을 바꾸면 감시가 걸리지 않는다
+        monkeypatch.setattr("codeproof_ai.cli.review_file", lambda *_, **__: pytest.fail("돌렸다"))
+        out = tmp_path / "no" / "such" / "report.md"
+        assert main(["review", str(_file(tmp_path, "a.py", SHELL)), "--out", str(out)]) == 2
+
+    def test_a_file_that_is_not_utf8_is_a_clear_error(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        path = tmp_path / "latin1.py"
+        path.write_bytes("s = 'caf\xe9'\n".encode("latin-1"))
+        assert main(["review", str(path)]) == 2
+        assert "UTF-8" in capsys.readouterr().err
+
+    def test_an_agent_not_yet_tried_is_not_offered(self) -> None:
+        """안 되는 것을 --help 에 두면 쓰는 사람이 속는다 - codex 는 이 경로를 실호출로 안 봤다."""
+        assert "codex" not in review.AGENTS
+        with pytest.raises(SystemExit):
+            main(["review", "x.py", "--agent", "codex"])
+
+
+class TestLocalModel:
+    """🔴 로컬 모델은 에이전트가 아니다 (model_api) - 키 · 계정 없이 로컬 서버를 부른다."""
+
+    def test_a_local_model_review_is_verified_like_any_model(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        with FakeOllama() as fake:
+            monkeypatch.setenv("OLLAMA_HOST", fake.host)
+            fake.answer = {"findings": [_said("shell.py", 6, "subprocess.run(cmd, shell=True)")]}
+            report = review_file(_file(tmp_path, "shell.py", SHELL), local="qwen3:4b")
+        mine = [e for e in report.entries if e.reviewer == "ollama"]
+        assert len(mine) == 1
+        citation = next(ev for ev in mine[0].verified.evidence if ev.kind is EvidenceKind.CITATION)
+        assert citation.verdict is Verdict.SUPPORTS
+        assert report.reviewers[-1].startswith("ollama qwen3:4b@")
+        assert "(정적분석기 + 로컬 모델)" in render_review(report)
+
+    def test_no_local_server_is_an_error_not_zero_findings(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        monkeypatch.setenv("OLLAMA_HOST", "http://127.0.0.1:9")
+        assert main(["review", str(_file(tmp_path, "a.py", SHELL)), "--ollama", "qwen3:4b"]) == 1
+        assert "닿지 않는다" in capsys.readouterr().err

@@ -149,10 +149,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    # 🔴 `review`(단일 PR 런타임 경로)는 **일부러 없다.**
-    #    안 되는 것을 --help 에 올려 두면 쓰는 사람이 속는다. 이 저장소의
-    #    논지는 오프라인 측정 경로(measure·eval·report)이고, 런타임 리뷰는
-    #    그 논지를 보이는 데 필요하지 않다. docs/DESIGN.md 의 범위 표를 본다.
+    # 🔴 안 되는 것을 --help 에 올려 두면 쓰는 사람이 속는다 - 실제로 돌려 본 경로만 연다.
+    #    `review` 는 정답이 없는 파일의 지적과 근거만 낸다 (결함 확인이 아니다 · review.py).
 
     ev = sub.add_parser("eval", help="모델을 리뷰어로 돌린다 (자격증명 필요)")
     ev.add_argument("--corpus", default="corpus/decoys")
@@ -241,6 +239,11 @@ def build_parser() -> argparse.ArgumentParser:
     rv.add_argument(
         "--agent", choices=AGENTS, default=None,
         help="에이전트 리뷰도 붙인다 - 그 CLI 에 로그인돼 있어야 한다 (구독 사용량 · 크레딧)",
+    )
+    rv.add_argument(
+        "--ollama", metavar="MODEL", default=None,
+        help="로컬 Ollama 모델의 리뷰도 붙인다 (예: qwen3:4b) - 계정 · 키 없음."
+        " Ollama 를 켜고 모델을 받아 둔다 (ollama pull)",
     )
 
     sub.add_parser("doctor", help="자격증명 · 도구 준비 상태 확인")
@@ -347,7 +350,7 @@ def _cmd_export(corpus: Path, out: Path, prompt_name: str, docstrings: str = "ke
         f"{out} 에 샘플 {n}개를 썼다 (prompt_hash={manifest['prompt_hash']} · "
         f"docstrings={docstrings})"
     )
-    print("  다음: ./scripts/review-with-agent.sh <claude|codex> "
+    print("  다음: ./scripts/review-with-agent.sh <claude|codex|gemini> "
           f"{out} <출력디렉터리>")
     print("  그다음: codeproof import --from <출력디렉터리> --kind agent "
           "--name <이름> --identity <버전>")
@@ -1031,16 +1034,27 @@ def _print_observations(run: ReviewerRun) -> None:
             )
 
 
-def _cmd_review(path: Path, out: Path | None, agent: str | None = None) -> int:
+def _cmd_review(
+    path: Path, out: Path | None, agent: str | None = None, local: str | None = None,
+) -> int:
     """정답이 없는 코드 - 채점하지 않고 지적과 근거만 낸다 (review.py)."""
     if path.suffix != ".py" or not path.is_file():
         print(f"파이썬 파일이 아니다: {path}", file=sys.stderr)
         return 2
+    # 🔴 보고서 경로는 돌리기 **전에** 본다 - 끝난 뒤에 실패하면 모델 리뷰가 사라지고,
+    #    입력과 같으면 원본 코드를 보고서로 덮어쓴다
+    if out is not None and (out.resolve() == path.resolve() or not out.parent.is_dir()):
+        why = "입력 파일과 같다" if out.resolve() == path.resolve() else "폴더가 없다"
+        print(f"보고서를 쓸 수 없다 ({why}): {out}", file=sys.stderr)
+        return 2
     try:
-        report = review_file(path, agent=agent)
+        report = review_file(path, agent=agent, local=local)
     except ReviewError as exc:
-        print(f"에이전트 리뷰를 내지 못했다: {exc}", file=sys.stderr)
+        print(f"모델 리뷰를 내지 못했다: {exc}", file=sys.stderr)
         return 1
+    except (UnicodeDecodeError, OSError) as exc:
+        print(f"파일을 읽지 못했다 (UTF-8 파이썬 파일이어야 한다): {path} - {exc}", file=sys.stderr)
+        return 2
     text = render_review(report)
     if out is None:
         print(text, end="")
@@ -1561,7 +1575,9 @@ _COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
     "export": lambda a: _cmd_export(Path(a.corpus), Path(a.out), a.prompt, a.docstrings),
     "pack": lambda a: _cmd_pack(Path(a.corpus), Path(a.src), Path(a.out), runs=a.runs),
     "doctor": lambda _a: _cmd_doctor(),
-    "review": lambda a: _cmd_review(Path(a.path), Path(a.out) if a.out else None, a.agent),
+    "review": lambda a: _cmd_review(
+        Path(a.path), Path(a.out) if a.out else None, a.agent, a.ollama,
+    ),
     "history": lambda a: _cmd_history(a.store, a.limit, a.repro),
     "import": lambda a: _cmd_import(
         Path(a.corpus),

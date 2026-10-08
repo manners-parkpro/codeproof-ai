@@ -73,16 +73,23 @@ class CitationVerifier:
             return MatchLevel.NOT_FOUND
 
         lines = src.content.splitlines()
-        claimed = finding.location.line
+        span = finding.location.span
+        claimed = span.start.line
+        last = max(claimed, span.end.line if span.end is not None else claimed)
+        # 🔴 여러 줄 인용은 그 줄 수만큼 창을 넓혀 이어 붙인 본문과 대조한다 - 한 줄씩 보면
+        #    정확히 그 자리에 있는 인용도 「위치 오류」가 된다 [실측: 측정 묶음의 에이전트
+        #    지적 claude 339/479 · codex 172/341 이 그 경우였다].
+        height = quote.count("\n") + 1
         lo = max(1, claimed - self.line_window)
-        hi = min(len(lines), claimed + self.line_window)
+        hi = min(len(lines), max(last, claimed + height - 1) + self.line_window)
 
         return self._locate(quote, lines[lo - 1 : hi], src.content)
 
     def _locate(
         self, quote: str, window: list[str], whole: str
     ) -> MatchLevel:
-        if any(quote in ln for ln in window):
+        multi = "\n" in quote
+        if (quote in "\n".join(window)) if multi else any(quote in ln for ln in window):
             return MatchLevel.EXACT_AT_LINE
         if not self.normalize:
             return (
@@ -93,7 +100,7 @@ class CitationVerifier:
         nq = _norm(quote)
         if not nq:
             return MatchLevel.NOT_FOUND
-        if any(nq in _norm(ln) for ln in window):
+        if (nq in _norm(" ".join(window))) if multi else any(nq in _norm(ln) for ln in window):
             return MatchLevel.NORMALIZED_AT_LINE
         return (
             MatchLevel.ELSEWHERE_IN_FILE

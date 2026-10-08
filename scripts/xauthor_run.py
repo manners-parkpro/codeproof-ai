@@ -69,7 +69,7 @@ FAILED_PER_KIND = 4   # 분류마다 버리는 쌍
 MAX_WINDOWS = 6       # 1단계 크레딧 창 (선언 「1단계 · 타당성」)
 ROUNDS = 7            # 2단계 바퀴 - 2~8 (선언 「2단계」 - 일곱 바퀴)
 MIN_KINDS = 10        # 2단계에서 남은 분류가 이보다 적으면 「미완」 (선언 「2단계」)
-STAGE2_MAX_WINDOWS = 20  # 2단계 창 상한 - 승인한 추정(13~15)을 넘기면 묻는다 (2단계 시작 전 보정)
+STAGE2_MAX_WINDOWS = 20  # 창 상한 - 승인 추정 13~15 에 여유를 둔 멈춤 지점 (2단계 시작 전 보정 ⑥)
 GATE_TIMEOUT_S = 30 * 60
 REPRO_TIMEOUT_S = 90  # 교차 패밀리 감사의 재현과 같다 (scripts/cross_family_repro.py)
 CREDITS = "out of credits"
@@ -746,7 +746,9 @@ def preflight(out: Path, stage2: dict[str, Any] | None = None) -> Path:
 def summarize(out: Path) -> dict[str, Any]:
     """1단계가 내는 것 - 채운 분류 수 · 호출과 입력 토큰(캐시 따로) · 크레딧 창.
 
-    실패한 시도까지 센다 (선언 「1단계 · 타당성」).
+    실패한 시도까지 센다 (선언 「1단계 · 타당성」). 🔴 2단계의 「채운 분류」는 `complete_kinds`
+    (바퀴 2~8 을 모두 받아들인 분류)다 - `kinds_filled` 는 받아들인 쌍이 하나라도 있는 분류라,
+    통째로 뺄 분류(`dropped`)도 센다. 옮길 쌍을 이것으로 고르면 구성비가 선언과 갈린다 (F5a).
     """
     zero = {"sessions": 0, "cut_sessions": 0, "turns": 0, **dict.fromkeys(USAGE_KEYS, 0)}
     totals = {c: dict(zero) for c in CATEGORIES}
@@ -772,7 +774,7 @@ def summarize(out: Path) -> dict[str, Any]:
         })
     filled = sorted({r["kind"] for r in rows if r["outcome"] == "accepted"})
     events = events_of(out)
-    return {
+    summary: dict[str, Any] = {
         "kinds_filled": len(filled), "kinds": filled, "windows_used": windows_used(out),
         "credit_cuts": sum(e.get("event") == "credit_cut" for e in events),
         "idle_cuts": sum(e.get("event") == "credit_cut_idle" for e in events),
@@ -780,6 +782,22 @@ def summarize(out: Path) -> dict[str, Any]:
         "interrupted": sum(e.get("event") == "interrupted" for e in events),
         "totals": totals, "pairs": rows,
     }
+    record = _load(out / "RUN.json") if (out / "RUN.json").exists() else {}
+    if "after" in record:  # 2단계
+        kinds = list(record.get("kinds", []))
+        summary["complete_kinds"] = [k for k in kinds if alive(k, 2 + ROUNDS, out)]
+        summary["dropped"] = {k: r for k in kinds if (r := dropped_round(k, out)) is not None}
+    return summary
+
+
+def dropped_round(kind: str, out: Path) -> int | None:
+    """그 분류를 통째로 뺀 바퀴 - 받아들인 쌍 없이 끝난(거절 · 실패 한도) 첫 바퀴. 없으면 None."""
+    mine = [d for d in pair_dirs(out) if pair_kind(d) == kind]
+    for rnd in sorted({pair_round(d) for d in mine}):
+        outcomes = [outcome_of(d) for d in mine if pair_round(d) == rnd]
+        if kind_done(outcomes) and "accepted" not in outcomes:
+            return rnd
+    return None
 
 
 def kind_done(outcomes: list[str | None]) -> bool:

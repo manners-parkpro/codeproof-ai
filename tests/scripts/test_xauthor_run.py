@@ -125,13 +125,15 @@ class TestStage2Inputs:
     """2단계가 이어받는 것 - 분류 · 앞서 받아들인 쌍의 요약 (선언 「쓰는 입력」 · ⑩ (e))."""
 
     @staticmethod
-    def _pair(out: Path, pid: str, kind: str, outcome: str, lure: str = "미끼") -> Path:
+    def _pair(
+        out: Path, pid: str, kind: str, outcome: str, lure: str = "미끼", *, claim: str = "주장",
+    ) -> Path:
         d = out / pid
         meta = d / "final" / f"{pid}-x" / "meta.toml"
         meta.parent.mkdir(parents=True)
         meta.write_text(
             f'trap_kind = "{kind}"\n[bait]\napparent_defect = """\n{lure}\n  둘째 줄\n"""\n'
-            '[safety]\nclaim = "주장"\nguard_symbol = "guard"\n',
+            f'[safety]\nclaim = "{claim}"\nguard_symbol = "guard"\n',
             encoding="utf-8",
         )
         (d / "pair.json").write_text(json.dumps({"kind": kind}), encoding="utf-8")
@@ -152,11 +154,32 @@ class TestStage2Inputs:
         briefs = xr.accepted_briefs("bounded_input", dirs)
         assert [b.split(" · ")[0] for b in briefs] == ["미끼: 하나 둘째 줄", "미끼: 셋 둘째 줄"]
 
+    def test_a_long_claim_is_carried_whole(self, tmp_path: Path) -> None:
+        """🔴 고치거나 자르지 않는다 - 1단계 claim 은 101~253자였다 [실측]. 짧으면 못 본다."""
+        claim = "가드는 " + "입력 크기를 먼저 검사하고 넘으면 할당 전에 거절한다 " * 8
+        d = self._pair(tmp_path, "XC001", "bounded_input", "accepted", claim=claim)
+        assert len(claim) > 200
+        assert xr.brief_of(d).endswith(" — " + " ".join(claim.split()))
+
     def test_the_kinds_carried_on_skip_refused_and_unfilled_ones(self, tmp_path: Path) -> None:
         self._pair(tmp_path, "XC001", "bounded_input", "accepted")
         self._pair(tmp_path, "XC002", "misleading_name", "refused")
         self._pair(tmp_path, "XC003", "defensive_copy", "failed")
         assert xr.stage2_kinds(tmp_path) == ["bounded_input"]
+
+    def test_a_refusal_closes_a_kind_that_also_has_an_accepted_pair(self, tmp_path: Path) -> None:
+        """🔴 받아들인 쌍이 있어도 거절이 있으면 닫힌다 - 위 시험은 「채우지 못함」으로도 빠진다."""
+        self._pair(tmp_path, "XC001", "bounded_input", "accepted")
+        self._pair(tmp_path, "XC002", "defensive_copy", "accepted")
+        self._pair(tmp_path, "XC003", "defensive_copy", "refused")
+        assert xr.stage2_kinds(tmp_path) == ["bounded_input"]
+
+    def test_the_declared_stage2_numbers_are_pinned(self) -> None:
+        """선언 「2단계」 · 시작 전 보정 ⑥ - 일곱 바퀴 · 10분류 미만은 미완 · 창 스무 개에서 멈춘다.
+
+        1단계 상수는 흐름 시험이 고정한다. 2단계 시험은 이 값들을 바꿔 끼워 써서 고정하지 못한다.
+        """
+        assert (xr.ROUNDS, xr.MIN_KINDS, xr.STAGE2_MAX_WINDOWS) == (7, 10, 20)
 
     @pytest.mark.parametrize("attempt", [1, 2])
     def test_every_attempt_carries_the_briefs(self, attempt: int) -> None:
@@ -454,6 +477,9 @@ elif not conf.get("no_pair"):
         if conf.get("wrong_kind"):
             text = re.sub(r'trap_kind = ".*"', 'trap_kind = "bounded_input"', text)
         meta.write_text(text)
+        if conf.get("leave_notes"):
+            (box / "notes.md").write_text("저자가 상자 맨 위에 남긴 메모")
+            (dest / "axes.md").write_text("축 표")
     if "감사가 재현한 문제" in prompt:
         (box / "response.md").write_text("1. 고쳤다")
         if conf.get("break_on_fix"):
@@ -506,6 +532,17 @@ class TestFlowWithAFakeCodex:
         assert not (pair.d / "fix.json").exists()
         repro = json.loads((pair.d / "audit.repro.json").read_text(encoding="utf-8"))
         assert [f["reproduced"] for f in repro] == [False]
+
+    def test_what_the_author_left_is_kept(self, pair: Any) -> None:
+        """🔴 상자 맨 위 파일과 쌍 폴더의 덤은 기록으로 남긴다 (2단계 전 보정 ②).
+
+        아무것도 안 남겨도 통과하던 0건 단언만 있었다."""
+        self._configure(pair, audits=[[self._finding("NOT REPRODUCED")]], leave_notes=True)
+        xr.run_pair(pair)
+        kept = pair.d / "box-files" / "notes.md"
+        assert kept.read_text(encoding="utf-8").startswith("저자가")
+        outcome = json.loads((pair.d / "outcome.json").read_text(encoding="utf-8"))
+        assert "axes.md" in outcome["extras"]
 
     def test_a_reproduced_problem_goes_through_fix_and_recheck(self, pair: Any) -> None:
         self._configure(pair, audits=[[self._finding("REPRODUCED")], []])
@@ -706,10 +743,12 @@ class TestFlowWithAFakeCodex:
         out: Path = p.out.parent / "stage2"
         venv: Path = p.venv
 
-        def fake_preflight(o: Path, _stage2: object = None) -> Path:
+        def fake_preflight(o: Path, stage2: dict[str, object] | None = None) -> Path:
             o.mkdir(parents=True, exist_ok=True)
+            # 진짜 preflight 처럼 2단계 정보(after · kinds)를 싣는다
             if not (o / "RUN.json").exists():
-                (o / "RUN.json").write_text(json.dumps({"rounds": {}}), encoding="utf-8")
+                rec = {"rounds": {}, **(stage2 or {})}
+                (o / "RUN.json").write_text(json.dumps(rec), encoding="utf-8")
             return venv
 
         monkeypatch.setattr(xr, "preflight", fake_preflight)
@@ -750,6 +789,10 @@ class TestFlowWithAFakeCodex:
         rows = [(xr.pair_round(d), xr.outcome_of(d)) for d in xr.pair_dirs(out)]
         assert rows == [(2, "failed")] * xr.FAILED_PER_KIND
         assert "미완" in xr.events_of(out)[-1]["why"]
+        summary = xr.summarize(out)
+        assert summary["complete_kinds"] == [] and summary["dropped"] == {GATE_KIND: 2}, (
+            "통째로 뺀 분류를 「채운 분류」로 읽지 않게 따로 적는다 (F5a)"
+        )
 
     def test_stage2_stops_past_its_window_budget(
         self, pair: Any, monkeypatch: pytest.MonkeyPatch,

@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from codeproof_ai.domain.finding import Finding
+    from codeproof_ai.domain.location import Span
     from codeproof_ai.domain.target import ReviewTarget
 
 
@@ -47,8 +48,13 @@ class CorroborationVerifier:
             raise ValueError(msg)
         self.line_slack = line_slack
         self._sources = frozenset(f.source for f in reference)
-        self._hits = frozenset(
-            (f.location.path, f.location.line) for f in reference
+        # 🔴 출처와 보고 범위째 든다 - 동의한 출처만 적고(전부가 아니다)
+        #    참조도 범위로 맞춘다 (A2a)
+        self._hits: tuple[tuple[str, Span, str], ...] = tuple(
+            sorted(
+                {(f.location.path, f.location.span, f.source) for f in reference},
+                key=lambda h: (h[0], h[1].start.line, h[2]),
+            )
         )
 
     def config_signature(self) -> str:
@@ -65,18 +71,20 @@ class CorroborationVerifier:
 
         loc = finding.location
         near = [
-            (p, ln)
-            for p, ln in self._hits
-            if p == loc.path
-            and loc.span.overlaps(ln - self.line_slack, ln + self.line_slack)
+            (span.start.line, src)
+            for p, span, src in self._hits
+            if p == loc.path and loc.span.near(span, self.line_slack)
         ]
         if near:
-            who = "+".join(sorted(self._sources))
+            # 🔴 가장 가까운 줄을 인용한다 - 집합 순서로 고르면 실행마다
+            #    다른 줄이 찍혔다 [실측: PYTHONHASHSEED]
+            line = min(near, key=lambda h: (abs(h[0] - loc.line), h[0]))[0]
+            who = "+".join(sorted({src for _, src in near}))
             return Evidence(
                 kind=EvidenceKind.CORROBORATION,
                 verdict=Verdict.SUPPORTS,
-                detail=f"{who} 도 {loc.path}:{near[0][1]} 를 지적했다",
-                locator=f"{loc.path}:{near[0][1]}",
+                detail=f"{who} 도 {loc.path}:{line} 근처(±{self.line_slack}줄)를 지적했다",
+                locator=f"{loc.path}:{line}",
             )
 
         return Evidence(
