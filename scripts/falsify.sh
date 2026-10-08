@@ -92,7 +92,7 @@ SCENARIOS=(layering runner registry registry-derived sdk-lazy falsify-shard proo
            review-unknown-shape review-single-runner review-claim-words ollama-digest ollama-request ollama-timeout
            ollama-lazy ollama-pin-once ollama-pin-before-answer
            gemini-model-check gemini-tools gemini-home gemini-login gemini-effort runner-timeout
-           runner-timeout-limit gemini-blocked
+           runner-timeout-limit gemini-blocked runner-blind runner-blind-record
            xauthor-s2-constants xauthor-box-files xauthor-s2-refused-closes xauthor-brief-whole
            xauthor-s2-dropped)
 
@@ -1060,6 +1060,14 @@ guard_gemini-effort() { uv run pytest "$_GT" -q -k effort_the_cli_cannot_set; }
 claim_runner-timeout() { echo "실행기는 GNU timeout 이 없어도 돈다 — 맥 기본 상태(면접관의 review --agent)에는 없다"; }
 break_runner-timeout() { perl -0pi -e 's/  \|\| timeout\(\) \{ perl/  || timeout_off() { perl/' "$_RWA"; }
 guard_runner-timeout() { uv run pytest "$_GT" -q -k without_gnu_timeout; }
+
+claim_runner-blind() { echo "측정 실행기는 --blind 면 진행 줄에 지적 수를 찍지 않는다 — 결과를 보면 멈출지 · 더 돌릴지가 끌린다 (§7.10d)"; }
+break_runner-blind() { perl -0pi -e 's/\[\[ \$PROGRESS == blind \]\]/[[ \$PROGRESS == blindx ]]/' "$_RWA"; }
+guard_runner-blind() { uv run pytest "$_GT" -q -k blind_progress; }
+
+claim_runner-blind-record() { echo "세션 기록에 눈가림 여부(progress)를 남긴다 — 측정 세션이 결과를 보지 않았는지 나중에 묻는다 (§7.10d)"; }
+break_runner-blind-record() { perl -0pi -e 's/\("started_at", "runs", "runner_sha", "progress"\)/("started_at", "runs", "runner_sha")/' "$_AO"; }
+guard_runner-blind-record() { uv run pytest "$_GT" -q -k blind_progress; }
 
 claim_runner-timeout-limit() { echo "대체 경로도 멈춘 호출을 제한시간에 끝낸다 — 상한을 잃으면 한 건이 실행 전체를 붙잡는다"; }
 break_runner-timeout-limit() { perl -0pi -e 's/alarm shift; exec/shift; exec/' "$_RWA"; }

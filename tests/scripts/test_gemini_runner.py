@@ -106,6 +106,7 @@ def _path_without(tmp_path: Path, name: str) -> str:
 def _run(
     tmp_path: Path, *, mode: str = "ok", stage: str = "review", effort: str = "low",
     login: bool = True, without_timeout: bool = False, limit_s: int | None = None,
+    extra: tuple[str, ...] = (),
 ) -> tuple[subprocess.CompletedProcess[str], Path]:
     bin_dir, home = tmp_path / "bin", tmp_path / "home"
     bin_dir.mkdir(exist_ok=True)
@@ -126,7 +127,7 @@ def _run(
     limit = ["--timeout", str(limit_s)] if limit_s else []
     r = subprocess.run(
         ["bash", str(RUNNER), "gemini", str(_export(tmp_path)), str(tmp_path / "out"),
-         "--effort", effort, "--model", MODEL, *limit],
+         "--effort", effort, "--model", MODEL, *limit, *extra],
         capture_output=True, text=True, env=env, timeout=40 if limit_s else 120, check=False,
     )
     return r, log
@@ -224,6 +225,26 @@ class TestGeminiRunner:
         assert r.returncode == 0, r.stderr
         out = json.loads((tmp_path / "out" / "S1.0.json").read_text(encoding="utf-8"))
         assert [f["message"] for f in out["findings"]] == ["m"]
+
+    @pytest.mark.parametrize(("extra", "shown", "progress"), [
+        (("--blind",), "리뷰 완료", "blind"),
+        ((), "지적 1", "counts"),
+    ])
+    def test_blind_progress_hides_the_counts(
+        self, tmp_path: Path, extra: tuple[str, ...], shown: str, progress: str,
+    ) -> None:
+        """🔴 측정 중에는 결과를 보지 않는다 - 진행 줄에 지적 수가 없고 세션에 남는다 (§7.10d).
+
+        손잡이가 없는 쪽은 대조군이다 - 고른 줄이 진행 줄이 맞고, 거기에 지적 수가 보인다.
+        """
+        r, _ = _run(tmp_path, extra=extra)
+        assert r.returncode == 0, r.stderr
+        lines = [line for line in r.stdout.splitlines() if line.lstrip().startswith("[")]
+        assert len(lines) == len(SAMPLES)
+        assert all(shown in line for line in lines)
+        assert all(("지적" in line) is (progress == "counts") for line in lines)
+        record = json.loads((tmp_path / "out" / "RUN.json").read_text(encoding="utf-8"))
+        assert record["sessions"][-1]["progress"] == progress
 
     def test_the_fallback_still_ends_a_hung_call(self, tmp_path: Path) -> None:
         """대체 경로도 제한시간을 지킨다 - 10초 걸리는 호출이 3초에 끊겨 지적을 쓰지 못한다.

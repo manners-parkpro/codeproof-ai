@@ -221,7 +221,8 @@ def check_model(
 
 
 def _session(fields: dict[str, str]) -> dict[str, str]:
-    return {k: fields.get(k, "") for k in ("started_at", "runs", "runner_sha")}
+    """세션마다 남긴다 - progress(blind · counts)는 측정 중 결과를 보지 않았는지의 기록이다."""
+    return {k: fields.get(k, "") for k in ("started_at", "runs", "runner_sha", "progress")}
 
 
 def record(path: Path, fields: dict[str, str]) -> list[str]:
