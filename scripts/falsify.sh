@@ -56,7 +56,7 @@ PASS=0; FAIL=0; FAILED_NAMES=()
 #   break_X   그 불변식을 깨는 최소 변경
 #   guard_X   가드. 깨끗한 트리에서 **통과**하고 깨뜨린 뒤 **실패**해야 한다.
 
-SCENARIOS=(layering runner registry registry-derived proof-label proof-vacuous corpus-strict convention docs-tree docs-results-prose selection-headline selection-table selection-repeats fp-counts-floor pair-table pair-sentence pair-block generated figures-generated figures-beside stale-figure out-dash pairs-ladder-label pair-ladder-note agents-points landing-page landing-css landing-blob landing-numbers mutants-unknown
+SCENARIOS=(layering runner registry registry-derived sdk-lazy proof-label proof-vacuous corpus-strict convention docs-tree docs-results-prose selection-headline selection-table selection-repeats fp-counts-floor pair-table pair-sentence pair-block generated figures-generated figures-beside stale-figure out-dash pairs-ladder-label pair-ladder-note agents-points landing-page landing-css landing-blob landing-numbers mutants-unknown
            readme-scoreboard scoreboard-primary misses-complement
            example-rule-slack scoreboard-interval near-miss-rule landing-highlights landing-markers
            agent-contract span-match llm-symbol import-format import-manifest import-rejected
@@ -114,6 +114,12 @@ break_registry-derived() {
   printf '\n_leak = OllamaReviewProvider()  # falsify.sh\n' >> src/codeproof_ai/cli.py
 }
 guard_registry-derived() { uv run pytest tests/architecture/test_registry.py -q -k cli; }
+
+claim_sdk-lazy() { echo "벤더 SDK 는 쓸 때만 읽는다 — 맨 위 import 가 모든 명령 · 가드에 약 1.1초를 붙였다 (H1 · 교훈 #71)"; }
+break_sdk-lazy() {
+  perl -0pi -e 's/from typing import TYPE_CHECKING, Any\n\nfrom codeproof_ai\.llm\.base/from typing import TYPE_CHECKING, Any\n\nimport anthropic\n\nfrom codeproof_ai.llm.base/' src/codeproof_ai/llm/anthropic_.py
+}
+guard_sdk-lazy() { uv run pytest tests/architecture/test_import_cost.py -q -k importing; }
 
 claim_registry() { echo "cli.py 는 구현체를 직접 생성하지 않는다 — A3"; }
 break_registry() {

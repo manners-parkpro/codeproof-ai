@@ -16,8 +16,6 @@ import json
 import time
 from typing import TYPE_CHECKING, Any
 
-import anthropic
-
 from codeproof_ai.llm.base import ReviewResponse, TokenUsage
 from codeproof_ai.llm.parse import parse_findings
 from codeproof_ai.llm.render import load_prompt, render_user_message
@@ -53,6 +51,10 @@ class AnthropicReviewProvider:
         어느 경로로 로그인하든 이 코드는 그대로다.
         """
         if self._client is None:
+            # SDK 는 쓸 때 import 한다 - 맨 위에 두면 레지스트리를 거치는 모든 명령 · 가드가
+            # 쓰지도 않는 SDK 를 읽는다 (0.8초 · openai 와 합쳐 1.1초 [실측: -X importtime]).
+            import anthropic  # noqa: PLC0415 - 위 이유
+
             # 🔴 max_retries=0 - 재시도는 호출자가 세고, 지연 측정을 오염시키지 않는다.
             self._client = anthropic.Anthropic(max_retries=0)
         return self._client

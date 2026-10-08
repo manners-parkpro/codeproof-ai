@@ -14,8 +14,6 @@ import json
 import time
 from typing import TYPE_CHECKING, Any
 
-import openai
-
 from codeproof_ai.llm.base import ReviewResponse, TokenUsage
 from codeproof_ai.llm.parse import parse_findings
 from codeproof_ai.llm.render import load_prompt, render_user_message
@@ -47,6 +45,8 @@ class OpenAIReviewProvider:
 
     def _get_client(self) -> Any:
         if self._client is None:
+            import openai  # noqa: PLC0415 - SDK 는 쓸 때 읽는다 (anthropic_ 의 _get_client 와 같은 이유)
+
             self._client = openai.OpenAI(max_retries=0)
         return self._client
 
