@@ -11,9 +11,29 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 REPO = Path(__file__).resolve().parents[1]
 DECOYS = REPO / "corpus" / "decoys"
 """목표 150쌍 코퍼스 - claude 가 썼다."""
 
 CORPORA = (DECOYS, REPO / "corpus" / "xauthor" / "codex")
 """쌍 단위 규격 테스트가 도는 코퍼스 전부. 두 번째는 codex 가 쓴 쌍이다 (DESIGN §7.10d)."""
+
+
+def made_corpora() -> list[object]:
+    """코퍼스 단위 시험의 매개변수 - 아직 없는 코퍼스는 이유를 달고 건너뛴다.
+
+    🔴 없는 코퍼스를 그대로 돌리면 0쌍으로 「통과」가 뜬다 - 쌍을 옮기기 전(§7.10d ③)에는
+       건너뛰었다고 보이게 하고, 있으면 시험이 쌍이 하나 이상인지도 본다.
+    """
+    return [
+        pytest.param(
+            root,
+            id=root.relative_to(REPO).as_posix(),
+            marks=() if root.is_dir() else pytest.mark.skip(
+                reason=f"{root.relative_to(REPO).as_posix()} 가 아직 없다 - 쌍을 옮기면 돈다"
+            ),
+        )
+        for root in CORPORA
+    ]

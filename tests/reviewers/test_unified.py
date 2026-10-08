@@ -16,6 +16,7 @@ import pytest
 
 from codeproof_ai.analysis.python.ruff import RuffAnalyzer
 from codeproof_ai.analysis.python.version import TARGET_PYTHON
+from codeproof_ai.analysis.toolchain import resolve
 from codeproof_ai.domain.reviewer import Reviewer, ReviewerKind
 from codeproof_ai.eval.grading.safety import ProvableSafetyGrader
 from codeproof_ai.eval.loader import load_decoy_samples
@@ -40,7 +41,8 @@ def sarif_dir() -> Path:
                 (root / f.path).write_text(f.content, encoding="utf-8")
             r = subprocess.run(
                 [
-                    "uv", "run", "ruff", "check", str(root),
+                    # `uv run` 을 거치지 않는다 (C2) - [실측] 300샘플 8.5초 → 3.5초
+                    *resolve("ruff"), "check", str(root),
                     "--output-format=sarif", "--no-cache", "--exit-zero",
                     "--isolated", "--ignore-noqa", "--select=S,B,F,SIM",
                     # 직접 실행 경로(RuffAnalyzer)와 같은 대상 판 - 없으면 3.10 으로 본다

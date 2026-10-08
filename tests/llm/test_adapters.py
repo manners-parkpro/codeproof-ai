@@ -165,10 +165,12 @@ class TestAnthropicResponseHandling:
         assert r.findings == ()
         assert r.raw["_refused"] is True
 
-    def test_malformed_json_does_not_raise(self) -> None:
-        r = self._provider(self._msg(text="not json")).review(TARGET, effort="low")
-        assert r.findings == ()
-        assert "_parse_error" in r.raw
+    def test_an_unreadable_body_is_counted_as_rejected(self) -> None:
+        """🔴 JSON 이 아니거나 객체가 아닌 본문은 버린 이유로 센다 - 「지적 0건」과 다르다 (I)."""
+        cases = (("not json", "본문이 JSON 이 아니다"), ("[]", "본문이 객체가 아니다 (list)"))
+        for text, why in cases:
+            r = self._provider(self._msg(text=text)).review(TARGET, effort="low")
+            assert (r.findings, r.raw["_rejected"]) == ((), [why])
 
     def test_wire_schema_is_recorded(self) -> None:
         """🔴 SDK 가 스키마를 조용히 재작성하므로 전송된 것을 남긴다."""

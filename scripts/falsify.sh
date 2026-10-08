@@ -104,7 +104,8 @@ SCENARIOS=(layering runner registry registry-derived sdk-lazy falsify-shard proo
            serve-unknown-agent serve-origin-null serve-body-cap serve-length ruff-syntax-adapter
            ruff-syntax-data ruff-syntax-js highlights-ai-only explorer-out-range mypy-broken-tool
            mypy-column-bytes grader-name-pairs grader-name-mix multi-run-console pair-ladder-moved
-           pairs-ladder-cells)
+           pairs-ladder-cells model-body-rejected reachability-gaps-doc corpus-clean-nonempty
+           batch-mypy-nonempty bait-untested-nonempty)
 
 claim_layering() { echo "런타임(analysis)은 정답 라벨(eval)을 볼 수 없다 — A1"; }
 break_layering() {
@@ -1287,6 +1288,26 @@ guard_grader-name-mix() { uv run pytest tests/eval/test_mix.py -q -k did_not_gra
 claim_multi-run-console() { echo "다회 실행의 콘솔은 합집합으로 센 편차 · 구성비 · 층을 싣지 않는다 — 어느 회차의 값도 아니다 (F6)"; }
 break_multi-run-console() { perl -0pi -e 's/multi = run\.manifest\.sample_n > 1\n/multi = False\n/' src/codeproof_ai/cli.py; }
 guard_multi-run-console() { uv run pytest tests/cli/test_commands.py -q -k multi_run_prints; }
+
+claim_model-body-rejected() { echo "모델 본문이 JSON 이 아니면 버린 이유로 센다 — 「지적 0건」과 갈린다 (I)"; }
+break_model-body-rejected() { perl -0pi -e 's/return ParseOutcome\(findings=\(\), rejected=\("본문이 JSON 이 아니다",\)\)/return ParseOutcome(findings=())/' src/codeproof_ai/llm/parse.py; }
+guard_model-body-rejected() { uv run pytest tests/llm -q -k 'unreadable_body or non_json_answer'; }
+
+claim_reachability-gaps-doc() { echo "도달성 검증자가 못 보는 것을 문서에 적는다 — 적지 않으면 SUPPORTS 가 과신으로 읽힌다 (E4)"; }
+break_reachability-gaps-doc() { perl -0pi -e 's/  - 동적 호출\(getattr · 문자열 디스패치\)\.\n//' src/codeproof_ai/verify/reachability.py; }
+guard_reachability-gaps-doc() { uv run pytest tests/verify/test_verifiers.py -q -k reachability_gaps; }
+
+claim_corpus-clean-nonempty() { echo "있는 코퍼스의 규격 시험은 쌍이 하나 이상일 때만 통과한다 — 0쌍으로 「깨끗하다」가 뜨지 않게 (H2)"; }
+break_corpus-clean-nonempty() { perl -0pi -e 's/    for d in pair_dirs\(root\):/    for d in pair_dirs(root)[:0]:/' src/codeproof_ai/corpus/decoy.py; }
+guard_corpus-clean-nonempty() { uv run pytest tests/corpus/test_decoy_validator.py -q -k repo_corpus_is_clean; }
+
+claim_batch-mypy-nonempty() { echo "일괄 == 개별 시험은 분석기마다 표본이 지적을 내야 한다 — Ruff ALL 이 mypy 쪽 0건을 가리지 않게 (H2)"; }
+break_batch-mypy-nonempty() { perl -0pi -e 's/(    def _to_findings\(\n        self, records: list\[dict\[str, Any\]\], target: ReviewTarget\n    \) -> list\[Finding\]:\n)/$1        return []\n/' src/codeproof_ai/analysis/python/mypy_.py; }
+guard_batch-mypy-nonempty() { uv run pytest tests/analysis/test_batch.py -q -k actually_produces_findings; }
+
+claim_bait-untested-nonempty() { echo "「미시험은 지적이 없다」 시험은 미시험이 있는 설정(F)으로 본다 — ALL 에서는 빈 목록을 돈다 (H2)"; }
+break_bait-untested-nonempty() { perl -0pi -e 's/return BaitStatus\.OUT_OF_SCOPE if self\.any_finding else BaitStatus\.UNTESTED/return BaitStatus.OUT_OF_SCOPE/' src/codeproof_ai/eval/bait.py; }
+guard_bait-untested-nonempty() { uv run pytest tests/eval/test_bait.py -q -k untested_means; }
 
 # ── 하네스 ─────────────────────────────────────────────────────────────────
 

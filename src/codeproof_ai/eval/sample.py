@@ -60,7 +60,6 @@ class Defect:
     origin: DefectOrigin
     description: str
     category: str | None = None
-    fix_diff: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,7 +76,6 @@ class SafetyRationale:
     claim: str
     justification: str
     guard_location: Location | None = None
-    buggy_twin_id: str | None = None
     covered_path: str | None = None
     covered_lines: tuple[int, int] | None = None
     """🔴 이 주장이 **덮는 범위**.

@@ -91,7 +91,6 @@ def decoy_to_samples(
             claim=rec.claim,
             justification=rec.justification,
             guard_location=guard_loc,
-            buggy_twin_id=_twin_id(rec.decoy_id),
             # 주장이 덮는 범위 = 미끼 구간 + 가드 구간.
             # 미끼는 "무엇이 결함처럼 보이는가", 가드는 "왜 아닌가" 다.
             covered_path=PRESENTED_FILENAME,

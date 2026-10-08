@@ -612,6 +612,8 @@ def _check_invisible(rec: DecoyRecord) -> list[Violation]:
         found = [
             (lineno, ch)
             for lineno, line in enumerate(path.read_text(encoding="utf-8").split("\n"), 1)
+            # 빠른 길 - 표시 문자뿐인 줄에는 걸리는 문자가 없다 [실측: 전 코드포인트에서 0개]
+            if not line.isprintable()
             for ch in line
             if _invisible(ch)
         ]

@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -34,6 +35,22 @@ def _as_int(value: object, default: int = 1) -> int:
     if isinstance(value, str) and value.strip().lstrip("-").isdigit():
         return int(value)
     return default
+
+
+def parse_body(text: str, *, source: str, target: ReviewTarget) -> ParseOutcome:
+    """모델 본문(JSON 문자열) → Finding. 읽지 못한 본문은 버린 이유로 센다 (I).
+
+    🔴 세 어댑터가 따로 읽을 때는 JSON 이 아니거나 객체가 아닌 본문이 버린 이유 없이 「지적 0건」이
+       됐다 - `review --ollama` 화면에는 0건만 남았다. 빈 본문은 `findings` 가 없는 것으로 센다.
+    """
+    try:
+        loaded = json.loads(text) if text.strip() else {}
+    except json.JSONDecodeError:
+        return ParseOutcome(findings=(), rejected=("본문이 JSON 이 아니다",))
+    if not isinstance(loaded, dict):
+        why = f"본문이 객체가 아니다 ({type(loaded).__name__})"
+        return ParseOutcome(findings=(), rejected=(why,))
+    return parse_findings(loaded, source=source, target=target)
 
 
 def parse_findings(

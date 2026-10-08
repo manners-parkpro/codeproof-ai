@@ -103,9 +103,10 @@ class TestOllamaProvider:
         assert resp.findings == ()
         assert resp.raw["_rejected"]
 
-    def test_a_non_json_answer_is_recorded(self) -> None:
+    def test_a_non_json_answer_is_counted_as_rejected(self) -> None:
+        """🔴 읽지 못한 본문은 「지적 0건」이 아니다 - 버린 이유로 센다 (I · review --ollama)."""
         with FakeOllama() as fake:
             fake.answer = "not json"
             resp = OllamaReviewProvider("qwen3:4b", host=fake.host).review(TARGET, effort="none")
         assert resp.findings == ()
-        assert resp.raw["_parse_error"]
+        assert resp.raw["_rejected"] == ["본문이 JSON 이 아니다"]

@@ -24,6 +24,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from codeproof_ai.eval.grading.base import MATCH_POLICY, Judgment, Outcome
+from codeproof_ai.verify.corroboration import SelfCorroborationError
+
+__all__ = ["SelfCorroborationError", "StaticCorroborationGrader"]
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -37,14 +40,6 @@ if TYPE_CHECKING:
 def _order(hit: tuple[str, Span]) -> tuple[str, int, int]:
     path, span = hit
     return path, span.start.line, span.end.line if span.end is not None else span.start.line
-
-
-class SelfCorroborationError(ValueError):
-    """평가 대상이 자기 자신을 확인하려 했다.
-
-    같은 도구의 지적을 같은 도구로 확인하면 항상 일치한다 -
-    측정이 아니라 항등식이다.
-    """
 
 
 class StaticCorroborationGrader:

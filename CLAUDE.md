@@ -211,7 +211,7 @@ span_start = min(node.lineno, *(d.lineno for d in node.decorator_list))
 
 🔴 **복원 방식이 분석 결과를 바꾸면 안 된다.** `__init__.py` 를 무조건 넣으면
 Ruff 의 `INP001` 이 사라져 일괄과 개별이 다른 숫자를 낸다 (DESIGN §6.7). mypy 만 모듈명 해소에
-필요하므로 `materialize_many(..., as_packages=True)` 로 **선택적**이다.
+필요하므로 `materialize_many(..., box_file="__init__.py")` 로 **선택적**이다 — 그 이름은 mypy 어댑터가 준다 (A3).
 
 테스트가 「일괄 == 개별」을 강제한다 — 속도 최적화가 숫자를 바꾸면 최적화가 아니라 버그다.
 

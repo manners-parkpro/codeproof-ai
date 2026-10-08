@@ -21,6 +21,7 @@ from codeproof_ai.domain.finding import Category, Finding, Severity
 from codeproof_ai.domain.location import Location, Position, Span
 from codeproof_ai.domain.target import ReviewTarget, SourceFile
 from codeproof_ai.eval.loader import load_decoy_samples
+from codeproof_ai.verify import reachability
 from codeproof_ai.verify.citation import CitationVerifier, MatchLevel
 from codeproof_ai.verify.confidence import (
     VerificationPipeline,
@@ -327,6 +328,15 @@ class TestAgainstShippedCorpus:
         assert scores[0] == scores[1], "구별하게 됐다면 아래 문서 단언을 갱신한다"
         doc = Path("src/codeproof_ai/verify/guard.py").read_text(encoding="utf-8")
         assert "taint analysis" in doc, "못 보는 것을 문서에 적지 않으면 과신으로 읽힌다"
+
+    def test_reachability_gaps_are_documented(self) -> None:
+        """🔴 E4 - 도달성 검증자가 못 보는 셋(분기 단위 · 파일 밖 · 동적 호출)이 모듈 문서에 있다.
+
+        파일 전체를 읽으면 실행 문자열의 같은 낱말이 문서를 대신해 통과한다 [실측: falsify].
+        """
+        doc = reachability.__doc__ or ""
+        missing = [gap for gap in ("분기 단위", "파일 밖", "동적 호출") if gap not in doc]
+        assert not missing, f"못 보는 것을 문서에 적지 않으면 과신으로 읽힌다: {missing}"
 
 
 class TestGuardStaysInScope:

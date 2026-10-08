@@ -5,7 +5,7 @@
 
 [실측] 이 단언을 세우는 과정에서 두 가지 실제 결함이 드러났다:
   ① `__init__.py` 를 무조건 넣었더니 Ruff 의 INP001 이 사라졌다
-     -> 복원 방식이 분석 결과를 바꾸면 안 된다 (as_packages 로 분리)
+     -> 복원 방식이 분석 결과를 바꾸면 안 된다 (box_file 로 분리)
   ② mypy 가 호스트 프로젝트의 pyproject.toml `strict = true` 를 주워왔다
      -> --config-file=/dev/null 로 격리 (Ruff 의 --isolated 대응물)
 """
@@ -67,14 +67,14 @@ class TestBatchEqualsIndividual:
             assert _key(findings) == _key(many[tid]), f"{tid} 에서 갈린다"
 
     def test_the_sample_actually_produces_findings(self) -> None:
-        """🔴 표본에 지적이 없으면 동치 검증이 「둘 다 0건」으로 공허하게 통과한다."""
+        """🔴 표본에 지적이 없으면 동치 검증이 「둘 다 0건」으로 공허하게 통과한다 (H2).
+
+        분석기마다 본다 - 합치면 늘 지적을 내는 Ruff ALL 이 mypy 쪽 0건을 가린다.
+        """
         targets = self._targets()
-        total = sum(
-            len(fs)
-            for a in (RuffAnalyzer(select=("ALL",)), MypyAnalyzer())
-            for fs in a.analyze_many(targets).values()
-        )
-        assert total > 0, "표본이 아무 지적도 내지 않는다 - 동치 검증이 무의미하다"
+        for a in (RuffAnalyzer(select=("ALL",)), MypyAnalyzer()):
+            total = sum(len(fs) for fs in a.analyze_many(targets).values())
+            assert total > 0, f"{a.name} 가 표본에서 지적을 내지 않는다 - 동치 검증이 무의미하다"
 
     def test_empty_input(self) -> None:
         assert RuffAnalyzer().analyze_many([]) == {}
@@ -121,7 +121,7 @@ class TestMaterializeMany:
             slug = next(iter(mapping))
             assert not (root / slug / "__init__.py").exists()
 
-        with materialize_many(targets, as_packages=True) as (root, mapping):
+        with materialize_many(targets, box_file="__init__.py") as (root, mapping):
             slug = next(iter(mapping))
             assert (root / slug / "__init__.py").is_file()
 

@@ -40,23 +40,16 @@ def materialize(target: ReviewTarget) -> Iterator[Path]:
 def materialize_many(
     targets: Sequence[ReviewTarget],
     *,
-    as_packages: bool = False,
+    box_file: str | None = None,
 ) -> Iterator[tuple[Path, dict[str, str]]]:
-    """대상 여러 개를 각각 별도 하위 디렉터리에 복원한다.
+    """대상 여러 개를 각각 별도 하위 디렉터리(상자)에 복원한다.
 
-    🔴 두 가지를 해야 mypy 일괄 실행이 된다:
+    상자 이름은 `s0000` 꼴이다 - 대상 식별자의 하이픈 · `#` 은 도구가 이름으로 쓰지 못할 수 있다.
+    `box_file` 을 주면 상자마다 그 이름의 빈 파일을 둔다 - 무엇이 필요한지는 분석기가 정한다
+    (mypy 는 상자가 패키지여야 모듈명이 갈린다 - `mypy_.py`).
 
-       ① 디렉터리명을 **유효한 파이썬 식별자로 소독**한다.
-          sample_id 에 하이픈과 `#` 이 있으면 모듈명이 될 수 없다.
-       ② `as_packages=True` 면 각 상자에 **`__init__.py` 를 둔다.**
-          [실측] ① 만으로는 부족했다 - 상자가 패키지가 아니면 그 안의 decoy.py 들이
-          전부 `decoy` 모듈이 되어 `Duplicate module named "decoy"` 가 난다.
-          패키지가 되면 `s0000.decoy` · `s0001.decoy` 로 갈린다.
-
-    🔴 `as_packages` 를 필요한 분석기만 켜는 이유: **복원 방식이 분석 결과를
-       바꾸면 안 된다.** [실측] `__init__.py` 를 무조건 넣었더니 Ruff 의
-       `INP001`(암묵적 네임스페이스 패키지) 지적이 사라져 일괄과 개별이
-       **다른 숫자**를 냈다. mypy 는 모듈명 해소에 필요하고 Ruff 는 아니다.
+    🔴 필요한 분석기만 켠다: **복원 방식이 분석 결과를 바꾸면 안 된다** (C1b) - 그 파일이 다른
+       도구의 지적을 없앨 수 있다. 테스트가 「일괄 == 개별」을 강제한다.
 
     Yields:
         (루트, 디렉터리명 -> target_id 매핑)
@@ -69,8 +62,8 @@ def materialize_many(
             mapping[slug] = target.target_id
             box = root / slug
             box.mkdir()
-            if as_packages:
-                (box / "__init__.py").touch()
+            if box_file is not None:
+                (box / box_file).touch()
             for f in target.files:
                 dest = box / f.path
                 dest.parent.mkdir(parents=True, exist_ok=True)
@@ -96,7 +89,7 @@ def analyze_batch(
     to_findings: Callable[[list[dict[str, Any]], ReviewTarget], list[Finding]],
     *,
     path_key: str,
-    as_packages: bool = False,
+    box_file: str | None = None,
 ) -> dict[str, list[Finding]]:
     """대상 전부를 상자별로 복원해 `run` **한 번**으로 분석하고, 보고 경로로 대상을 되찾는다.
 
@@ -108,7 +101,7 @@ def analyze_batch(
     by_id = {t.target_id: t for t in targets}
     out: dict[str, list[Finding]] = {t.target_id: [] for t in targets}
 
-    with materialize_many(targets, as_packages=as_packages) as (root, mapping):
+    with materialize_many(targets, box_file=box_file) as (root, mapping):
         for rec in run(root):
             split = split_batch_path(root, str(rec.get(path_key, "")))
             if split is None:

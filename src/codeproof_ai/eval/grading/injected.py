@@ -58,19 +58,13 @@ class InjectedDefectGrader:
 
         for i, defect in enumerate(sample.defects):
             d = defect.location
-            if d.path != loc.path:
-                continue
-            lo = max(1, d.span.start.line - self.line_slack)
-            hi = (
-                d.span.end.line if d.span.end else d.span.start.line
-            ) + self.line_slack
-            if loc.span.overlaps(lo, hi):
+            if d.path == loc.path and loc.span.near(d.span, self.line_slack):  # A2a - 같은 함수
                 return Judgment(
                     finding_key=key,
                     outcome=Outcome.TRUE_POSITIVE,
                     grader=self.name,
                     matched_defect=f"{sample.sample_id}#d{i}",
-                    rationale=f"주입 결함 {d.path}:{lo}-{hi} 와 일치",
+                    rationale=f"주입 결함 {d.path}:{d.line} 와 일치 (slack {self.line_slack})",
                 )
 
         # 🔴 이 정의에는 「판정 불가」가 없다.

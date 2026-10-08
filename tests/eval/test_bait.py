@@ -53,7 +53,10 @@ class TestStatusIsThreeWay:
     def test_untested_means_no_finding_at_all(
         self, analyzed: AnalyzedCorpus, shipped_samples: list[LabeledSample]
     ) -> None:
-        for st in _stats(analyzed, shipped_samples).by_status(BaitStatus.UNTESTED):
+        """🔴 ALL 에서는 모든 파일에 INP001 이 나서 미시험이 0 이다 [실측] - 빈 목록은 공허하다."""
+        untested = _stats(analyzed, shipped_samples, ("F",)).by_status(BaitStatus.UNTESTED)
+        assert untested, "미시험 decoy 가 없다 - 대조가 공허하다"
+        for st in untested:
             assert st.any_finding == 0
 
     def test_out_of_scope_means_findings_but_none_in_bait(

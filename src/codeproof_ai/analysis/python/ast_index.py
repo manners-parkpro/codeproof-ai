@@ -48,7 +48,7 @@ class PythonSymbolIndex:
     def _chain(self, tree: ast.Module, line: int) -> list[_Scope]:
         """가장 안쪽 스코프까지의 경로.
 
-        🔴 ast.walk 를 쓰지 않는다 - 중첩 관계가 소실된다 (D4).
+        🔴 ast.walk 를 쓰지 않는다 - 중첩 관계가 소실된다 (B3).
            iter_child_nodes 재귀로 내려간다.
         """
         chain: list[_Scope] = []

@@ -25,7 +25,7 @@ import urllib.request
 from typing import TYPE_CHECKING, Any
 
 from codeproof_ai.llm.base import ReviewResponse, TokenUsage
-from codeproof_ai.llm.parse import parse_findings
+from codeproof_ai.llm.parse import parse_body
 from codeproof_ai.llm.render import load_prompt, render_user_message
 from codeproof_ai.llm.schema import review_schema
 
@@ -152,14 +152,7 @@ class OllamaReviewProvider:
 
         message = raw.get("message")
         text = message.get("content", "") if isinstance(message, dict) else ""
-        payload: dict[str, Any] = {"findings": []}
-        try:
-            loaded = json.loads(text) if str(text).strip() else {}
-            if isinstance(loaded, dict):
-                payload = loaded
-        except json.JSONDecodeError:
-            raw["_parse_error"] = "본문이 JSON 이 아니다"
-        parsed = parse_findings(payload, source=self.name, target=target)
+        parsed = parse_body(str(text), source=self.name, target=target)
         raw["_rejected"] = list(parsed.rejected)
         raw["_refused"] = False
         return ReviewResponse(
