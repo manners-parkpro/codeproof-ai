@@ -30,6 +30,7 @@
 #   scripts/falsify.sh              전부
 #   scripts/falsify.sh layering     하나만
 #   scripts/falsify.sh --list       목록
+#   FALSIFY_SHARD=1/2 scripts/falsify.sh   조각 하나 (CI 가 나눠 동시에 돈다 - 목록에서 n 개마다 k 번째)
 #
 # 전제: 작업 트리가 깨끗해야 한다. 이 스크립트는 소스를 **일부러 고쳤다가**
 #       `git checkout` 으로 되돌리므로, 커밋 안 된 변경이 있으면 거부한다.
@@ -56,7 +57,7 @@ PASS=0; FAIL=0; FAILED_NAMES=()
 #   break_X   그 불변식을 깨는 최소 변경
 #   guard_X   가드. 깨끗한 트리에서 **통과**하고 깨뜨린 뒤 **실패**해야 한다.
 
-SCENARIOS=(layering runner registry registry-derived sdk-lazy proof-label proof-vacuous corpus-strict convention docs-tree docs-results-prose selection-headline selection-table selection-repeats fp-counts-floor pair-table pair-sentence pair-block generated figures-generated figures-beside stale-figure out-dash pairs-ladder-label pair-ladder-note agents-points landing-page landing-css landing-blob landing-numbers mutants-unknown
+SCENARIOS=(layering runner registry registry-derived sdk-lazy falsify-shard proof-label proof-vacuous corpus-strict convention docs-tree docs-results-prose selection-headline selection-table selection-repeats fp-counts-floor pair-table pair-sentence pair-block generated figures-generated figures-beside stale-figure out-dash pairs-ladder-label pair-ladder-note agents-points landing-page landing-css landing-blob landing-numbers mutants-unknown
            readme-scoreboard scoreboard-primary misses-complement
            example-rule-slack scoreboard-interval near-miss-rule landing-highlights landing-markers
            agent-contract span-match llm-symbol import-format import-manifest import-rejected
@@ -114,6 +115,10 @@ break_registry-derived() {
   printf '\n_leak = OllamaReviewProvider()  # falsify.sh\n' >> src/codeproof_ai/cli.py
 }
 guard_registry-derived() { uv run pytest tests/architecture/test_registry.py -q -k cli; }
+
+claim_falsify-shard() { echo "CI 가 가드를 조각으로 나눠 돌아도 빠지거나 겹치는 시나리오가 없다 — 빠진 가드는 아무도 깨뜨려 보지 않는다 (H3)"; }
+break_falsify-shard() { perl -0pi -e 's/\(\( _i % _n == _k - 1 \)\)/(( _i % _n == _k ))/' scripts/falsify.sh; }
+guard_falsify-shard() { uv run pytest tests/scripts/test_falsify_shards.py -q -k cover; }
 
 claim_sdk-lazy() { echo "벤더 SDK 는 쓸 때만 읽는다 — 맨 위 import 가 모든 명령 · 가드에 약 1.1초를 붙였다 (H1 · 교훈 #71)"; }
 break_sdk-lazy() {
@@ -1153,6 +1158,23 @@ run_one() {
   echo
 }
 
+# CI 는 가드를 조각으로 나눠 동시에 돈다 - FALSIFY_SHARD=k/n 이면 목록에서 n 개마다 k 번째를 고른다.
+# 🔴 형식이 틀리거나 빈 조각이면 거부한다 - 조용히 0개를 돌면 「다 울었다」로 읽힌다 (합집합 · 서로소는 시험이 본다).
+SHARD=""
+if [[ -n ${FALSIFY_SHARD-} ]]; then
+  _picked=()
+  if [[ $FALSIFY_SHARD =~ ^([1-9][0-9]*)/([1-9][0-9]*)$ ]] && (( BASH_REMATCH[1] <= BASH_REMATCH[2] )); then
+    _k=${BASH_REMATCH[1]}; _n=${BASH_REMATCH[2]}
+    for _i in "${!SCENARIOS[@]}"; do
+      if (( _i % _n == _k - 1 )); then _picked+=("${SCENARIOS[$_i]}"); fi
+    done
+  fi
+  if [[ ${#_picked[@]} -eq 0 ]]; then
+    echo "${RED}FALSIFY_SHARD 는 비지 않은 조각 k/n (1 ≤ k ≤ n) 이다: $FALSIFY_SHARD${OFF}" >&2; exit 2
+  fi
+  SCENARIOS=("${_picked[@]}"); SHARD=" (조각 $FALSIFY_SHARD)"
+fi
+
 case "${1-}" in
   --list)
     for s in "${SCENARIOS[@]}"; do printf '%-16s %s\n' "$s" "$("claim_$s")"; done
@@ -1161,6 +1183,12 @@ esac
 
 require_clean_tree
 trap 'restore' EXIT INT TERM   # 🔴 깨끗함을 확인한 뒤에만 - 지울 것이 없을 때만 되돌린다
+
+# 🔴 바이트코드 쓰기는 끄되(위 · 교훈 #66) site-packages 는 한 번 미리 만든다. 끄기만 하면 새 venv(CI)에서는
+#    가드마다 pytest 를 소스부터 다시 컴파일한다 [실측: 가드 1회 +0.4초]. 깨는 것은 저장소 소스뿐이라
+#    site-packages 의 바이트코드는 낡을 일이 없고, compileall 은 쓰기 끄기와 상관없이 쓴다 [실측].
+uv run python -m compileall -q -j 0 \
+  "$(uv run python -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')" > /dev/null 2>&1 || true
 
 TARGETS=("${SCENARIOS[@]}")
 [[ $# -gt 0 ]] && TARGETS=("$@")
@@ -1174,7 +1202,7 @@ for s in "${TARGETS[@]}"; do
   run_one "$s"
 done
 
-printf '%s%d개 가드가 울었다%s' "$GREEN" "$PASS" "$OFF"
+printf '%s%d개 가드가 울었다%s%s' "$GREEN" "$PASS" "$SHARD" "$OFF"
 if [[ $FAIL -gt 0 ]]; then
   printf ' · %s%d개가 실패했다: %s%s\n' "$RED" "$FAIL" "${FAILED_NAMES[*]}" "$OFF"
   exit 1
