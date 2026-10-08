@@ -29,8 +29,14 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
     from codeproof_ai.domain.finding import Finding
+    from codeproof_ai.domain.location import Span
     from codeproof_ai.domain.observation import ObservedFinding
     from codeproof_ai.eval.sample import LabeledSample
+
+
+def _order(hit: tuple[str, Span]) -> tuple[str, int, int]:
+    path, span = hit
+    return path, span.start.line, span.end.line if span.end is not None else span.start.line
 
 
 class SelfCorroborationError(ValueError):
@@ -67,8 +73,9 @@ class StaticCorroborationGrader:
             raise ValueError(msg)
         self.line_slack = line_slack
         self.reference_name = reference_name
-        self._hits: dict[str, frozenset[tuple[str, int]]] = {
-            sid: frozenset((f.location.path, f.location.line) for f in fs)
+        # 🔴 참조도 보고 범위째 든다 - 시작 줄만 남기면 방향마다 판정이 갈린다 (Span.near · A2a)
+        self._hits: dict[str, tuple[tuple[str, Span], ...]] = {
+            sid: tuple(sorted({(f.location.path, f.location.span) for f in fs}, key=_order))
             for sid, fs in reference.items()
         }
         self._sources = frozenset(
@@ -95,18 +102,17 @@ class StaticCorroborationGrader:
             )
             raise SelfCorroborationError(msg)
 
-        hits = self._hits.get(sample.sample_id, frozenset())
+        hits = self._hits.get(sample.sample_id, ())
         return [self._judge_one(o, hits) for o in observed]
 
     def _judge_one(
-        self, o: ObservedFinding, hits: frozenset[tuple[str, int]]
+        self, o: ObservedFinding, hits: tuple[tuple[str, Span], ...]
     ) -> Judgment:
         loc = o.finding.location
         near = [
-            line
-            for path, line in hits
-            if path == loc.path
-            and loc.span.overlaps(line - self.line_slack, line + self.line_slack)
+            span.start.line
+            for path, span in hits
+            if path == loc.path and loc.span.near(span, self.line_slack)
         ]
         if near:
             return Judgment(

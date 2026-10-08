@@ -85,7 +85,13 @@ SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict conv
            xauthor-run-gate-rc xauthor-run-timeout xauthor-run-kind-budget xauthor-run-interrupted
            xauthor-run-recheck xauthor-run-fix-gate xauthor-run-box-missing xauthor-box-help
            xauthor-box-gate-doc xauthor-box-metadata xauthor-s2-accepted-briefs xauthor-s2-drop-kind
-           xauthor-s2-retry-briefs xauthor-s2-same-as xauthor-s2-window-cap)
+           xauthor-s2-retry-briefs xauthor-s2-same-as xauthor-s2-window-cap
+           review-guard-scope review-citation-lines review-corroboration-who review-corroboration-nearest
+           span-near-reference review-convention review-unfold review-rejected review-out-path
+           review-unknown-shape review-single-runner review-claim-words ollama-digest ollama-request ollama-timeout
+           gemini-model-check gemini-tools gemini-home gemini-login gemini-effort runner-timeout
+           xauthor-s2-constants xauthor-box-files xauthor-s2-refused-closes xauthor-brief-whole
+           xauthor-s2-dropped)
 
 claim_layering() { echo "런타임(analysis)은 정답 라벨(eval)을 볼 수 없다 — A1"; }
 break_layering() {
@@ -749,7 +755,7 @@ break_review-unlabeled() { perl -0pi -e 's/    if graders and unlabeled:/    if 
 guard_review-unlabeled() { uv run pytest tests/review/test_review.py -q -k unlabeled_samples_are_not_graded; }
 
 claim_review-no-defect-claim() { echo "리뷰 보고서는 결함 확인이라고 쓰지 않는다 — 지적과 근거일 뿐이다 (F4 · E2)"; }
-break_review-no-defect-claim() { perl -0pi -e 's/"> 결함을 확인하는 보고서가 아니다\. 리뷰어의 지적과, 지적마다 모은 근거를 보여 준다\.",/"> 확인된 결함과 근거다.",/' "$_REV"; }
+break_review-no-defect-claim() { perl -0pi -e 's/"> 결함을 확인하는 보고서가 아니다\. 리뷰어의 지적과, 지적마다 모은 근거를 보여 준다\.",/"> 지적과 근거다.",/' "$_REV"; }
 guard_review-no-defect-claim() { uv run pytest tests/review/test_review.py -q -k never_claims; }
 
 claim_review-self-corroboration() { echo "교차 확인자에는 다른 도구의 지적만 넘긴다 — 자기 확인은 항등식이다 (F7)"; }
@@ -931,6 +937,118 @@ guard_xauthor-s2-same-as() { uv run pytest tests/scripts/test_xauthor_run.py -q 
 claim_xauthor-s2-window-cap() { echo "2단계는 크레딧 창 스무 개를 넘게 쓰면 멈추고 묻는다 — 승인한 예산의 상한 (§7.10d 2단계 시작 전 보정)"; }
 break_xauthor-s2-window-cap() { perl -0pi -e 's/        if windows_used\(out\) > STAGE2_MAX_WINDOWS:/        if False:/' "$_XR"; }
 guard_xauthor-s2-window-cap() { uv run pytest tests/scripts/test_xauthor_run.py -q -k past_its_window_budget; }
+
+# ── 재검증(2026-10-08) · 로컬 모델 · gemini — 새 가드마다 반증 (교훈 #68 · #69 · H3) ──
+_VT=tests/verify/test_verifiers.py
+_RT=tests/review/test_review.py
+_GT=tests/scripts/test_gemini_runner.py
+_OLL=src/codeproof_ai/llm/ollama_.py
+_AO=scripts/agent_output.py
+_RWA=scripts/review-with-agent.sh
+
+claim_review-guard-scope() { echo "가드는 지적된 줄과 같은 실행 범위에서만 찾는다 — 다른 함수의 if 는 그 줄을 막지 않는다 (교훈 #68)"; }
+break_review-guard-scope() { perl -0pi -e 's/for node in _scope_walk\(_scope_of\(tree, line\)\):/for node in ast.walk(tree):/' src/codeproof_ai/verify/guard.py; }
+guard_review-guard-scope() { uv run pytest "$_VT" -q -k GuardStaysInScope; }
+
+claim_review-citation-lines() { echo "여러 줄 인용은 이은 창과 대조한다 — 한 줄씩 보면 맞는 인용도 위치 오류가 된다 (교훈 #68)"; }
+break_review-citation-lines() { perl -0pi -e 's/        multi = "\\n" in quote/        multi = False/' src/codeproof_ai/verify/citation.py; }
+guard_review-citation-lines() { uv run pytest "$_VT" -q -k MultiLineCitation; }
+
+claim_review-corroboration-who() { echo "교차 확인에는 그 자리를 실제로 짚은 출처만 적는다 — 확인자 전부가 아니다 (교훈 #68)"; }
+break_review-corroboration-who() { perl -0pi -e 's/who = "\+"\.join\(sorted\(\{src for _, src in near\}\)\)/who = "+".join(sorted(self._sources))/' src/codeproof_ai/verify/corroboration.py; }
+guard_review-corroboration-who() { uv run pytest "$_VT" -q -k only_the_agreeing_source; }
+
+claim_review-corroboration-nearest() { echo "교차 확인은 가장 가까운 줄을 인용한다 — 집합 순서로 고르면 실행마다 다르다 (교훈 #68 · #69)"; }
+break_review-corroboration-nearest() { perl -0pi -e 's/line = min\(near, key=lambda h: \(abs\(h\[0\] - loc\.line\), h\[0\]\)\)\[0\]/line = next(iter({(loc.path, h[0]) for h in near}))[1]/' src/codeproof_ai/verify/corroboration.py; }
+guard_review-corroboration-nearest() { uv run pytest "$_VT" -q -k nearest_line; }
+
+claim_span-near-reference() { echo "참조 쪽도 보고 범위로 맞춘다 — 확인자와 채점자가 Span.near 하나를 쓴다 (A2a · 교훈 #68)"; }
+break_span-near-reference() { perl -0pi -e 's/return self\.overlaps\(other\.start\.line - slack, max\(other\.start\.line, last\) \+ slack\)/return self.overlaps(other.start.line - slack, other.start.line + slack)/' src/codeproof_ai/domain/location.py; }
+guard_span-near-reference() { uv run pytest tests/eval/test_corroboration_grader.py "$_VT" -q -k "ReferenceSpan or reference_span"; }
+
+claim_review-convention() { echo "관례 주장에는 가드 · 도달성을 걸지 않는다 — 막을 실패가 없다 (F4a)"; }
+break_review-convention() { perl -0pi -e 's/\(defect if f\.category\.is_defect_claim else convention\)/defect/' "$_REV"; }
+guard_review-convention() { uv run pytest "$_RT" -q -k convention_claim; }
+
+claim_review-unfold() { echo "한 번 돈 리뷰는 묶인 지적도 펼쳐 싣는다 — 대표만 남기면 같은 줄의 다른 지적이 사라진다"; }
+break_review-unfold() { perl -0pi -e 's/for f in o\.variants\)/for f in (o.finding,))/' "$_REV"; }
+guard_review-unfold() { uv run pytest "$_RT" -q -k not_folded; }
+
+claim_review-rejected() { echo "파서가 버린 모델 지적은 세어 보고서에 싣는다 — 세지 않으면 「지적 0건」과 구별되지 않는다 (I)"; }
+break_review-rejected() { perl -0pi -e 's/        rejected \+= \[f"\{agent\}: \{r\}" for r in dropped\]/        rejected += []/' "$_REV"; }
+guard_review-rejected() { uv run pytest "$_RT" -q -k dropped_agent_findings; }
+
+claim_review-out-path() { echo "보고서 경로는 돌리기 전에 본다 — 입력을 덮어쓰거나 끝난 뒤에 실패하지 않는다"; }
+break_review-out-path() { perl -0pi -e 's/    if out is not None and \(out\.resolve\(\) == path\.resolve\(\) or not out\.parent\.is_dir\(\)\):/    if False:/' src/codeproof_ai/cli.py; }
+guard_review-out-path() { uv run pytest "$_RT" -q -k "overwrites_the_input or missing_report_folder"; }
+
+claim_review-unknown-shape() { echo "지적 모양이 아닌 에이전트 답은 오류다 — 「지적 0건」으로 접지 않는다 (F4)"; }
+break_review-unknown-shape() { perl -0pi -e 's/    if reviewer\.unrecognized:\n        msg = f"\{agent\} 의 답이/    if False:\n        msg = f"{agent} 의 답이/' "$_REV"; }
+guard_review-unknown-shape() { uv run pytest "$_RT" -q -k unknown_shape; }
+
+claim_review-single-runner() { echo "에이전트 지적도 run_reviewer 로 돈다 — 건너뛰면 둘러싼 함수가 빠진다 (E00)"; }
+break_review-single-runner() { perl -0pi -e 's/    run = run_reviewer\(reviewer, \[sample\], \[\]\)\n    if reviewer\.unrecognized:/    direct = reviewer.review(sample.target).findings\n    if reviewer.unrecognized:/; s/return reviewer\.identity, _findings\(run\), tuple\(reviewer\.rejected\)/return reviewer.identity, direct, tuple(reviewer.rejected)/' "$_REV"; }
+guard_review-single-runner() { uv run pytest "$_RT" -q -k enclosing_function; }
+
+claim_review-claim-words() { echo "면책 문장이 남아 있어도 결함 확인 문구를 더하면 운다 — 금지어 검사가 따로 산다 (F4)"; }
+break_review-claim-words() { perl -0pi -e 's/("> 결함을 확인하는 보고서가 아니다\. 리뷰어의 지적과, 지적마다 모은 근거를 보여 준다\.",)/$1\n        "> 확인한 결함을 지적마다 보여 준다.",/' "$_REV"; }
+guard_review-claim-words() { uv run pytest "$_RT" -q -k never_claims; }
+
+claim_ollama-digest() { echo "로컬 모델은 digest 로 고정하고 호출마다 다시 본다 — 같은 태그도 다시 받으면 다른 가중치다 (D6)"; }
+break_ollama-digest() { perl -0pi -e 's/        if self\._digest\(\) != self\.digest:/        if False:/' "$_OLL"; }
+guard_ollama-digest() { uv run pytest tests/llm/test_ollama.py -q -k weights_that_change; }
+
+claim_ollama-request() { echo "로컬 모델 요청은 추론 수준을 명시한다 — 모델 기본값에 맡기지 않는다 (D4)"; }
+break_ollama-request() { perl -0pi -e 's/            "think": THINK\[effort\],\n//' "$_OLL"; }
+guard_ollama-request() { uv run pytest tests/llm/test_ollama.py -q -k pins_schema_effort_and_nonce; }
+
+claim_ollama-timeout() { echo "늦은 답을 「서버에 닿지 않는다」로 안내하지 않는다 — 늦음과 없음은 다르다"; }
+break_ollama-timeout() { perl -0pi -e 's/        except TimeoutError as exc:\n/        except ZeroDivisionError as exc:\n/' "$_OLL"; }
+guard_ollama-timeout() { uv run pytest tests/llm/test_ollama.py -q -k slow_answer; }
+
+claim_gemini-model-check() { echo "gemini 는 고정한 모델이 답했는지 본다 — 다른 모델이 답하면 측정 대상이 바뀐다 (D5 · A2b)"; }
+break_gemini-model-check() { perl -0pi -e 's/    if not \(isinstance\(used, dict\) and int\(used\.get\("output_tokens"\) or 0\) > 0\):/    if False:/' "$_AO"; }
+guard_gemini-model-check() { uv run pytest "$_GT" -q -k another_model; }
+
+claim_gemini-tools() { echo "gemini 의 도구는 읽기 셋뿐이다 — 셸 · 하위 에이전트가 끼면 조건과 답한 모델이 바뀐다 (A2b)"; }
+break_gemini-tools() { perl -0pi -e 's/GEMINI_TOOLS = \("read_file", "grep_search", "glob"\)/GEMINI_TOOLS = ("read_file", "grep_search", "glob", "run_shell_command")/' "$_AO"; }
+guard_gemini-tools() { uv run pytest "$_GT" -q -k measurement_conditions_are_forced; }
+
+claim_gemini-home() { echo "gemini 는 호출마다 새 HOME 을 쓴다 — 기억 도구가 HOME 에 쓰면 다음 샘플로 샌다 (A2b)"; }
+break_gemini-home() { perl -0pi -e 's/      local gh; gh=\$\(mktemp -d\)/      local gh="\$OUT\/raw\/_gemini_home"; mkdir -p "\$gh"/' "$_RWA"; }
+guard_gemini-home() { uv run pytest "$_GT" -q -k isolated_from_the_users_home; }
+
+claim_gemini-login() { echo "gemini 는 로그인이 없으면 CLI 를 부르지 않고 멈춘다 — 이유를 말한다"; }
+break_gemini-login() { perl -0pi -e 's/    \[\[ -f "\$GEMINI_LOGIN\/oauth_creds\.json" \]\] \\\n/    true \\\n/' "$_RWA"; }
+guard_gemini-login() { uv run pytest "$_GT" -q -k without_a_login; }
+
+claim_gemini-effort() { echo "gemini 의 effort 는 low · high 뿐이다 — 다른 값을 조용히 바꾸지 않는다 (D4)"; }
+break_gemini-effort() { perl -0pi -e 's/      \*\) die "gemini 의 effort 는 low · high 뿐이다 \(CLI 의 thinkingLevel\) - \$EFFORT" ;;/      *) THINK=LOW ;;/' "$_RWA"; }
+guard_gemini-effort() { uv run pytest "$_GT" -q -k effort_the_cli_cannot_set; }
+
+claim_runner-timeout() { echo "실행기는 timeout 이 없으면 시작 전에 멈추고 설치 방법을 말한다 — macOS 에는 없다"; }
+break_runner-timeout() { perl -0pi -e 's/command -v timeout > \/dev\/null \|\| die "timeout 을 찾을 수 없다 - macOS 는 brew install coreutils"/true/' "$_RWA"; }
+guard_runner-timeout() { uv run pytest "$_GT" -q -k without_timeout; }
+
+claim_xauthor-s2-constants() { echo "2단계 선언 수치(일곱 바퀴 · 10분류 · 창 스무 개)는 시험이 고정한다 (§7.10d 2단계)"; }
+break_xauthor-s2-constants() { perl -0pi -e 's/^ROUNDS = 7 /ROUNDS = 70 /m' "$_XR"; }
+guard_xauthor-s2-constants() { uv run pytest tests/scripts/test_xauthor_run.py -q -k declared_stage2_numbers; }
+
+claim_xauthor-box-files() { echo "끝날 때 상자 맨 위 파일을 기록으로 남긴다 (§7.10d 2단계 전 보정 ②)"; }
+break_xauthor-box-files() { perl -0pi -e 's/    top = \[q for q in sorted\(p\.box\.iterdir\(\)\)\n           if \(q\.is_file\(\) or q\.is_symlink\(\)\) and q\.name not in \(PROMPT\.name, "response\.md"\)\]/    top: list[Path] = []/' "$_XR"; }
+guard_xauthor-box-files() { uv run pytest tests/scripts/test_xauthor_run.py -q -k what_the_author_left; }
+
+claim_xauthor-s2-refused-closes() { echo "거절은 받아들인 쌍이 있는 분류도 닫는다 — 필터를 넘긴 쌍만 남기면 분류가 필터로 골라진다 (§7.10d)"; }
+break_xauthor-s2-refused-closes() { perl -0pi -e 's/ and k not in closed\]/]/' "$_XR"; }
+guard_xauthor-s2-refused-closes() { uv run pytest tests/scripts/test_xauthor_run.py -q -k refusal_closes_a_kind; }
+
+claim_xauthor-brief-whole() { echo "앞 쌍 요약은 codex 가 쓴 문장을 자르지 않는다 — 공백만 접는다 (§7.10d 2단계 시작 전 보정 ③)"; }
+break_xauthor-brief-whole() { perl -0pi -e 's/    claim = " "\.join\(str\(safety\.get\("claim", ""\)\)\.split\(\)\)/    claim = " ".join(str(safety.get("claim", "")).split())[:40]/' "$_XR"; }
+guard_xauthor-brief-whole() { uv run pytest tests/scripts/test_xauthor_run.py -q -k long_claim; }
+
+claim_xauthor-s2-dropped() { echo "2단계 요약은 통째로 뺀 분류를 따로 적는다 — 「채운 분류」로 읽으면 구성비가 갈린다 (F5a)"; }
+break_xauthor-s2-dropped() { perl -0pi -e 's/        if kind_done\(outcomes\) and "accepted" not in outcomes:\n            return rnd/        if False:\n            return rnd/' "$_XR"; }
+guard_xauthor-s2-dropped() { uv run pytest tests/scripts/test_xauthor_run.py -q -k misses_a_round; }
 
 claim_xauthor-audit-schema() { echo "감사 exec 은 저자 exec 에 스키마 하나만 더한다 — 감사 카나리가 감사 인자 그대로를 본다 (§7.10d 상자)"; }
 break_xauthor-audit-schema() { perl -0pi -e 's/        args \+= \["--output-schema", str\(schema\)\]\n/        args += ["--output-schema", str(schema), "--skip-git-repo-check"]\n/' "$_XA"; }

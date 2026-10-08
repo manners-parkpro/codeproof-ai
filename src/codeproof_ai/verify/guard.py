@@ -26,8 +26,12 @@ from typing import TYPE_CHECKING
 from codeproof_ai.domain.evidence import Evidence, EvidenceKind, Verdict
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from codeproof_ai.domain.finding import Finding
     from codeproof_ai.domain.target import ReviewTarget
+
+_SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,6 +60,28 @@ def _exits(body: list[ast.stmt]) -> bool:
     return any(
         isinstance(s, ast.Return | ast.Raise | ast.Continue | ast.Break) for s in body
     )
+
+
+def _scope_of(node: ast.AST, line: int, scope: ast.AST | None = None) -> ast.AST:
+    """그 줄을 둘러싼 가장 안쪽 실행 범위 (함수 · 람다 · 클래스 몸통, 없으면 모듈).
+
+    중첩을 잃지 않게 `iter_child_nodes` 로 내려간다 (B3).
+    """
+    scope = node if scope is None else scope
+    for child in ast.iter_child_nodes(node):
+        start, end = getattr(child, "lineno", None), getattr(child, "end_lineno", None)
+        if start is not None and end is not None and start <= line <= end:
+            return _scope_of(child, line, child if isinstance(child, _SCOPES) else scope)
+    return scope
+
+
+def _scope_walk(scope: ast.AST) -> Iterator[ast.AST]:
+    """scope 안의 노드 - 안쪽 함수 · 람다 · 클래스 몸통에는 들어가지 않는다 (다른 실행 범위다)."""
+    for child in ast.iter_child_nodes(scope):
+        if isinstance(child, _SCOPES):
+            continue
+        yield child
+        yield from _scope_walk(child)
 
 
 class GuardVerifier:
@@ -87,7 +113,10 @@ class GuardVerifier:
         target_names = _names_in(stmt) if stmt is not None else frozenset()
         hits: list[GuardHit] = []
 
-        for node in ast.walk(tree):
+        # 🔴 같은 실행 범위만 본다 - 다른 함수의 이른 반환은 그 줄이 돌 때 실행되지 않는다.
+        #    모듈 전체를 훑던 때는 부르지도 않는 함수의 if 가 「반박」이 됐다 [실측: 실코드 8개 ·
+        #    가드 반박 580건 중 395건]. 호출한 함수의 가드는 아래 callee-guard 가 따로 본다.
+        for node in _scope_walk(_scope_of(tree, line)):
             hit = self._as_guard(node, line)
             if hit is None:
                 continue

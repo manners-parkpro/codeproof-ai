@@ -94,6 +94,16 @@ class Span:
         last = self.end.line if self.end is not None else self.start.line
         return self.start.line <= hi and max(self.start.line, last) >= lo
 
+    def near(self, other: Span, slack: int = 0) -> bool:
+        """두 보고 범위가 slack 줄 안에서 겹치는가 - **참조 쪽도 범위로 본다.**
+
+        🔴 한쪽만 범위로 보면 같은 두 지적이 방향마다 다른 판정을 받는다 [실측: review
+           --agent 에서 claude L4-8 ↔ ruff L8 - claude 쪽은 뒷받침, ruff 쪽은 판단 못 함].
+           확인자 · 교차 확인 채점자가 전부 이것을 쓴다 (A2a).
+        """
+        last = other.end.line if other.end is not None else other.start.line
+        return self.overlaps(other.start.line - slack, max(other.start.line, last) + slack)
+
 
 @dataclass(frozen=True, slots=True)
 class Location:

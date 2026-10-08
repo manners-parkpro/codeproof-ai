@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from codeproof_ai.llm.anthropic_ import AnthropicReviewProvider
+from codeproof_ai.llm.ollama_ import OllamaReviewProvider
 from codeproof_ai.llm.openai_ import OpenAIReviewProvider
 from codeproof_ai.llm.replay import ReplayProvider
 
@@ -20,14 +21,17 @@ if TYPE_CHECKING:
 PROVIDERS: dict[str, Callable[..., ReviewProvider]] = {
     "claude": AnthropicReviewProvider,
     "codex": OpenAIReviewProvider,
+    # 로컬 서버의 오픈 모델 - 계정 · 키 없음 (model_api 층 · 에이전트가 아니다)
+    "ollama": OllamaReviewProvider,
     # 🔴 배관 검증 전용. 이 숫자를 결과로 보고하지 않는다.
     "replay": ReplayProvider,
 }
 
-# provider 이름 -> 자격증명 확인 대상. replay 는 자격증명이 없다.
+# provider 이름 -> 자격증명 확인 대상. ollama 와 replay 는 자격증명이 없다.
 CREDENTIAL_OF: dict[str, str | None] = {
     "claude": "anthropic",
     "codex": "openai",
+    "ollama": None,
     "replay": None,
 }
 

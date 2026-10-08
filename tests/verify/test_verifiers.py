@@ -7,6 +7,9 @@
 
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -33,6 +36,8 @@ from codeproof_ai.verify.reachability import ReachabilityVerifier
 
 DECOYS = Path(__file__).resolve().parents[2] / "corpus" / "decoys"
 
+
+REPO = Path(__file__).resolve().parents[2]
 
 def _t(src: str, path: str = "m.py") -> ReviewTarget:
     return ReviewTarget(target_id="t", files=(SourceFile(path, src),))
@@ -322,3 +327,100 @@ class TestAgainstShippedCorpus:
         assert scores[0] == scores[1], "구별하게 됐다면 아래 문서 단언을 갱신한다"
         doc = Path("src/codeproof_ai/verify/guard.py").read_text(encoding="utf-8")
         assert "taint analysis" in doc, "못 보는 것을 문서에 적지 않으면 과신으로 읽힌다"
+
+
+class TestGuardStaysInScope:
+    """🔴 다른 함수의 이른 반환은 그 줄이 돌 때 실행되지 않는다 - 반박의 근거가 아니다.
+
+    [실측] 모듈 전체를 훑던 때 실코드 8개의 가드 반박 580건 중 395건이 다른 함수의 가드였다.
+    """
+
+    SRC = (
+        "import subprocess\n\n\n"
+        "def validate(cmd):\n    if not cmd.isalnum():\n        raise ValueError(cmd)\n\n\n"
+        "def run(cmd):\n    subprocess.run(cmd, shell=True)\n\n\n"
+        "def guarded(cmd):\n    if not cmd.isalnum():\n        raise ValueError(cmd)\n"
+        "    subprocess.run(cmd, shell=True)\n"
+    )
+
+    def test_a_guard_in_another_function_does_not_refute(self) -> None:
+        ev = GuardVerifier().verify(_f(10), _t(self.SRC))
+        assert ev.verdict is Verdict.INCONCLUSIVE, ev.detail
+
+    def test_a_guard_in_the_same_function_still_refutes(self) -> None:
+        ev = GuardVerifier().verify(_f(16), _t(self.SRC))
+        assert ev.verdict is Verdict.REFUTES
+        assert "@L14" in ev.detail and "@L5" not in ev.detail
+
+    def test_a_guard_in_a_called_function_still_counts(self) -> None:
+        """callee-guard 는 그대로다 - 부른 함수가 인자를 검사하면 방어다."""
+        call = "    subprocess.run(cmd, shell=True)\n\n\n"
+        src = self.SRC.replace(call, "    validate(cmd)\n\n\n", 1)
+        ev = GuardVerifier().verify(_f(10), _t(src))
+        assert ev.verdict is Verdict.REFUTES
+        assert "callee-guard" in ev.detail
+
+
+class TestMultiLineCitation:
+    """🔴 정확히 그 자리에 있는 여러 줄 인용을 「위치 오류」로 찍지 않는다.
+
+    [실측] 측정 묶음의 에이전트 지적 claude 339/479 · codex 172/341 이 여러 줄 인용이었다.
+    """
+
+    SRC = "import os\n\n\ndef f(x):\n    if x:\n        return os.system(x)\n    return 0\n"
+
+    def test_a_multi_line_quote_at_its_lines_is_supported(self) -> None:
+        quote = "    if x:\n        return os.system(x)"
+        ev = CitationVerifier().verify(_f(5, quote), _t(self.SRC))
+        assert ev.verdict is Verdict.SUPPORTS, ev.detail
+
+    def test_a_multi_line_quote_far_away_is_still_a_location_error(self) -> None:
+        quote = "def f(x):\n    if x:"
+        level = CitationVerifier(line_window=0).match_level(_f(7, quote), _t(self.SRC))
+        assert level is MatchLevel.ELSEWHERE_IN_FILE
+
+    def test_a_multi_line_quote_that_does_not_exist_is_refuted(self) -> None:
+        ev = CitationVerifier().verify(_f(5, "    if y:\n        rm(y)"), _t(self.SRC))
+        assert ev.verdict is Verdict.REFUTES
+
+
+class TestCorroborationNamesWhoAgreed:
+    """🔴 「도 지적했다」에는 그 자리를 실제로 짚은 출처만 - 확인자 전부가 아니다."""
+
+    def test_only_the_agreeing_source_is_named(self) -> None:
+        ref = [_f(5, source="ruff"), _f(30, source="mypy")]
+        ev = CorroborationVerifier(reference=ref).verify(_f(5), _t("x\n" * 40))
+        assert ev.verdict is Verdict.SUPPORTS
+        assert ev.detail.startswith("ruff 도 m.py:5 ")
+
+    def test_the_nearest_line_is_cited_every_time(self) -> None:
+        """집합 순서로 고르면 실행마다 다른 줄이 찍혔다 [실측: PYTHONHASHSEED] - 시드를 바꿔도 같다.
+
+        한 프로세스에서 한 번 보면 옛 코드도 운으로 통과한다 [실측] - 시드마다 새 프로세스로 본다.
+        """
+        code = (
+            "from tests.verify.test_verifiers import _f, _t\n"
+            "from codeproof_ai.verify.corroboration import CorroborationVerifier\n"
+            "ref = [_f(7, source='ruff'), _f(5, source='ruff'), _f(6, source='ruff')]\n"
+            "print(CorroborationVerifier(reference=ref).verify(_f(5), _t('x\\n' * 10)).locator)\n"
+        )
+        seen = {
+            subprocess.run(
+                [sys.executable, "-c", code], capture_output=True, text=True, check=True,
+                env=os.environ | {"PYTHONHASHSEED": str(seed)}, cwd=REPO,
+            ).stdout.strip()
+            for seed in range(8)
+        }
+        assert seen == {"m.py:5"}
+
+    def test_a_reference_span_is_matched_by_its_range(self) -> None:
+        """🔴 참조도 범위로 맞춘다 - claude L4-8 ↔ ruff L8 은 어느 방향이든 같은 자리다 (A2a)."""
+        wide = Finding(
+            source="claude", rule_id="x", message="m",
+            location=Location(path="m.py", span=Span(Position(4, 0), Position(8, 0))),
+            category=Category.SECURITY, severity=Severity.WARNING,
+        )
+        ruff_at_8 = _f(8, source="ruff")
+        one_way = CorroborationVerifier(reference=[ruff_at_8]).verify(wide, _t("x\n" * 20))
+        other_way = CorroborationVerifier(reference=[wide]).verify(ruff_at_8, _t("x\n" * 20))
+        assert one_way.verdict is other_way.verdict is Verdict.SUPPORTS
