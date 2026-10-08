@@ -22,7 +22,7 @@ from codeproof_ai.corpus.decoy import (
     validate_corpus,
     validate_decoy,
 )
-from tests.corpora import CORPORA, REPO
+from tests.corpora import made_corpora
 
 REPO_DECOYS = Path(__file__).resolve().parents[2] / "corpus" / "decoys"
 
@@ -334,7 +334,7 @@ class TestDiffRanges:
 class TestShippedCorpus:
     """저장소에 실제로 들어 있는 decoy 가 규격을 지키는지."""
 
-    @pytest.mark.parametrize("root", CORPORA, ids=lambda r: r.relative_to(REPO).as_posix())
+    @pytest.mark.parametrize("root", made_corpora())
     def test_repo_corpus_is_clean(self, root: Path) -> None:
         """🔴 훅과 같은 기준(`--strict`)이다 - 경고도 센다.
 
@@ -343,6 +343,7 @@ class TestShippedCorpus:
         복사로만 들어오는 코퍼스(DESIGN §7.10d)도 같은 기준으로 본다.
         """
         report = validate_corpus(root)
+        assert report.checked > 0, f"{root} 에 쌍이 없다 - 대조가 공허하다"
         detail = "\n".join(f"{n}: {v}" for n, v in report.violations)
         assert report.ok, f"코퍼스에 오류가 있다:\n{detail}"
         assert report.warn_count == 0, f"코퍼스에 경고가 있다 (훅은 --strict):\n{detail}"

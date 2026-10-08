@@ -39,7 +39,7 @@ DOCS = {
     "docs/RESULTS.md": ROOT / "docs" / "RESULTS.md",
     "docs/AI-WORKFLOW.md": ROOT / "docs" / "AI-WORKFLOW.md",
 }
-PROSE = ("README.md", "docs/RESULTS.md", "docs/AI-WORKFLOW.md")
+PROSE = ("README.md", "docs/RESULTS.md", "docs/AI-WORKFLOW.md", "docs/VERIFY.md")
 """결과를 산문으로 옮겨 적는 문서 - README 는 안내판이고 자세한 판은 RESULTS 다.
 
 🔴 아래 대조는 이 셋을 모두 본다. README 만 보면 결과를 옮긴 문서에서 같은 오류가 산다.

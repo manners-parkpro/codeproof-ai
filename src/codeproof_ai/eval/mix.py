@@ -335,7 +335,7 @@ def mix_sensitivity(
             continue
         kind = kind_of.get(o.sample_id, UNCLASSIFIED)
         seen[kind].add(o.sample_id)
-        for j in o.judgments.get(grader, ()):
+        for j in o.judgments[grader]:  # 이름이 어긋나면 KeyError - 「물림 0/0」으로 접지 않는다
             # 🔴 분모에서 빼지 않는다. 증명된 음성 위에서는 TP 가 정의상
             #    불가능해서 FP/(TP+FP) 가 항상 100% 다 - 정보가 없다.
             #    범위 밖 지적은 「이 미끼와 무관한 지적」이라 분모에 남아야

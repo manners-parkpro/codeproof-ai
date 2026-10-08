@@ -56,8 +56,12 @@ def _flagged(outcome: SampleOutcome, grader: str, *, want: Outcome) -> bool:
     음성에서는 FALSE_POSITIVE 가, 양성에서는 TRUE_POSITIVE 가
     "리뷰어가 이 자리를 지적했다" 를 뜻한다.
     UNDECIDABLE 은 **지적하지 않은 것으로 세지 않는다** - 판정 범위 밖일 뿐이다.
+
+    🔴 이름으로 바로 꺼낸다 - 어긋나면 KeyError 다. 채점한 샘플에는 판정이 없어도 그 채점자의
+       칸이 있다 (`runner._grade`). `.get(…, ())` 은 틀린 이름을 「모든 짝 P-B」로 바꿨다
+       [실측 · 150쌍 · Ruff ALL] - `spread_of` 가 같은 이유로 KeyError 를 낸다.
     """
-    return any(j.outcome is want for j in outcome.judgments.get(grader, ()))
+    return any(j.outcome is want for j in outcome.judgments[grader])
 
 
 def score_pairs(outcomes: Sequence[SampleOutcome], grader: str) -> tuple[PairResult, ...]:

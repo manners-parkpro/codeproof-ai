@@ -87,7 +87,6 @@ class Finding:
             런타임 인용 검증(verify/citation.py)의 입력이다.
             정적분석기 산출에는 없을 수 있다.
         rule_name: 사람이 읽는 룰 이름 (ruff 의 "unused-import").
-        family: 상위 분류 (ruff 의 "Pyflakes").
         hint: 부가 설명. mypy 의 note 가 여기 접혀 들어온다.
         suppression: noqa / type: ignore 등 억제 마커.
         raw: 도구 원본 페이로드. 🔴 절대 버리지 않는다 —
@@ -102,7 +101,6 @@ class Finding:
     severity: Severity = Severity.WARNING
     quoted_code: str | None = None
     rule_name: str | None = None
-    family: str | None = None
     hint: str | None = None
     suppression: str | None = None
     raw: dict[str, object] = field(default_factory=dict, compare=False, repr=False)

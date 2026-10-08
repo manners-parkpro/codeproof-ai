@@ -24,7 +24,7 @@ from codeproof_ai.eval.gate import neutral_problem
 from codeproof_ai.eval.loader import load_decoy_samples
 from codeproof_ai.llm.render import load_prompt, prompt_hash
 from codeproof_ai.llm.schema import review_schema
-from tests.corpora import CORPORA, REPO
+from tests.corpora import made_corpora
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -152,13 +152,15 @@ class TestDocstringKnob:
     (DESIGN §7.10c).
     """
 
-    @pytest.mark.parametrize("root", CORPORA, ids=lambda r: r.relative_to(REPO).as_posix())
+    @pytest.mark.parametrize("root", made_corpora())
     def test_every_shipped_file_keeps_its_lines(self, root: Path) -> None:
         """줄 번호가 그대로여야 정답 구간(미끼 · 가드 · twin)이 맞는다 - 바뀌는 줄은 하나뿐이다.
 
         neutral 로 재는 코퍼스 전부를 본다 (DESIGN §7.10d 「수집 전에 준비할 것」 ②).
         """
-        for s in load_decoy_samples(root):
+        samples = load_decoy_samples(root)
+        assert samples, f"{root} 에 쌍이 없다 - 대조가 공허하다"
+        for s in samples:
             for f in s.target.files:
                 assert neutral_problem(f.content) is None, s.sample_id  # 관문(§7.10d)과 같은 규칙
 

@@ -43,6 +43,7 @@ from codeproof_ai.eval.pairing import (
     score_pairs,
 )
 from codeproof_ai.eval.report import (
+    HEADLINE_GRADER,
     HIGHLIGHTS,
     LANDING,
     RULE_SELECTIONS,
@@ -707,11 +708,23 @@ def _print_scoring(
 
     셋이 따로 부를 때는 절을 더하거나(`_print_mix`) 서명을 바꿀 때(`_print_pairs`)마다
     세 곳을 고쳤다.
+
+    🔴 다회 실행이면 편차 · 구성비 · 층은 싣지 않는다 - 셋 다 합집합으로 센다 (F6). [실측] claude
+       3회 묶음의 구성비 절은 지적 30건을 셌는데 회차마다는 16 · 16 · 17건이었다 - 어느 회차의
+       값도 아니다. 짝 채점과 매칭 민감도는 관점마다 낸다.
     """
-    _print_spread(run, graders)
+    multi = run.manifest.sample_n > 1
+    if not multi:
+        _print_spread(run, graders)
     _print_pairs(run, graders, samples)
-    _print_sensitivity(run, samples, "provable_safety")
-    _print_mix(run, samples, "provable_safety")
+    _print_sensitivity(run, samples, HEADLINE_GRADER)
+    if multi:
+        print(
+            "\n  [편차 · 구성비 · 층] 다회 실행이라 싣지 않는다 - 합집합으로 세면 어느 회차의"
+            " 값도 아니다 (F6)\n    관점별 숫자는 `codeproof report` 의 생성물이 든다"
+        )
+        return
+    _print_mix(run, samples, HEADLINE_GRADER)
     _print_strata(run)
 
 

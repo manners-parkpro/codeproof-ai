@@ -50,9 +50,8 @@ uv run pytest           # 전체 테스트
 정답이 없는 코드라 결함이라고 판정하지는 않는다. 같은 리뷰를 위 페이지의 화면으로 하려면 `uv run codeproof serve` 로
 그 페이지를 내 컴퓨터(127.0.0.1)에서 연다 — 웹 판에서는 브라우저 Ruff 까지만 된다.
 
-소요는 기계와 가드 수에 따라 다르다 — GitHub 러너에서 `verify.sh` 는 macOS 약 11분 · Linux 약 14분(느린 러너에서 25분),
-pytest 는 약 5분 · 10분이다 [실측 · 2026-10-08 · CI 최근 30회 중앙값 · 가드 160개]. 같은 검사를 GitHub Actions 가 PR 마다
-Linux · macOS 새 환경에서 돈다 ([실행 기록](https://github.com/manners-parkpro/codeproof-ai/actions/workflows/ci.yml)).
+소요는 기계와 가드 수에 따라 다르다 — 재 본 값은 [docs/VERIFY.md](docs/VERIFY.md) §0 에 있다. 같은 검사를 GitHub Actions 가
+PR 마다 Linux · macOS 새 환경에서 돈다 ([실행 기록](https://github.com/manners-parkpro/codeproof-ai/actions/workflows/ci.yml)).
 공백이 든 경로와 빈 홈 디렉터리에서도 통과했다 [실측 · 2026-10-07]. Windows 는 확인하지 않았다.
 주장을 직접 무너뜨려 보는 절차는 [docs/VERIFY.md](docs/VERIFY.md) 에 있다.
 
@@ -103,14 +102,15 @@ API 키 없이 다시 나온다 — 결과 1~3 · 5 · 6 은 `uv run codeproof m
 
 자세한 이유는 [docs/RESULTS.md](docs/RESULTS.md).
 
-1. **한계 1** — 결함 탐지는 리뷰의 1/8 이다 — 실제 리뷰 코멘트 중 결함 지적은 14% 다
+1. **한계 1** — 결함 탐지는 리뷰의 약 1/7 이다 — 실제 리뷰 코멘트 중 결함 지적은 14% 다
    ([Bacchelli & Bird](https://sback.it/publications/icse2013.pdf)).
 2. **한계 2** — 정답과 일치하는 것과 유용한 것은 다르다.
 3. **한계 3** — 50:50 세트의 precision 은 프로덕션 precision 이 아니다 → 양성 층이 생기면 `(TPR, FPR)` 로 보고한다.
 4. **한계 4** — 오염 내성은 층마다 다르다 — 직접 만든 층(변이 주입 · decoy)은 면역이고, 공개 PR 에서 캔 층은 아니다.
 5. **한계 5** — 변이 주입 층은 현실적이지 않다 → recall 바닥선으로만 쓴다.
-6. **한계 6** — 안전한 쪽 정답(decoy)과 측정 뒤 재판정을 측정 대상 한쪽과 같은 패밀리(Claude)가 했다 — 틀린 라벨이 남으면
-   claude 쪽으로 기운다. 그래서 Codex 가 쓴 쌍으로 다시 잰다 ([DESIGN §7.10d](docs/DESIGN.md)).
+6. **한계 6** — 안전한 쪽 정답(decoy) · 결함 쪽 설계(twin) · 측정 뒤 재판정을 측정 대상 한쪽과 같은 패밀리(Claude)가 했다 —
+   틀린 라벨이나 설계 친숙도가 claude 쪽으로 기울일 수 있고, 차이는 twin 쪽에서 났다. 그래서 Codex 가 쓴 쌍으로 다시 잰다
+   ([DESIGN §7.10d](docs/DESIGN.md)).
 7. **한계 7** — 에이전트 비교는 같은 프롬프트 하나 위의 차이다 — 다른 프롬프트에서 같은 차이가 나는지는 재지 않았다.
 
 ## 기술 스택

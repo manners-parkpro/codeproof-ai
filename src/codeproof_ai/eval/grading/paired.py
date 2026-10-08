@@ -158,13 +158,7 @@ class PairedFixGrader:
     ) -> str | None:
         for i, defect in enumerate(sample.defects):
             d = defect.location
-            if d.path != loc.path:
-                continue
-            lo = max(1, d.span.start.line - self.line_slack)
-            hi = (
-                d.span.end.line if d.span.end else d.span.start.line
-            ) + self.line_slack
-            if loc.span.overlaps(lo, hi):
+            if d.path == loc.path and loc.span.near(d.span, self.line_slack):  # A2a - 같은 함수
                 return f"{sample.sample_id}#d{i}"
         return None
 

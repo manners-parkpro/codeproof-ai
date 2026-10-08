@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from codeproof_ai.analysis.python.ruff import RuffAnalyzer
 from codeproof_ai.domain.observation import ObservationSet
 from codeproof_ai.eval.grading.base import Judgment, Outcome
@@ -44,6 +46,18 @@ def _pair(neg: list[Outcome], pos: list[Outcome]) -> PairVerdict:
     )
     assert len(got) == 1
     return got[0].verdict
+
+
+class TestAGraderThatDidNotGrade:
+    def test_its_name_is_refused(self) -> None:
+        """🔴 틀린 이름은 KeyError 다 - `.get(…, ())` 은 모든 짝을 「놓침」(P-B)으로 바꿨다."""
+        outcomes = [
+            _outcome("d", safe=True, outcomes=[]),
+            _outcome("d#twin", safe=False, outcomes=[Outcome.TRUE_POSITIVE]),
+        ]
+        assert score_pairs(outcomes, G)[0].verdict is PairVerdict.CORRECT
+        with pytest.raises(KeyError):
+            score_pairs(outcomes, "provable-safety")
 
 
 class TestFourVerdicts:

@@ -127,17 +127,14 @@ class ProvableSafetyGrader:
         loc = o.finding.location
         for i, defect in enumerate(sample.defects):
             d = defect.location
-            if d.path != loc.path:
-                continue
-            lo = max(1, d.span.start.line - self.overlap_slack)
-            hi = (d.span.end.line if d.span.end else d.span.start.line) + self.overlap_slack
-            if loc.span.overlaps(lo, hi):
+            # 🔴 확인자 · 교차 확인 채점자와 같은 함수로 맞춘다 (A2a) - 범위를 다시 세지 않는다
+            if d.path == loc.path and loc.span.near(d.span, self.overlap_slack):
                 return Judgment(
                     finding_key=o.finding.fingerprint,
                     outcome=Outcome.TRUE_POSITIVE,
                     grader=self.name,
                     matched_defect=f"{sample.sample_id}#d{i}",
-                    rationale=f"결함 위치 {d.path}:{lo}-{hi} 와 겹친다",
+                    rationale=f"결함 위치 {d.path}:{d.line} 와 겹친다 (slack {self.overlap_slack})",
                 )
 
         # 결함이 있는 샘플의 다른 지점 지적은, 이 채점자로는 알 수 없다.

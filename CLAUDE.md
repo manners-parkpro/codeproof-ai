@@ -147,7 +147,8 @@ TP 와 FP 를 가른다 (DESIGN §7.9).
 mypy 텍스트(1-based 바이트) · ast(0-based 바이트) · SARIF(1-based 문자).
 **같은 mypy 실행이 텍스트와 JSON 에서 다른 컬럼을 낸다.**
 
-- 변환은 `analysis/<lang>/<tool>.py` 어댑터 **안에서만**. 어댑터 하나가 변환 하나를 책임진다.
+- 변환은 도구 출력을 읽는 어댑터 **안에서만** — `analysis/<lang>/<tool>.py` 와 가져온 지적의 `reviewers/formats.py`.
+  어댑터 하나가 변환 하나를 책임진다.
 - **비ASCII 회귀 테스트를 지우지 않는다.** 없으면 이 버그는 조용히 산다.
 - ⚠ mypy `--native-parser` 가 곧 기본값 → 컬럼 의미 변동 가능. 핀 테스트로 감지한다.
 
@@ -210,7 +211,7 @@ span_start = min(node.lineno, *(d.lineno for d in node.decorator_list))
 
 🔴 **복원 방식이 분석 결과를 바꾸면 안 된다.** `__init__.py` 를 무조건 넣으면
 Ruff 의 `INP001` 이 사라져 일괄과 개별이 다른 숫자를 낸다 (DESIGN §6.7). mypy 만 모듈명 해소에
-필요하므로 `materialize_many(..., as_packages=True)` 로 **선택적**이다.
+필요하므로 `materialize_many(..., box_file="__init__.py")` 로 **선택적**이다 — 그 이름은 mypy 어댑터가 준다 (A3).
 
 테스트가 「일괄 == 개별」을 강제한다 — 속도 최적화가 숫자를 바꾸면 최적화가 아니라 버그다.
 
@@ -234,6 +235,8 @@ mypy --output=json --show-error-end --show-absolute-path --no-error-summary
 
 ### C3. diff
 
+PR(diff) 리뷰를 만들 때의 규칙이다 — 지금은 diff 경로가 없다 (DESIGN §11 「범위 밖」).
+
 ```bash
 git diff --no-color --no-ext-diff --find-renames --unified=0 BASE...HEAD
 ```
@@ -245,7 +248,7 @@ git diff --no-color --no-ext-diff --find-renames --unified=0 BASE...HEAD
 ### C4. 도달성은 v1 에서 파일 안까지만
 
 파이썬 전용 호출그래프 도구가 전멸했다(PyCG · JarvisCG · Pyre/Pysa 전부 아카이브).
-함수 단위(LibCST+jedi 직접 조합)를 v1 에서 시작하지 마라 — 그 레이어를 소유해야 하고,
+파일 밖까지 잇는 호출그래프(LibCST+jedi 직접 조합)를 v1 에서 시작하지 마라 — 그 레이어를 소유해야 하고,
 거기 예산을 태우면 논지를 못 만든다.
 
 ---

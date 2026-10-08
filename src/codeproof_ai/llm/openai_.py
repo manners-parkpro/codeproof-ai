@@ -10,12 +10,11 @@ Anthropic 과 대칭이되 벤더 차이를 반영한다:
 
 from __future__ import annotations
 
-import json
 import time
 from typing import TYPE_CHECKING, Any
 
 from codeproof_ai.llm.base import ReviewResponse, TokenUsage
-from codeproof_ai.llm.parse import parse_findings
+from codeproof_ai.llm.parse import ParseOutcome, parse_body
 from codeproof_ai.llm.render import load_prompt, render_user_message
 from codeproof_ai.llm.schema import SCHEMA_NAME, review_schema
 
@@ -94,17 +93,9 @@ class OpenAIReviewProvider:
         choice = response.choices[0] if response.choices else None
         refused = bool(getattr(getattr(choice, "message", None), "refusal", None))
 
-        payload: dict[str, Any] = {"findings": []}
+        parsed = ParseOutcome(findings=())
         if choice is not None and not refused:
-            text = choice.message.content or ""
-            try:
-                loaded = json.loads(text) if text.strip() else {}
-                if isinstance(loaded, dict):
-                    payload = loaded
-            except json.JSONDecodeError:
-                raw["_parse_error"] = "본문이 JSON 이 아니다"
-
-        parsed = parse_findings(payload, source=self.name, target=target)
+            parsed = parse_body(choice.message.content or "", source=self.name, target=target)
         raw["_rejected"] = list(parsed.rejected)
         raw["_refused"] = refused
 

@@ -18,20 +18,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Final
 
+from codeproof_ai.domain.finding import Category
+
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-CATEGORIES: Final = (
-    "correctness",
-    "security",
-    "performance",
-    "type_safety",
-    "resource",
-    "concurrency",
-    "maintainability",
-    "style",
-    "other",
-)
+CATEGORIES: Final = tuple(c.value for c in Category)
+"""모델에 강제하는 분류 - 도메인 정본에서 뽑는다 (A2b). 손으로 베끼면 어긋난 값을 파서가
+OTHER(결함 주장)로 접어 관례 주장이 FP 로 세어진다 (F4a)."""
 
 SEVERITIES: Final = ("info", "warning", "error")
 

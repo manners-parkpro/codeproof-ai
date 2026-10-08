@@ -125,8 +125,8 @@ class TestSpreadIsReal:
     ) -> None:
         """0 으로 나누어 「무한대 배」로 부풀리지 않는다."""
         sp = _run(analyzed, shipped_samples, ("F",))
-        if sp.fp_range[0] == 0:
-            assert sp.fp_ratio is None
+        assert sp.fp_range[0] == 0, "전제가 깨졌다 - 최솟값이 0 인 설정을 다시 고른다"
+        assert sp.fp_ratio is None
 
 
 class TestSelfCorroborationIsRefused:

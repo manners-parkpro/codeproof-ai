@@ -138,14 +138,28 @@ class TestMypyAdapter:
         assert any(f.rule_id == "return-value" for f in findings)
 
     def test_column_converts_bytes_to_characters(self) -> None:
-        """🔴 mypy JSON 은 0-based **바이트**. 비ASCII 가 있으면 갈린다."""
-        src = 'def f() -> int:\n    s = "héllo"\n    return s\n'
-        findings = MypyAnalyzer().analyze(_target(src))
-        for f in findings:
-            line = src.splitlines()[f.location.line - 1]
-            assert f.location.span.start.column <= len(line), (
-                "문자 열이 그 줄의 문자 수를 넘는다 - 바이트를 그대로 쓴 것이다"
-            )
+        """🔴 mypy JSON 은 0-based **바이트** - 비ASCII 가 오류 앞의 같은 줄에 있어야 갈린다 (B1).
+
+        `"a"` 는 문자로 23 · 바이트로 24 다 (`é` 가 2바이트). 바이트를 그대로 쓰면 한 칸 밀린다.
+        """
+        src = 'x: str = "é"; y: int = "a"\n'
+        (f,) = MypyAnalyzer().analyze(_target(src))
+        start = f.location.span.start
+        assert (f.rule_id, start.line, start.column, start.byte_column) == ("assignment", 1, 23, 24)
+        assert src[start.column :].startswith('"a"')
+
+    def test_a_broken_tool_is_not_zero_findings(self) -> None:
+        """🔴 종료 코드 2 에 진단이 없으면 도구 고장이다 - 「지적 0건」으로 접지 않는다 (C2 · I).
+
+        대조: 구문 오류도 2 를 내지만 그 진단을 싣는다 - 그때는 지적으로 읽는다.
+        """
+
+        class Broken(MypyAnalyzer):
+            DEFAULT_FLAGS = (*MypyAnalyzer.DEFAULT_FLAGS, "--no-such-flag")
+
+        with pytest.raises(RuntimeError, match="mypy 자체가 실패했다"):
+            Broken().analyze(_target("x: int = 1\n"))
+        assert MypyAnalyzer().analyze(_target("def f(:\n"))
 
     def test_clean_code_yields_nothing(self) -> None:
         assert MypyAnalyzer().analyze(_target("x: int = 1\n")) == []

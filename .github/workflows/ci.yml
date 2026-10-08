@@ -40,7 +40,8 @@ jobs:
       - run: uv sync
       - run: uv run ruff check .
       - run: uv run mypy
-      - run: uv run pytest
+      # 느린 시험을 코드로 짐작하지 않고 기록에서 읽는다 (H1)
+      - run: uv run pytest --durations=25
       # 테스트가 추적 파일을 바꾸면 README 순서(pytest → verify.sh)에서 가드 반증이 건너뛰어진다
       # [실측 · c841360] CLI 테스트가 저장소의 진짜 그림을 덮어쓴 적이 있다
       - name: 테스트 뒤 작업 트리가 깨끗하다
