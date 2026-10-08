@@ -32,7 +32,6 @@ from codeproof_ai.eval.sensitivity import DEFAULT_SWEEP
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
-    from codeproof_ai.eval.multirun import Difference
     from codeproof_ai.eval.runner import ReviewerRun
     from codeproof_ai.eval.sample import LabeledSample
 
@@ -92,7 +91,7 @@ def glance(
         share_a, share_b = _share(strict[0], loose[0], hits), _share(strict[1], loose[1], hits)
         if d.point is None or d.interval is None or share_a is None or share_b is None:
             return None
-        readings = {_reading(difference_of(*ladder[s], hits)) for s in DEFAULT_SWEEP}
+        readings = {difference_of(*ladder[s], hits).reading for s in DEFAULT_SWEEP}
         rows.append(
             ScoreRow(
                 label,
@@ -144,11 +143,6 @@ def _share(strict: Verdicts, loose: Verdicts, hits: frozenset[PairVerdict]) -> S
     """선언한 매칭(slack 0)의 값과 사다리 끝 값."""
     low, high = mean_share(strict, hits), mean_share(loose, hits)
     return None if low is None or high is None else Share(low, high)
-
-
-def _reading(d: Difference) -> tuple[bool, bool | None]:
-    """차이의 방향과 판정 - 사다리 전체에서 같아야 「안정」이다 (「에이전트 비교」와 같은 셈)."""
-    return (d.point or 0.0) > 0, d.distinguishable
 
 
 def fixed(

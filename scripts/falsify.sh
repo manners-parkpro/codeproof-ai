@@ -94,7 +94,10 @@ SCENARIOS=(layering runner registry registry-derived sdk-lazy falsify-shard proo
            gemini-model-check gemini-tools gemini-home gemini-login gemini-effort runner-timeout
            runner-timeout-limit gemini-blocked runner-blind runner-blind-record
            xauthor-s2-constants xauthor-box-files xauthor-s2-refused-closes xauthor-brief-whole
-           xauthor-s2-dropped)
+           xauthor-s2-dropped
+           xauthor-read-every-rung xauthor-read-twin xauthor-read-shaky xauthor-twin-hits
+           xauthor-declared-runs xauthor-declared-setup xauthor-declared-kinds xauthor-declared-min-kinds
+           xauthor-issues-unknown xauthor-orphan-doc)
 
 claim_layering() { echo "런타임(analysis)은 정답 라벨(eval)을 볼 수 없다 — A1"; }
 break_layering() {
@@ -1100,6 +1103,49 @@ guard_xauthor-s2-dropped() { uv run pytest tests/scripts/test_xauthor_run.py -q 
 claim_xauthor-audit-schema() { echo "감사 exec 은 저자 exec 에 스키마 하나만 더한다 — 감사 카나리가 감사 인자 그대로를 본다 (§7.10d 상자)"; }
 break_xauthor-audit-schema() { perl -0pi -e 's/        args \+= \["--output-schema", str\(schema\)\]\n/        args += ["--output-schema", str(schema), "--skip-git-repo-check"]\n/' "$_XA"; }
 guard_xauthor-audit-schema() { uv run pytest tests/scripts/test_xauthor.py -q -k only_the_audit; }
+
+_XAN=src/codeproof_ai/eval/crossauthor.py
+_XANT=tests/eval/test_crossauthor.py
+
+claim_xauthor-read-every-rung() { echo "twin 쪽 차이는 사다리 모든 칸에서 0 보다 커야 ① 이다 — 첫 칸만 보면 흔들리는 twin 이 결론이 된다 (§7.10d 읽는 법)"; }
+break_xauthor-read-every-rung() { perl -0pi -e 's/ for r in twin\):/ for r in twin[:1]):/' "$_XAN"; }
+guard_xauthor-read-every-rung() { uv run pytest "$_XANT" -q -k every_rung; }
+
+claim_xauthor-read-twin() { echo "주 지표만 0 보다 크면 「twin 쪽으로 확인되지 않은 우위」다 — twin 쪽 없이 ① 을 쓰지 않는다 (§7.10d 읽는 법)"; }
+break_xauthor-read-twin() { perl -0pi -e 's/^    return Reading\.PRIMARY_ONLY$/    return Reading.BOTH/m' "$_XAN"; }
+guard_xauthor-read-twin() { uv run pytest "$_XANT" -q -k lead_without; }
+
+claim_xauthor-read-shaky() { echo "주 지표의 부호나 판정이 사다리에서 바뀌면 「흔들린다」 — 결론이 없다 (§7.10b 와 같은 규칙)"; }
+break_xauthor-read-shaky() { perl -0pi -e 's/for r in primary\}\) > 1:/for r in primary}) > 9:/' "$_XAN"; }
+guard_xauthor-read-shaky() { uv run pytest "$_XANT" -q -k shaky; }
+
+claim_xauthor-twin-hits() { echo "twin 쪽 차이는 twin 을 짚은 짝(P-C · P-V)으로 센다 — P-V 를 빼면 주 지표를 두 번 잰다 (§7.10d 주 지표)"; }
+break_xauthor-twin-hits() { perl -0pi -e 's/^TWIN = frozenset\(CAUGHT\)$/TWIN = CORRECT_ONLY/m' "$_XAN"; }
+guard_xauthor-twin-hits() { uv run pytest "$_XANT" -q -k caught_the_twin; }
+
+claim_xauthor-declared-runs() { echo "선언한 회차(3)가 아닌 측정은 값을 내지 않는다 (§7.10d 측정)"; }
+break_xauthor-declared-runs() { perl -0pi -e 's/if x\.run\.manifest\.sample_n != RUNS:/if False:/' "$_XAN"; }
+guard_xauthor-declared-runs() { uv run pytest "$_XANT" -q -k runs_and_the_knob; }
+
+claim_xauthor-declared-setup() { echo "설정이 목표 150쌍 측정과 다르면 「미완」이다 — 격리 설치한 판 대신 다른 판으로 잰 것을 잡는다 (§7.10d 측정)"; }
+break_xauthor-declared-setup() { perl -0pi -e 's/for k in SETUP_KEYS\n/for k in ()\n/' "$_XAN"; }
+guard_xauthor-declared-setup() { uv run pytest "$_XANT" -q -k cli_version; }
+
+claim_xauthor-declared-kinds() { echo "분류마다 선언한 쌍 수가 아니면 「미완」이다 — 채우지 못한 분류의 쌍이 섞이면 구성비가 선언과 달라진다 (§7.10d 2단계 · F5a)"; }
+break_xauthor-declared-kinds() { perl -0pi -e 's/if n != PAIRS_PER_KIND\]/if False]/' "$_XAN"; }
+guard_xauthor-declared-kinds() { uv run pytest "$_XANT" -q -k every_kind_must_be_full; }
+
+claim_xauthor-declared-min-kinds() { echo "남은 분류가 10 미만이면 「미완」이다 (§7.10d 2단계)"; }
+break_xauthor-declared-min-kinds() { perl -0pi -e 's/if len\(counts\) < MIN_KINDS:/if len(counts) < 0:/' "$_XAN"; }
+guard_xauthor-declared-min-kinds() { uv run pytest "$_XANT" -q -k too_few_kinds; }
+
+claim_xauthor-issues-unknown() { echo "라벨 문제 목록에 코퍼스에 없는 쌍이 있으면 거절한다 — 오타가 조용히 「뺀 쌍 0」이 된다 (§7.10d 민감도)"; }
+break_xauthor-issues-unknown() { perl -0pi -e 's/unknown = sorted\(ids - kinds\.keys\(\)\)/unknown: list[str] = []/' "$_XAN"; }
+guard_xauthor-issues-unknown() { uv run pytest "$_XANT" -q -k unknown_pair; }
+
+claim_xauthor-orphan-doc() { echo "묶음 없이 분석 문서만 있으면 낡은 것이다 — 다시 만들 수 없는 숫자를 최신으로 세지 않는다"; }
+break_xauthor-orphan-doc() { perl -0pi -e 's/        if target\.is_file\(\):\n/        if False:\n/' src/codeproof_ai/cli.py; }
+guard_xauthor-orphan-doc() { uv run pytest tests/cli/test_commands.py -q -k before_the_measurement; }
 
 # ── 하네스 ─────────────────────────────────────────────────────────────────
 

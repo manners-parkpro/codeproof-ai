@@ -18,10 +18,12 @@ from typing import TYPE_CHECKING, Any
 import pytest
 
 from codeproof_ai.cli import main
+from codeproof_ai.eval import crossauthor
 from codeproof_ai.eval.export import sample_digest
 from codeproof_ai.eval.figures import BANNER as FIGURE_BANNER
 from codeproof_ai.eval.loader import PRESENTED_FILENAME, load_decoy_samples
 from codeproof_ai.eval.report import HIGHLIGHTS, LANDING
+from codeproof_ai.eval.sensitivity import DEFAULT_SWEEP
 from codeproof_ai.reviewers.imported import (
     BUNDLE_FILE,
     DIGEST_SUFFIX,
@@ -1504,3 +1506,111 @@ class TestPack:
         assert self._pack(small_corpus, _runner_output(tmp_path, small_corpus, runs=2), out) == 2
         assert "다른 파일이 있다" in capsys.readouterr().err
         assert not (out / BUNDLE_FILE).exists()
+
+
+class TestXauthorReport:
+    """교차 저자 분석 (DESIGN §7.10d 준비 ⑧) - 배관과 거절. 읽는 법은 eval 의 test_crossauthor.
+
+    분류가 다른 세 쌍으로 선언을 「분류마다 1쌍 · 3분류」로 줄여 돈다 - 셈은 같고 쌍 수만 다르다.
+    """
+
+    PAIRS = (
+        "D001-upstream-validated-dict-access",
+        "D006-emptiness-narrowed",
+        "D002-shell-true-constant-command",
+    )
+
+    @pytest.fixture(autouse=True)
+    def _one_pair_per_kind(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(crossauthor, "PAIRS_PER_KIND", 1)
+        monkeypatch.setattr(crossauthor, "MIN_KINDS", len(self.PAIRS))
+
+    @pytest.fixture
+    def three(self, tmp_path: Path) -> Path:
+        root = tmp_path / "corpus"
+        for name in self.PAIRS:
+            dst = root / name
+            dst.mkdir(parents=True)
+            for f in ("decoy.py", "twin.py", "meta.toml", "proof.py"):
+                (dst / f).write_text((DECOYS / name / f).read_text(encoding="utf-8"), "utf-8")
+        return root
+
+    def _packs(self, root: Path, corpus: Path, *names: str, **run: Any) -> Path:
+        """실행기 출력을 묶은 디렉터리 - 이름이 claude 로 시작하면 claude, 아니면 codex."""
+        agents = root / "agents"
+        for name in names:
+            (root / name).mkdir(parents=True)
+            agent = "claude" if name.startswith("claude") else "codex"
+            src = _runner_output(
+                root / name, corpus, 3, agent=agent, docstrings="neutral", **run
+            )
+            _bundle(src, agents / name, corpus)
+        return agents
+
+    def _run(self, tmp_path: Path, corpus: Path, agents: Path, *extra: str) -> int:
+        reference = tmp_path / "reference"
+        if not reference.exists():
+            self._packs(reference, corpus, "claude-code-neutral", "codex-cli-neutral")
+        return main([
+            "xauthor-report", "--corpus", str(corpus), "--agents", str(agents),
+            "--reference-corpus", str(corpus), "--reference-agents", str(reference / "agents"),
+            "--issues", str(tmp_path / "issues"), "--out", str(tmp_path / "X.md"), *extra,
+        ])
+
+    def test_the_declared_analysis_is_generated_and_checked(
+        self, three: Path, tmp_path: Path
+    ) -> None:
+        agents = self._packs(tmp_path / "x", three, "claude-code", "codex-cli")
+        assert self._run(tmp_path, three, agents) == 0
+        body = (tmp_path / "X.md").read_text(encoding="utf-8")
+        assert body.split("\n", 1)[0] == crossauthor.BANNER
+        assert "**3쌍** = 분류 3 x 1" in body
+        # 같은 지적을 낸 두 리뷰어다 - 차이가 0 이라 주 지표가 0 을 품는다 (②).
+        assert "> **② codex 가 쓴 쌍에서 구별되지 않는다**" in body
+        assert body.count("| 주 지표 (P-C) |") == len(DEFAULT_SWEEP) + 1  # 사다리 + 크기
+        assert "감사 전" in body
+        assert self._run(tmp_path, three, agents, "--check") == 0
+        (tmp_path / "X.md").write_text(body + "x", encoding="utf-8")
+        assert self._run(tmp_path, three, agents, "--check") == 1
+
+    def test_nothing_is_written_before_the_measurement(
+        self, three: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        assert self._run(tmp_path, three, tmp_path / "none") == 0
+        assert "측정 전" in capsys.readouterr().out
+        assert not (tmp_path / "X.md").exists()
+        # 🔴 묶음 없이 문서만 있으면 다시 만들 수 없는 숫자다
+        (tmp_path / "X.md").write_text("old", encoding="utf-8")
+        assert self._run(tmp_path, three, tmp_path / "none") == 1
+
+    def test_one_reviewer_alone_is_not_scored(
+        self, three: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """🔴 채점은 둘 다 찬 뒤 한 번이다 - 먼저 끝난 쪽은 묶기만 한다 (§7.10d 「측정」)."""
+        agents = self._packs(tmp_path / "x", three, "claude-code")
+        assert self._run(tmp_path, three, agents) == 2
+        assert "하나씩만 있어야 한다 (지금 1개)" in capsys.readouterr().err
+        assert not (tmp_path / "X.md").exists()
+
+    def test_a_measurement_off_the_declaration_writes_nothing(
+        self, three: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """🔴 격리 설치한 판 대신 다른 판으로 쟀으면 「미완」이다 - 그때까지의 값도 내지 않는다."""
+        agents = self._packs(tmp_path / "x", three, "claude-code", cli_version="9.9.8")
+        self._packs(tmp_path / "x", three, "codex-cli")
+        assert self._run(tmp_path, three, agents) == 2
+        assert "`cli_version` 9.9.9 → 9.9.8" in capsys.readouterr().err
+        assert not (tmp_path / "X.md").exists()
+
+    def test_the_sensitivity_drops_the_listed_pairs(
+        self, three: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        agents = self._packs(tmp_path / "x", three, "claude-code", "codex-cli")
+        issues = tmp_path / "issues"
+        issues.mkdir()
+        (issues / "a.txt").write_text(f"# 판정자 a\n{self.PAIRS[0]}\n\n", encoding="utf-8")
+        assert self._run(tmp_path, three, agents) == 0
+        assert "| `a` | 1 | 2 |" in (tmp_path / "X.md").read_text(encoding="utf-8")
+        (issues / "b.txt").write_text("D999-typo\n", encoding="utf-8")
+        assert self._run(tmp_path, three, agents) == 2
+        assert "D999-typo" in capsys.readouterr().err
