@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import hashlib
 import itertools
 import re
 import tomllib
@@ -739,10 +740,13 @@ class TestMeasuredClaimsAreLabelled:
 class TestTheLandingPage:
     """docs/index.html - GitHub Pages 의 첫 페이지. 받은 사람이 파일로 열어도 같아야 한다.
 
-    숫자는 페이지에 쓰지 않는다 - 그림(생성물)이 든다. 그래서 페이지는 손으로 쓰고 생성하지 않는다.
+    숫자는 손으로 쓴 문장에 쓰지 않는다 - 생성 구간 · 그림 · 데이터(생성물)가 든다.
+    스크립트는 저장소의 파일만 싣는다 (기록 탐색 · 브라우저 Ruff) - 바깥에서 받는 것은 사용자가
+    「분석」을 누를 때의 Ruff WebAssembly 하나이고, 해시로 검증한다.
     """
 
     PAGE = ROOT / "docs" / "index.html"
+    APP = ROOT / "docs" / "app.js"
 
     def test_its_relative_images_and_links_resolve(self) -> None:
         html = self.PAGE.read_text(encoding="utf-8")
@@ -757,7 +761,10 @@ class TestTheLandingPage:
         """링크는 괜찮다 - 불러오는 자원(그림 · 스크립트 · 스타일)만 막는다."""
         html = self.PAGE.read_text(encoding="utf-8")
         assert not re.findall(r'src="https?://', html)
-        assert "<script" not in html
+        # 스크립트는 저장소 파일만 - 인라인 코드도 바깥 주소도 없다 (상대 경로는 위 검사가 본다)
+        scripts = re.findall(r"<script\b([^>]*)>(.*?)</script>", html, re.S)
+        assert scripts, "스크립트가 없다 - 대조가 공허하다"
+        assert all('src="' in attrs and not body.strip() for attrs, body in scripts)
         assert not re.findall(r'<link[^>]+href="https?://', html)
         # 손으로 쓰는 페이지에 가장 흔히 들어오는 바깥 자원 - 웹 폰트 (독립 검토)
         assert "@import" not in html
@@ -778,6 +785,30 @@ class TestTheLandingPage:
         assert len(texts) >= 5, "본문을 못 읽었다 - 대조가 공허하다"
         quoted = [t for _, t in texts if re.search(r"\d", re.sub(r"<[^>]+>", "", t))]
         assert not quoted, f"페이지 문장에 숫자가 있다: {quoted}"
+
+    def test_the_only_outside_fetch_is_the_pinned_ruff(self) -> None:
+        """🔴 브라우저 Ruff 는 저장소의 Ruff 와 같은 판이고, 받은 WebAssembly 는 해시로 검증한다.
+
+        판이 다르면 브라우저 결과가 측정과 다른 도구의 결과가 된다. 붙임 코드는 npm 의 그 판에서
+        가져와 저장소에 둔다 - 바깥 스크립트를 실행하지 않는다.
+        """
+        app = self.APP.read_text(encoding="utf-8")
+        lock = (ROOT / "uv.lock").read_text(encoding="utf-8")
+        locked = re.search(r'^name = "ruff"\nversion = "([^"]+)"', lock, re.M)
+        assert locked is not None, "uv.lock 에서 Ruff 판을 못 읽었다 - 대조가 공허하다"
+        version = locked.group(1)
+        urls = set(re.findall(r"https?://[^\s\"']+", app))
+        wasm = f"https://cdn.jsdelivr.net/npm/@astral-sh/ruff-wasm-web@{version}/ruff_wasm_bg.wasm"
+        assert urls == {wasm}
+        assert re.search(r'RUFF_SRI = "sha384-[A-Za-z0-9+/=]{64}"', app)
+        assert "integrity: RUFF_SRI" in app
+        glue = ROOT / "docs" / "vendor" / f"ruff-wasm-web-{version}" / "ruff_wasm.js"
+        assert f'"./vendor/ruff-wasm-web-{version}/ruff_wasm.js"' in app
+        assert glue.is_file()
+        # npm tarball(@astral-sh/ruff-wasm-web 0.16.8)의 ruff_wasm.js 와 같은 바이트 -
+        # 판을 올리면 함께 바꾼다
+        digest = hashlib.sha256(glue.read_bytes()).hexdigest()
+        assert digest == "8a90aec3c47c6d0b06a0930d2ff7be0b584e15fc7c09768f74717fc8b5103d0e"
 
     def test_its_highlights_are_generated(self) -> None:
         """첫 화면의 핵심 발견은 생성 구간이다 - 표시가 사라지면 report 가 채우기를 멈춘다."""

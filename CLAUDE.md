@@ -24,6 +24,7 @@ uv run codeproof measure         # 정적분석기로 채점 기준 편차 측�
 uv run codeproof review <파일.py> [--agent claude] [--ollama MODEL]  # 정답 없는 코드 - 지적과 근거만 (채점하지 않는다)
 uv run codeproof history         # 저장된 실행 · 재현성 확인
 uv run codeproof report          # docs/MEASUREMENTS.md · docs/figures/*.svg 생성 (--check 로 최신 확인)
+uv run codeproof serve           # 대시보드(docs/)를 127.0.0.1 에 열고 붙여 넣은 코드를 review 와 같은 경로로 리뷰
 uv run codeproof xauthor-report  # results/xauthor/MEASUREMENTS.md — codex 가 쓴 쌍의 선언한 분석 (DESIGN §7.10d · 묶음이 없으면 쓰지 않는다)
 uv run codeproof pack --from <실행기 출력> --out results/agent/<이름> [--runs N]  # 에이전트 묶음 (N = 수집 전에 선언한 회차 수)
 uv run codeproof decoy validate  # decoy 규격 검사
@@ -47,6 +48,7 @@ corpus    → domain              reviewers → domain·analysis·llm
 eval      → domain·analysis·llm·verify·corpus·reviewers
 store     → domain·eval         cli       → 전부
 review    → domain·analysis·llm·verify·eval·reviewers   ← 정답 없는 코드 · 채점하지 않는다
+serve     → review                                      ← 대시보드 + 리뷰를 127.0.0.1 로만
 ```
 
 `domain/` 은 **stdlib 과 `typing` 만** import 한다.

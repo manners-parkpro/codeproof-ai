@@ -97,7 +97,11 @@ SCENARIOS=(layering runner registry registry-derived sdk-lazy falsify-shard proo
            xauthor-s2-dropped
            xauthor-read-every-rung xauthor-read-twin xauthor-read-shaky xauthor-twin-hits
            xauthor-declared-runs xauthor-declared-setup xauthor-declared-kinds xauthor-declared-min-kinds
-           xauthor-issues-unknown xauthor-orphan-doc)
+           xauthor-issues-unknown xauthor-orphan-doc
+           explorer-said-run explorer-verdict-check explorer-marks explorer-every-pair data-stale
+           ruff-rules-empty highlights-leader highlights-shaky highlights-trade landing-ruff-pin
+           landing-ruff-sri landing-inline-script serve-origin serve-host serve-json serve-one-at-a-time
+           serve-unknown-agent)
 
 claim_layering() { echo "런타임(analysis)은 정답 라벨(eval)을 볼 수 없다 — A1"; }
 break_layering() {
@@ -1146,6 +1150,80 @@ guard_xauthor-issues-unknown() { uv run pytest "$_XANT" -q -k unknown_pair; }
 claim_xauthor-orphan-doc() { echo "묶음 없이 분석 문서만 있으면 낡은 것이다 — 다시 만들 수 없는 숫자를 최신으로 세지 않는다"; }
 break_xauthor-orphan-doc() { perl -0pi -e 's/        if target\.is_file\(\):\n/        if False:\n/' src/codeproof_ai/cli.py; }
 guard_xauthor-orphan-doc() { uv run pytest tests/cli/test_commands.py -q -k before_the_measurement; }
+
+_EX=src/codeproof_ai/eval/explorer.py
+_EXT=tests/eval/test_explorer.py
+_SV=src/codeproof_ai/serve.py
+_SVT=tests/review/test_serve.py
+_HLT=tests/eval/test_highlights.py
+
+claim_explorer-said-run() { echo "기록된 리뷰는 회차마다 그 회차가 낸 원문만 싣는다 — 묶인 지적의 대표 문구는 다른 회차의 것일 수 있다 (교훈 #72)"; }
+break_explorer-said-run() { perl -0pi -e 's/ if r == run\)/ if True)/' src/codeproof_ai/domain/observation.py; }
+guard_explorer-said-run() { uv run pytest tests/domain/test_observation.py -q -k said_it; }
+
+claim_explorer-verdict-check() { echo "원문 판정으로 만든 짝 판정이 점수판과 다르면 기록 데이터를 만들지 않는다 — 화면이 센 값과 모순된다"; }
+break_explorer-verdict-check() { perl -0pi -e 's/if mine is not verdicts\[pid\]:/if False:/' "$_EX"; }
+guard_explorer-verdict-check() { uv run pytest "$_EXT" -q -k scoreboard_did_not_count; }
+
+claim_explorer-marks() { echo "채점하지 않은 지적은 이유(관례 주장 · 정답 라벨 밖)를 갈라 싣는다 (F4 · F4a)"; }
+break_explorer-marks() { perl -0pi -e 's/return "out" if finding\.category\.is_defect_claim else "style"/return "out"/' "$_EX"; }
+guard_explorer-marks() { uv run pytest "$_EXT" -q -k 'marks_say_why or each_outcome'; }
+
+claim_explorer-every-pair() { echo "기록된 리뷰는 고르지 않는다 — 잰 짝 전부를 싣는다"; }
+break_explorer-every-pair() { perl -0pi -e 's/s\.sample_id in measured\)/s.sample_id in measured)[:1]/' "$_EX"; }
+guard_explorer-every-pair() { uv run pytest tests/cli/test_commands.py -q -k dashboard_data_is_generated; }
+
+claim_data-stale() { echo "더는 만들지 않는 대시보드 데이터가 남으면 --check 가 운다 — 점수판 없는 옛 기록을 보여 주지 않게 (F5b)"; }
+break_data-stale() { perl -0pi -e 's/pattern="\*\.js", banner=explorer\.BANNER/pattern="*.nope", banner=explorer.BANNER/' src/codeproof_ai/cli.py; }
+guard_data-stale() { uv run pytest tests/cli/test_commands.py -q -k dashboard_data_is_generated; }
+
+claim_ruff-rules-empty() { echo "도구가 룰 분류를 주지 않으면 브라우저 Ruff 표를 만들지 않는다 — 빈 표는 모든 지적을 결함 주장으로 보이게 한다 (F4a)"; }
+break_ruff-rules-empty() { perl -0pi -e 's/if not categories:/if False:/' "$_EX"; }
+guard_ruff-rules-empty() { uv run pytest "$_EXT" -q -k no_categories_is_refused; }
+
+claim_highlights-leader() { echo "첫 화면의 「앞섰다」는 값에서 고른다 — 다시 잰 뒤 순서가 바뀌면 문장도 바뀐다 (F5b)"; }
+break_highlights-leader() { perl -0pi -e 's/leader = a if row\.diff\.point > 0 else b/leader = a/' src/codeproof_ai/eval/report.py; }
+guard_highlights-leader() { uv run pytest "$_HLT" -q -k other_reviewer; }
+
+claim_highlights-shaky() { echo "주 지표가 사다리에서 흔들리면 첫 화면은 순위를 주장하지 않는다 (A2a)"; }
+break_highlights-shaky() { perl -0pi -e 's/elif row\.stable:/elif True:/' src/codeproof_ai/eval/report.py; }
+guard_highlights-shaky() { uv run pytest "$_HLT" -q -k shaky_ladder; }
+
+claim_highlights-trade() { echo "「대신 헛경고는」은 많이 짚는 쪽이 헛경고도 더 낼 때만 쓴다 — 값에서 고른다 (F5b)"; }
+break_highlights-trade() { perl -0pi -e 's/ if more == caught_more else / if True else /' src/codeproof_ai/eval/report.py; }
+guard_highlights-trade() { uv run pytest "$_HLT" -q -k trade_off_word; }
+
+claim_landing-ruff-pin() { echo "브라우저 Ruff 는 uv.lock 의 Ruff 와 같은 판이다 — 다르면 측정과 다른 도구의 결과다"; }
+break_landing-ruff-pin() { perl -0pi -e 's/ruff-wasm-web\@0\.16\.8\/ruff_wasm_bg\.wasm/ruff-wasm-web\@0.16.7\/ruff_wasm_bg.wasm/' docs/app.js; }
+guard_landing-ruff-pin() { uv run pytest tests/docs/test_consistency.py -q -k pinned_ruff; }
+
+claim_landing-ruff-sri() { echo "받은 Ruff WebAssembly 는 SRI 해시로 검증한다 — 바뀐 바이너리를 실행하지 않는다"; }
+break_landing-ruff-sri() { perl -0pi -e 's/\{ integrity: RUFF_SRI, /{ /' docs/app.js; }
+guard_landing-ruff-sri() { uv run pytest tests/docs/test_consistency.py -q -k pinned_ruff; }
+
+claim_landing-inline-script() { echo "첫 페이지의 스크립트는 저장소 파일만이다 — 인라인 코드도 바깥 주소도 싣지 않는다"; }
+break_landing-inline-script() { perl -0pi -e 's/<script src="app\.js" defer><\/script>/<script src="app.js" defer><\/script>\n<script>document.title = "x";<\/script>/' docs/index.html; }
+guard_landing-inline-script() { uv run pytest tests/docs/test_consistency.py -q -k 'TheLandingPage and outside'; }
+
+claim_serve-origin() { echo "로컬 서버는 다른 출처의 리뷰 요청을 받지 않는다 — 리뷰는 사용자 계정의 모델 호출이다"; }
+break_serve-origin() { perl -0pi -e 's/if origin is not None and origin\.removeprefix\("http:\/\/"\) not in self\._server\(\)\.hosts:/if False:/' "$_SV"; }
+guard_serve-origin() { uv run pytest "$_SVT" -q -k another_origin; }
+
+claim_serve-host() { echo "로컬 서버는 다른 이름(Host)으로 온 요청을 받지 않는다 — DNS rebinding"; }
+break_serve-host() { perl -0pi -e 's/return self\.headers\.get\("Host", ""\) in self\._server\(\)\.hosts/return True/' "$_SV"; }
+guard_serve-host() { uv run pytest "$_SVT" -q -k another_host_name; }
+
+claim_serve-json() { echo "로컬 서버는 JSON 요청만 받는다 — 폼 · text/plain 은 사전 확인 없이 오는 교차 출처 요청이다"; }
+break_serve-json() { perl -0pi -e 's/if not self\.headers\.get\("Content-Type", ""\)\.startswith\("application\/json"\):/if False:/' "$_SV"; }
+guard_serve-json() { uv run pytest "$_SVT" -q -k form_post; }
+
+claim_serve-one-at-a-time() { echo "로컬 서버의 리뷰는 한 번에 하나다 — 에이전트 리뷰는 분 단위이고 계정 한도를 쓴다"; }
+break_serve-one-at-a-time() { perl -0pi -e 's/if not self\._server\(\)\.busy\.acquire\(blocking=False\):/if False:/' "$_SV"; }
+guard_serve-one-at-a-time() { uv run pytest "$_SVT" -q -k second_review; }
+
+claim_serve-unknown-agent() { echo "로컬 서버는 모르는 에이전트 · 모델 이름을 거절한다 — 실행기 인자로 넘어간다"; }
+break_serve-unknown-agent() { perl -0pi -e 's/if agent is not None and agent not in AGENTS:/if False:/' "$_SV"; }
+guard_serve-unknown-agent() { uv run pytest "$_SVT" -q -k unknown_values; }
 
 # ── 하네스 ─────────────────────────────────────────────────────────────────
 

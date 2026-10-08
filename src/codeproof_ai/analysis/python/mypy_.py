@@ -28,7 +28,7 @@ from codeproof_ai.domain.location import Location, Position, Span
 from codeproof_ai.domain.run import ToolVersion
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Mapping, Sequence
     from pathlib import Path
 
     from codeproof_ai.domain.target import ReviewTarget
@@ -86,6 +86,10 @@ class MypyAnalyzer:
 
     def config_signature(self) -> str:
         return f"mypy(strict={self.strict},py={_PYTHON},isolated,no-cache)"
+
+    def rule_categories(self) -> Mapping[str, Category]:
+        """mypy 는 오류 코드마다 분류를 주지 않는다 - 짐작해 채우지 않는다 (C2)."""
+        return {}
 
     def analyze(self, target: ReviewTarget) -> list[Finding]:
         with materialize(target) as root:

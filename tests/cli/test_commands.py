@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any
 import pytest
 
 from codeproof_ai.cli import main
-from codeproof_ai.eval import crossauthor
+from codeproof_ai.eval import crossauthor, explorer
 from codeproof_ai.eval.export import sample_digest
 from codeproof_ai.eval.figures import BANNER as FIGURE_BANNER
 from codeproof_ai.eval.loader import PRESENTED_FILENAME, load_decoy_samples
@@ -952,6 +952,37 @@ class TestReport:
         assert main(["report", *args]) == 0
         assert "# 측정값" in capsys.readouterr().out
         assert not (tmp_path / "figures").exists()
+
+    def test_the_dashboard_data_is_generated_beside_the_page(
+        self, small_corpus: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """대시보드의 기록 탐색 · 브라우저 Ruff 표도 생성물이다 - 기록은 리뷰어만 다른 짝일 때만.
+
+        🔴 에이전트 묶음이 빠졌는데 기록 데이터가 남으면 점수판 없는 옛 기록을 보여 준다 -
+           그림과 같이 `--check` 가 울고, 다시 만들면 지운다.
+        """
+        agents = tmp_path / "agents"
+        for name, agent in (("claude-code", "claude"), ("codex-cli", "codex")):
+            self._pack(agents, tmp_path, small_corpus, name, agent=agent, docstrings="neutral")
+        out = tmp_path / "gen" / "MEASUREMENTS.md"
+        out.parent.mkdir()
+        assert self._report(small_corpus, agents, out) == 0
+        data = out.parent / "data"
+        assert sorted(p.name for p in data.iterdir()) == [explorer.REVIEWS, explorer.RUFF]
+        loaded = explorer.load((data / explorer.REVIEWS).read_text(encoding="utf-8"))
+        pairs = [d for d in small_corpus.iterdir() if d.is_dir()]
+        assert len(loaded["pairs"]) == len(pairs)
+        assert main(["report", "--corpus", str(small_corpus), "--agents", str(agents),
+                     "--out", str(out), "--check"]) == 0
+        empty = tmp_path / "no-agents"
+        empty.mkdir()
+        capsys.readouterr()
+        args = ["--corpus", str(small_corpus), "--agents", str(empty), "--out", str(out)]
+        assert main(["report", *args, "--check"]) == 1
+        assert "더는 만들지 않는 데이터" in capsys.readouterr().err
+        assert main(["report", *args]) == 0
+        assert sorted(p.name for p in data.iterdir()) == [explorer.RUFF]
+        capsys.readouterr()
 
     def test_a_figure_no_longer_drawn_fails_the_check_and_is_removed(
         self, small_corpus: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]

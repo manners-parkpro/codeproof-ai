@@ -6,7 +6,7 @@
 
 실무 Spring 백엔드에서 Codex 와 Claude 를 매일 쓰다가 생긴 질문, 「AI 리뷰어가 내는 품질 숫자를 얼마나 믿을 수 있나」를
 직접 재 본 프로젝트다. 이 저장소도 AI 에이전트와 함께 만들었다 ([아래](#ai-에이전트와-만든-방식)).
-그림으로 보는 한 페이지: <https://manners-parkpro.github.io/codeproof-ai/>
+결과 · 두 AI 의 실제 리뷰 기록 · 내 코드를 넣어 보는 한 페이지: <https://manners-parkpro.github.io/codeproof-ai/>
 
 > **상태** — 정적분석기(Ruff · mypy)와 에이전트 층(Claude Code · Codex CLI, 목표 150쌍 · 각 3회) 측정을 마쳤다.
 > 모델 API 층은 어댑터만 있고 아직 재지 않았다.
@@ -47,7 +47,8 @@ uv run pytest           # 전체 테스트
 내 파이썬 파일로 돌려 보려면 `uv run codeproof review 파일.py` — Ruff · mypy 의 지적마다 모은 근거(다른 도구가 같은 자리를
 짚었는지 · 가드 · 도달성)를 붙여 낸다. 모델 리뷰도 붙일 수 있다 — `--ollama qwen3:4b` 는 로컬 Ollama 모델(계정 · 키 없음),
 `--agent claude` 는 로그인된 에이전트(측정과 같은 실행기 · 모델 기준)이고, 둘 다 인용이 코드에 실제로 있는지까지 본다.
-정답이 없는 코드라 결함이라고 판정하지는 않는다.
+정답이 없는 코드라 결함이라고 판정하지는 않는다. 같은 리뷰를 위 페이지에서 하려면 `uv run codeproof serve`
+(내 컴퓨터의 127.0.0.1 에만 열린다).
 
 소요는 기계와 가드 수에 따라 다르다 — GitHub 러너에서 `verify.sh` 는 macOS 약 11분 · Linux 약 14분(느린 러너에서 25분),
 pytest 는 약 5분 · 10분이다 [실측 · 2026-10-08 · CI 최근 30회 중앙값 · 가드 160개]. 같은 검사를 GitHub Actions 가 PR 마다

@@ -244,6 +244,33 @@ def review_file(
     )
 
 
+def review_dict(report: ReviewReport) -> dict[str, object]:
+    """같은 보고서의 JSON 꼴 - `codeproof serve` 의 화면이 쓴다. 문구는 Markdown 보고서와 같다."""
+    return {
+        "path": report.path,
+        "reviewers": list(report.reviewers),
+        "settings": list(report.settings),
+        "rejected": list(report.rejected),
+        "weights": Weights().signature(),
+        "entries": [
+            {
+                "reviewer": e.reviewer,
+                "line": e.verified.finding.location.line,
+                "rule": e.verified.finding.rule_id,
+                "message": e.verified.finding.message,
+                "defect_claim": e.verified.finding.category.is_defect_claim,
+                "evidence": [
+                    {"kind": KIND[ev.kind], "verdict": VERDICT[ev.verdict], "detail": ev.detail}
+                    for ev in e.verified.evidence
+                ],
+                "confidence": round(e.verified.confidence, 2),
+            }
+            for e in report.entries
+        ],
+        "limits": list(LIMITS),
+    }
+
+
 def render_review(report: ReviewReport) -> str:
     """Markdown 보고서 - 지적마다 근거를 붙이고, 검증자가 못 보는 것을 같이 적는다."""
     lines = [

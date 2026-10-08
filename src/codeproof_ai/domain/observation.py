@@ -82,12 +82,15 @@ class ObservedFinding:
         total_runs: 전체 실행 수.
         variants: 같은 것으로 묶인 원본들. 문구 차이를 보존한다 -
             표현 안정성도 데이터이고, 감사 시 원본이 필요하다.
+        variant_runs: `variants` 마다 그것이 나온 실행 번호. 🔴 한 실행이 같은 묶음에
+            지적을 둘 낼 수 있어 `runs` 로는 원본을 실행별로 가를 수 없다.
     """
 
     finding: Finding
     runs: frozenset[int]
     total_runs: int
     variants: tuple[Finding, ...] = field(default_factory=tuple, repr=False)
+    variant_runs: tuple[int, ...] = field(default_factory=tuple, repr=False)
 
     def __post_init__(self) -> None:
         if self.total_runs < 1:
@@ -98,6 +101,11 @@ class ObservedFinding:
             raise ValueError(msg)
         if out_of_range := {r for r in self.runs if not 0 <= r < self.total_runs}:
             msg = f"실행 번호가 범위를 벗어난다: {sorted(out_of_range)}"
+            raise ValueError(msg)
+        if self.variant_runs and (
+            len(self.variant_runs) != len(self.variants) or set(self.variant_runs) != self.runs
+        ):
+            msg = f"원본마다의 실행 번호가 원본 · 실행과 맞지 않는다: {self.variant_runs}"
             raise ValueError(msg)
 
     @property
@@ -115,6 +123,10 @@ class ObservedFinding:
 
     def appeared_in(self, run: int) -> bool:
         return run in self.runs
+
+    def said_in(self, run: int) -> tuple[Finding, ...]:
+        """그 실행이 실제로 낸 원본 - 대표는 다른 실행의 문구일 수 있다."""
+        return tuple(f for f, r in zip(self.variants, self.variant_runs, strict=True) if r == run)
 
 
 class MixedReviewerError(ValueError):
@@ -213,12 +225,14 @@ def group_runs(
     # dict 는 삽입 순서를 지킨다 - 관측 순서는 첫 등장 순서이고, 대표는 묶음의 첫 지적이다.
     seen_in: dict[str, set[int]] = {}
     variants: dict[str, list[Finding]] = {}
+    variant_runs: dict[str, list[int]] = {}
 
     for idx, findings in enumerate(materialized):
         for f in findings:
             k = policy.key(f)
             seen_in.setdefault(k, set()).add(idx)
             variants.setdefault(k, []).append(f)
+            variant_runs.setdefault(k, []).append(idx)
 
     return ObservationSet(
         target_id=target_id,
@@ -231,6 +245,7 @@ def group_runs(
                 runs=frozenset(seen_in[k]),
                 total_runs=total,
                 variants=tuple(group),
+                variant_runs=tuple(variant_runs[k]),
             )
             for k, group in variants.items()
         ),

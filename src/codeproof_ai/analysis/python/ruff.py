@@ -21,7 +21,7 @@ from codeproof_ai.domain.location import Location, Position, Span
 from codeproof_ai.domain.run import ToolVersion
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Mapping, Sequence
     from pathlib import Path
 
     from codeproof_ai.domain.target import ReviewTarget
@@ -161,6 +161,9 @@ class RuffAnalyzer:
         #    다른 숫자를 내므로, 어느 쪽이었는지 모르면 재현이 안 된다.
         src = "cat=tool" if self._categories else "cat=prefix"
         return f"ruff(select={'+'.join(self.select)},target={_TARGET},{noqa},{src})"
+
+    def rule_categories(self) -> Mapping[str, Category]:
+        return dict(self._categories)
 
     def _category(self, code: str) -> Category:
         """도구가 말한 분류를 쓰고, 없으면 접두사로 degrade 한다."""

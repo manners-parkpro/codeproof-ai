@@ -12,9 +12,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterator, Sequence
+    from collections.abc import Callable, Iterator, Mapping, Sequence
 
-    from codeproof_ai.domain.finding import Finding
+    from codeproof_ai.domain.finding import Category, Finding
     from codeproof_ai.domain.run import ToolVersion
     from codeproof_ai.domain.target import ReviewTarget
 
@@ -148,6 +148,13 @@ class Analyzer(Protocol):
 
         룰 선택은 측정 손잡이다 - `--select ALL` 과 `--select E,F` 는
         같은 코드에서 FP 수가 완전히 다르다. 기록하지 않으면 재현 불가다.
+        """
+        ...
+
+    def rule_categories(self) -> Mapping[str, Category]:
+        """룰마다 **도구가 말한** 분류 - 관례 주장과 결함 주장을 가른다 (F4a).
+
+        🔴 접두사로 짐작하지 않는다 (C2). 도구가 분류를 주지 않으면 빈 표다.
         """
         ...
 
