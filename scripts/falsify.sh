@@ -424,7 +424,7 @@ guard_bundle-separators() { uv run pytest tests/reviewers/test_imported.py -q -k
 
 claim_pair-difference() { echo "리뷰어 비교는 같은 짝으로 함께 복원추출한다 — 짝이 어긋나면 자기 자신과의 차이에도 폭이 생긴다"; }
 break_pair-difference() {
-  perl -0pi -e 's/diffs = \[sa\[p\] - sb\[p\] for p in sa\]/diffs = [sa[p] - sb[q] for p, q in zip(sa, reversed(list(sb)), strict=True)]/' \
+  perl -0pi -e 's/return \{p: sa\[p\] - sb\[p\] for p in sa\}/return {p: sa[p] - sb[q] for p, q in zip(sa, reversed(list(sb)), strict=True)}/' \
     src/codeproof_ai/eval/multirun.py
 }
 guard_pair-difference() { uv run pytest tests/eval/test_multirun.py -q -k against_itself_has_no_width; }
