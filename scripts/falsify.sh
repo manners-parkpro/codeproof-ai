@@ -102,7 +102,9 @@ SCENARIOS=(layering runner registry registry-derived sdk-lazy falsify-shard proo
            ruff-rules-empty highlights-leader highlights-shaky highlights-trade landing-ruff-pin
            landing-ruff-sri landing-inline-script serve-origin serve-host serve-json serve-one-at-a-time
            serve-unknown-agent serve-origin-null serve-body-cap serve-length ruff-syntax-adapter
-           ruff-syntax-data ruff-syntax-js highlights-ai-only explorer-out-range)
+           ruff-syntax-data ruff-syntax-js highlights-ai-only explorer-out-range mypy-broken-tool
+           mypy-column-bytes grader-name-pairs grader-name-mix multi-run-console pair-ladder-moved
+           pairs-ladder-cells)
 
 claim_layering() { echo "런타임(analysis)은 정답 라벨(eval)을 볼 수 없다 — A1"; }
 break_layering() {
@@ -296,7 +298,15 @@ break_pairs-ladder-label() { perl -0pi -e 's/moved = len\(set\(tops\)\) > 1/move
 guard_pairs-ladder-label() { uv run pytest tests/eval/test_figures.py -q -k ladder_column; }
 
 claim_pair-ladder-note() { echo "측정값 문서의 짝 판정 사다리가 흔들림을 적는다 — 판정을 바꾸면 report --check 가 운다 (A2a · F5b)"; }
-break_pair-ladder-note() { perl -0pi -e 's/            if len\(tops\) > 1\n/            if len(tops) > 9\n/' src/codeproof_ai/eval/report.py; }
+break_pair-ladder-note() { perl -0pi -e 's/        if len\(tops\) > 1:\n/        if len(tops) > 9:\n/' src/codeproof_ai/eval/report.py; }
+
+claim_pair-ladder-moved() { echo "가장 많은 판정이 그대로여도 판정 수가 움직이면 생성물은 「안정」이라 쓰지 않는다 — CLI 와 같은 정의 (A2a)"; }
+break_pair-ladder-moved() { perl -0pi -e 's/        elif moved:\n/        elif False:\n/' src/codeproof_ai/eval/report.py; }
+guard_pair-ladder-moved() { uv run codeproof report --check; }
+
+claim_pairs-ladder-cells() { echo "짝 그림도 판정 수가 움직이면 「안정」이라 쓰지 않는다 — 생성물 · CLI 와 같은 정의 (moved_cells)"; }
+break_pairs-ladder-cells() { perl -0pi -e 's/cells = moved_cells\(\[r\.counts for r in ladder\]\)/cells = ()/' src/codeproof_ai/eval/figures.py; }
+guard_pairs-ladder-cells() { uv run pytest tests/eval/test_figures.py -q -k ladder_column; }
 guard_pair-ladder-note() { uv run codeproof report --check; }
 
 claim_agents-points() { echo "에이전트 그림은 리뷰어마다 점만 찍는다 — 두 구간을 겹쳐 보는 읽기를 권하지 않게 (F6)"; }
@@ -1257,6 +1267,26 @@ guard_highlights-ai-only() { uv run pytest "$_HLT" -q -k speaks_only_of_the_two_
 claim_explorer-out-range() { echo "기록된 리뷰의 채점하지 않은 결함 주장은 정답 구간과 겹치지 않는다 — 화면이 그 거리를 적는다"; }
 break_explorer-out-range() { perl -0pi -e 's/"buggy":\[\[\d+,\d+,("[a-z_]+","out")/"buggy":[[1,999,$1/' docs/data/reviews.js; }
 guard_explorer-out-range() { uv run pytest "$_EXT" -q -k outside_the_labeled_range; }
+
+claim_mypy-broken-tool() { echo "mypy 가 종료 코드 2 에 진단을 하나도 내지 않으면 도구 고장이다 — 「지적 0건」으로 접지 않는다 (C2 · I)"; }
+break_mypy-broken-tool() { perl -0pi -e 's/if out\.returncode == 2 and not records:/if False:/' src/codeproof_ai/analysis/python/mypy_.py; }
+guard_mypy-broken-tool() { uv run pytest tests/analysis/test_adapters.py -q -k broken_tool; }
+
+claim_mypy-column-bytes() { echo "mypy 의 0-based 바이트 열을 문자 열로 바꾼다 — 비ASCII 가 오류 앞 같은 줄에 있으면 갈린다 (B1)"; }
+break_mypy-column-bytes() { perl -0pi -e 's/start = Position\.from_byte_0based\(line, int\(rec\.get\("column", 0\)\), source_line\)/start = Position(line=line, column=int(rec.get("column", 0)), byte_column=int(rec.get("column", 0)))/' src/codeproof_ai/analysis/python/mypy_.py; }
+guard_mypy-column-bytes() { uv run pytest tests/analysis/test_adapters.py -q -k column_converts; }
+
+claim_grader-name-pairs() { echo "짝 채점은 채점하지 않은 채점자 이름을 거절한다 — 틀린 이름이 「모든 짝 P-B」가 됐다"; }
+break_grader-name-pairs() { perl -0pi -e 's/for j in outcome\.judgments\[grader\]\)/for j in outcome.judgments.get(grader, ()))/' src/codeproof_ai/eval/pairing.py; }
+guard_grader-name-pairs() { uv run pytest tests/eval/test_pairing.py -q -k DidNotGrade; }
+
+claim_grader-name-mix() { echo "구성비 민감도는 채점하지 않은 채점자 이름을 거절한다 — 「물림 0/0」으로 접지 않는다"; }
+break_grader-name-mix() { perl -0pi -e 's/for j in o\.judgments\[grader\]:/for j in o.judgments.get(grader, ()):/' src/codeproof_ai/eval/mix.py; }
+guard_grader-name-mix() { uv run pytest tests/eval/test_mix.py -q -k did_not_grade; }
+
+claim_multi-run-console() { echo "다회 실행의 콘솔은 합집합으로 센 편차 · 구성비 · 층을 싣지 않는다 — 어느 회차의 값도 아니다 (F6)"; }
+break_multi-run-console() { perl -0pi -e 's/multi = run\.manifest\.sample_n > 1\n/multi = False\n/' src/codeproof_ai/cli.py; }
+guard_multi-run-console() { uv run pytest tests/cli/test_commands.py -q -k multi_run_prints; }
 
 # ── 하네스 ─────────────────────────────────────────────────────────────────
 

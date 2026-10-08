@@ -30,6 +30,7 @@ from codeproof_ai.eval.figures import (
     Spread,
     agents_svg,
     examples_svg,
+    moved_cells,
     pairs_svg,
     scoreboard_svg,
     spread_svg,
@@ -72,7 +73,7 @@ BANNER = (
     "`uv run codeproof report --out docs/MEASUREMENTS.md` 로 다시 만든다. -->"
 )
 
-HEADLINE_GRADER = "provable_safety"
+HEADLINE_GRADER = ProvableSafetyGrader.name
 RULE_SELECTIONS = ("F,E", "S", "ALL")
 """룰 선택 손잡이 - 관례 주장 위주 · 보안 룰만 · 전부.
 
@@ -338,12 +339,20 @@ def _pair_ladder_section(ladder: Sequence[PairRung]) -> str:
             for r in rs
         ]
         tops = list(dict.fromkeys(r.counts.dominant for r in rs))
-        notes.append(
-            f"- 🔴 `{grader}` · `{sel}` — 가장 많은 판정이 slack 에 따라 {' → '.join(tops)} 로 "
-            "바뀐다. 그 판정은 매칭 정책의 산물이다."
-            if len(tops) > 1
-            else f"- o `{grader}` · `{sel}` — 사다리 전체에서 {tops[0]} 다. 안정."
-        )
+        moved = moved_cells([r.counts for r in rs])
+        if len(tops) > 1:
+            note = (
+                f"가장 많은 판정이 slack 에 따라 {' → '.join(tops)} 로 바뀐다. "
+                "그 판정은 매칭 정책의 산물이다."
+            )
+        elif moved:
+            note = (
+                f"가장 많은 판정은 사다리 전체에서 {tops[0]} 지만 판정 수는 움직인다 "
+                f"({' · '.join(moved)}) — 그 수는 매칭 정책을 따른다."
+            )
+        else:
+            note = f"사다리 전체에서 판정 수가 같다 ({tops[0]}). 안정."
+        notes.append(f"- {'🔴' if moved else 'o'} `{grader}` · `{sel}` — {note}")
     return "\n".join([*lines, "", *notes, ""])
 
 

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import unicodedata
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 from xml.sax.saxutils import escape
 
 if TYPE_CHECKING:
@@ -58,6 +58,34 @@ class Spread:
         if self.safety_fp == 0:
             return "배수로 잴 수 없다"
         return f"{self.injected_fp / self.safety_fp:.1f}배"
+
+
+class Cells(Protocol):
+    """짝 판정 네 칸의 수 - `PairCounts` · `sensitivity.SlackPoint`."""
+
+    @property
+    def correct(self) -> int: ...
+    @property
+    def over_flag(self) -> int: ...
+    @property
+    def under_flag(self) -> int: ...
+    @property
+    def reversed_(self) -> int: ...
+
+
+CELLS = (("P-C", "correct"), ("P-V", "over_flag"), ("P-B", "under_flag"), ("P-R", "reversed_"))
+
+
+def moved_cells(ladder: Sequence[Cells]) -> tuple[str, ...]:
+    """slack 사다리에서 수가 바뀐 판정 칸. 비어야 「안정」이다 (A2a).
+
+    🔴 가장 많은 판정이 그대로여도 칸은 움직일 수 있다 - 그때 단일 slack 의 숫자는 매칭 정책을
+       따른다. CLI(`Sensitivity.stable`)와 생성물(짝 판정 사다리 · 짝 그림)이 이 정의 하나를 쓴다 -
+       [실측] 따로 정의하던 때 같은 Ruff ALL 실행을 CLI 는 「불안정」, 생성물은 「안정」이라고 썼다.
+    """
+    return tuple(
+        name for name, attr in CELLS if len({getattr(c, attr) for c in ladder}) > 1
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -271,12 +299,14 @@ def pairs_svg(rungs: Sequence[PairRung]) -> str:
                 if w >= LABEL_MIN:
                     body.append(_t(x + w / 2, y + 13, str(n), anchor="middle"))
             x += w
-        tops = [r.counts.dominant for r in sorted(rs, key=lambda r: r.slack)]
+        ladder = sorted(rs, key=lambda r: r.slack)
+        tops = [r.counts.dominant for r in ladder]
         moved = len(set(tops)) > 1
+        cells = moved_cells([r.counts for r in ladder])
         verdict = "·".join(tops)
         if bar.total:
-            verdict += " 흔들린다" if moved else " 안정"
-        body.append(_t(WIDTH - 20, y + 13, verdict, "strong" if moved else "muted", "end"))
+            verdict += " 흔들린다" if moved else " 수는 움직인다" if cells else " 안정"
+        body.append(_t(WIDTH - 20, y + 13, verdict, "strong" if cells else "muted", "end"))
         y += 26
     y += 8
     lx = 20.0

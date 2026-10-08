@@ -32,7 +32,7 @@ text.guard { fill: #0969da; } text.bug { fill: #cf222e; } text.small { font-size
 <text x="355.45" y="105" text-anchor="middle">134</text>
 <rect class="pr" x="507.3" y="92" width="22.7" height="18" rx="2"/>
 <text x="518.65" y="105" text-anchor="middle">10</text>
-<text x="740" y="105" class="muted" text-anchor="end">P-B·P-B·P-B·P-B 안정</text>
+<text x="740" y="105" class="strong" text-anchor="end">P-B·P-B·P-B·P-B 수는 움직인다</text>
 <text x="20" y="131" text-anchor="start">injected_defect</text>
 <rect class="pv" x="190" y="118" width="58.9" height="18" rx="2"/>
 <text x="219.45" y="131" text-anchor="middle">26</text>
@@ -46,14 +46,14 @@ text.guard { fill: #0969da; } text.bug { fill: #cf222e; } text.small { font-size
 <rect class="pb" x="201.3" y="172" width="317.3" height="18" rx="2"/>
 <text x="359.95" y="185" text-anchor="middle">140</text>
 <rect class="pr" x="518.6" y="172" width="11.3" height="18" rx="2"/>
-<text x="740" y="185" class="muted" text-anchor="end">P-B·P-B·P-B·P-B 안정</text>
+<text x="740" y="185" class="strong" text-anchor="end">P-B·P-B·P-B·P-B 수는 움직인다</text>
 <text x="20" y="211" text-anchor="start">injected_defect</text>
 <rect class="pc" x="190" y="198" width="4.5" height="18" rx="2"/>
 <rect class="pv" x="194.5" y="198" width="6.8" height="18" rx="2"/>
 <rect class="pb" x="201.3" y="198" width="317.3" height="18" rx="2"/>
 <text x="359.95" y="211" text-anchor="middle">140</text>
 <rect class="pr" x="518.6" y="198" width="11.3" height="18" rx="2"/>
-<text x="740" y="211" class="muted" text-anchor="end">P-B·P-B·P-B·P-B 안정</text>
+<text x="740" y="211" class="strong" text-anchor="end">P-B·P-B·P-B·P-B 수는 움직인다</text>
 <rect class="pc" x="20" y="238" width="12" height="12" rx="2"/>
 <text x="38" y="248" text-anchor="start">P-C 구별</text>
 <rect class="pv" x="150" y="238" width="12" height="12" rx="2"/>

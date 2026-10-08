@@ -13,6 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from codeproof_ai.eval.figures import moved_cells
 from codeproof_ai.eval.grading.safety import ProvableSafetyGrader
 from codeproof_ai.eval.multirun import (
     EXPECTATION_LABEL,
@@ -126,11 +127,11 @@ class Sensitivity:
 
     @property
     def stable(self) -> bool:
-        """모든 slack 에서 같은 판정 분포인가.
+        """모든 slack 에서 같은 판정 분포인가 - 생성물과 같은 정의(`figures.moved_cells`).
 
         🔴 불안정하면 단일 값으로 낸 숫자를 결론으로 쓰면 안 된다.
         """
-        return len({p.signature for p in self.points}) <= 1
+        return not moved_cells(self.points)
 
     @property
     def flips(self) -> tuple[tuple[int, int], ...]:

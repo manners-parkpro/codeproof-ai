@@ -131,6 +131,12 @@ class MypyAnalyzer:
                 continue  # 🔴 한 건이 깨져도 나머지를 살린다
             if isinstance(obj, dict):
                 records.append(obj)
+        # 🔴 종료 코드만으로 판단하지 않는다 (C2) - mypy 는 구문 오류에도 2 를 내고 진단을 싣는다.
+        #    2 인데 진단이 하나도 없으면 도구가 깨진 것이다 [실측: 모르는 플래그 · 2.3.1] -
+        #    아니면 모든 대상이 「지적 0건」이 되어 확인자(교차 확인)의 입력이 조용히 빈다.
+        if out.returncode == 2 and not records:  # noqa: PLR2004
+            msg = f"mypy 자체가 실패했다: {(out.stderr or out.stdout).strip()[:400]}"
+            raise RuntimeError(msg)
         return records
 
     def _to_findings(

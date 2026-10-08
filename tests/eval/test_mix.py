@@ -12,6 +12,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import pytest
+
 from codeproof_ai.domain.observation import group_runs
 from codeproof_ai.domain.target import ReviewTarget, SourceFile
 from codeproof_ai.eval.grading.base import Judgment, Outcome
@@ -53,6 +55,15 @@ def _outcome(
 
 class TestDenominatorIsAllFindings:
     """🔴 판정된 것만 분모에 넣으면 항상 100% 가 나온다."""
+
+    def test_a_grader_that_did_not_grade_is_refused(
+        self, shipped_samples: list[LabeledSample]
+    ) -> None:
+        """🔴 틀린 이름은 KeyError 다 - 「물림 0/0」으로 접지 않는다."""
+        outcomes = [_outcome(shipped_samples[0].sample_id, [Outcome.FALSE_POSITIVE])]
+        assert mix_sensitivity(outcomes, shipped_samples, GRADER).observed.total == 1
+        with pytest.raises(KeyError):
+            mix_sensitivity(outcomes, shipped_samples, "provable-safety")
 
     def test_undecided_stays_in_the_denominator(
         self, analyzed: AnalyzedCorpus, shipped_samples: list[LabeledSample]

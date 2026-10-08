@@ -152,7 +152,9 @@ class TestPairs:
         """🔴 막대(slack 0)만으로는 「역전」이 정의의 것인지 매칭 정책의 것인지 모른다 (A2a)."""
         texts = _texts(pairs_svg(RUNGS))
         assert "P-R·P-V 흔들린다" in texts
-        assert "P-B·P-B 안정" in texts
+        # 가장 많은 판정이 그대로여도 칸이 움직이면 「안정」이 아니다 - CLI 와 같은 정의
+        assert "P-B·P-B 수는 움직인다" in texts
+        assert "P-B 안정" in texts
         assert "slack 0·10" in texts
         assert any("막대는 slack 0" in t and "150쌍" in t for t in texts)
 

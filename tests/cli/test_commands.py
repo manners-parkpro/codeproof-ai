@@ -216,6 +216,19 @@ class TestCredentialGate:
         )
         assert code == 0
 
+    def test_multi_run_prints_no_union_sections(
+        self, db: str, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """🔴 다회 실행의 편차 · 구성비 · 층은 합집합으로 센다 - 싣지 않고 이유를 적는다 (F6)."""
+        args = ["eval", "--providers", "replay", "--effort", "low", "--store", db]
+        assert main([*args, "--samples", "2"]) == 0
+        multi = capsys.readouterr().out
+        assert "다회 실행이라 싣지 않는다" in multi
+        assert "[채점 기준 편차]" not in multi
+        assert "단일 실행 기대값" in multi, "짝 채점은 관점마다 낸다"
+        assert main([*args, "--samples", "1"]) == 0
+        assert "다회 실행이라 싣지 않는다" not in capsys.readouterr().out
+
 
 class TestMeasureOutput:
     def test_reports_spread_pairing_and_sensitivity(

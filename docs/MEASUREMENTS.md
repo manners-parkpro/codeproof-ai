@@ -69,10 +69,10 @@
 | `S` | `injected_defect` | 5 | 2 | 6 | 140 | 2 |
 | `S` | `injected_defect` | 10 | 2 | 7 | 140 | 1 |
 
-- o `provable_safety` · `ALL` — 사다리 전체에서 P-B 다. 안정.
+- 🔴 `provable_safety` · `ALL` — 가장 많은 판정은 사다리 전체에서 P-B 지만 판정 수는 움직인다 (P-C · P-V · P-B · P-R) — 그 수는 매칭 정책을 따른다.
 - 🔴 `injected_defect` · `ALL` — 가장 많은 판정이 slack 에 따라 P-R → P-V 로 바뀐다. 그 판정은 매칭 정책의 산물이다.
-- o `provable_safety` · `S` — 사다리 전체에서 P-B 다. 안정.
-- o `injected_defect` · `S` — 사다리 전체에서 P-B 다. 안정.
+- 🔴 `provable_safety` · `S` — 가장 많은 판정은 사다리 전체에서 P-B 지만 판정 수는 움직인다 (P-V · P-R) — 그 수는 매칭 정책을 따른다.
+- 🔴 `injected_defect` · `S` — 가장 많은 판정은 사다리 전체에서 P-B 지만 판정 수는 움직인다 (P-V · P-R) — 그 수는 매칭 정책을 따른다.
 
 ## 코퍼스 구성비 민감도
 
