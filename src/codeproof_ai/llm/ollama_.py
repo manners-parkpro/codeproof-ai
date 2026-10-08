@@ -6,7 +6,8 @@
 
   format   출력 스키마를 강제한다 - `review_schema()` 그대로 (D5)
   think    추론 수준을 명시한다 - 모델 기본값에 맡기지 않는다 (D4)
-  digest   태그는 다시 받으면 다른 모델이 된다 - 시작 때 digest 를 고정하고 호출마다 다시 본다 (D6)
+  digest   태그는 다시 받으면 다른 모델이 된다 - 처음 쓸 때 한 번 고정하고 호출마다 다시 본다 (D6).
+           생성은 서버에 닿지 않는다 - Anthropic · OpenAI 의 클라이언트처럼 처음 쓸 때 닿는다
   캐시     로컬 KV 캐시는 비용이 아니라 지연만 바꾼다. nonce 는 다른 어댑터처럼 맨 앞에 둔다 (D3)
 
 🔴 에이전트가 아니다 (model_api 층) - 파일을 탐색하지 않고 프롬프트에 실린 코드만 본다.
@@ -63,9 +64,19 @@ class OllamaReviewProvider:
         self.host = (host or _host()).rstrip("/")
         self.prompt_name = prompt_name
         self._system = load_prompt(prompt_name)
-        self.digest = self._digest()
-        self.model_id = f"{self.tag}@{self.digest.removeprefix('sha256:')[:12]}"
-        """🔴 태그가 아니라 digest 까지 - 같은 태그도 다시 받으면 다른 가중치다 (D6)."""
+        self._pinned: str | None = None
+
+    @property
+    def digest(self) -> str:
+        """🔴 처음 읽을 때 한 번 고정한다 - 같은 태그도 다시 받으면 다른 가중치다 (D6)."""
+        if self._pinned is None:
+            self._pinned = self._current_digest()
+        return self._pinned
+
+    @property
+    def model_id(self) -> str:
+        """🔴 태그가 아니라 digest 까지 - 매니페스트 · identity 가 읽을 때 고정된다 (D6)."""
+        return f"{self.tag}@{self.digest.removeprefix('sha256:')[:12]}"
 
     def config_signature(self) -> str:
         return f"ollama({self.model_id},prompt={self.prompt_name},format=schema)"
@@ -100,7 +111,7 @@ class OllamaReviewProvider:
             raise OllamaError(msg)
         return loaded
 
-    def _digest(self) -> str:
+    def _current_digest(self) -> str:
         models = self._call("/api/tags").get("models")
         want = {self.tag, f"{self.tag}:latest"}
         for m in models if isinstance(models, list) else []:
@@ -121,6 +132,8 @@ class OllamaReviewProvider:
             msg = f"effort 는 {' · '.join(THINK)} 중 하나다 (D4): {effort!r}"
             raise ValueError(msg)
         schema = review_schema()
+        # 🔴 답을 받기 전에 고정한다 - 받은 뒤 고정하면 첫 호출의 비교가 공허하다
+        pinned = self.digest
         started = time.perf_counter()
         raw = self._call("/api/chat", {
             "model": self.tag,
@@ -133,7 +146,7 @@ class OllamaReviewProvider:
             "stream": False,
         })
         total_ms = (time.perf_counter() - started) * 1000
-        if self._digest() != self.digest:
+        if self._current_digest() != pinned:
             msg = f"실행 도중 {self.tag} 의 가중치가 바뀌었다 - 한 실행이 두 모델로 갈린다 (D6)"
             raise OllamaError(msg)
 

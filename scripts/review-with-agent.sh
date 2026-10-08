@@ -114,8 +114,12 @@ for f in PROMPT.md SCHEMA.json MANIFEST.json; do
 done
 command -v "$AGENT" > /dev/null || die "$AGENT 를 찾을 수 없다"
 command -v python3 > /dev/null || die "python3 를 찾을 수 없다"
-# 🔴 macOS 에는 timeout 이 없다 (GNU coreutils) - 없으면 호출마다 실패해 원인이 가려진다
-command -v timeout > /dev/null || die "timeout 을 찾을 수 없다 - macOS 는 brew install coreutils"
+# 🔴 macOS 에는 GNU timeout 이 없다 [실측: CI macOS] - 없으면 perl 의 alarm 으로 같은 상한을 건다.
+#    면접관 경로(codeproof review --agent)가 이 실행기를 부르므로 coreutils 를 요구하지 않는다.
+#    alarm 은 exec 뒤에도 남아 제한시간에 그 프로세스를 SIGALRM 으로 끝낸다 [실측: bash 3.2].
+#    ⚠ GNU timeout 과 달리 그 프로세스의 자식까지 끝내지는 않는다 - 제한시간은 운영 값이다 (지문 밖).
+command -v timeout > /dev/null \
+  || timeout() { perl -e 'alarm shift; exec { $ARGV[0] } @ARGV or die "exec $ARGV[0]: $!\n"' "$@"; }
 
 IN=$(cd "$IN" && pwd)
 mkdir -p "$OUT/raw" || die "$OUT 를 만들 수 없다"

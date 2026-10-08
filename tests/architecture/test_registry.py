@@ -133,19 +133,17 @@ class TestCliDoesNotBypassTheRegistry:
 
     [실측] 이 테스트를 쓰기 전에는 cli.py 가 8곳에서 구현체를 직접 생성했고,
     문서만 registry 를 주장하고 있었다.
+
+    🔴 금지 목록은 registry 에서 뽑는다 - [실측] 손으로 적은 목록은 Ollama 를 더할 때 빠졌다.
+       등록을 잊은 구현은 `TestEveryImplementationIsRegistered` 가 잡는다.
     """
 
-    DIRECT_CONSTRUCTION = (
-        "RuffAnalyzer(",
-        "MypyAnalyzer(",
-        "AnthropicReviewProvider(",
-        "OpenAIReviewProvider(",
-        "ReplayProvider(",
-    )
+    IMPLEMENTATIONS = (*ANALYZERS.values(), *PROVIDERS.values())
 
     def test_cli_constructs_nothing_directly(self) -> None:
+        assert self.IMPLEMENTATIONS, "registry 가 비면 이 가드는 공허하다"
         text = (SRC / "cli.py").read_text(encoding="utf-8")
-        leaked = [c for c in self.DIRECT_CONSTRUCTION if c in text]
+        leaked = [c.__name__ for c in self.IMPLEMENTATIONS if f"{c.__name__}(" in text]
         assert not leaked, (
             f"cli.py 가 구현체를 직접 생성한다: {leaked}. "
             "registry 의 create_* 를 쓴다."
@@ -153,15 +151,14 @@ class TestCliDoesNotBypassTheRegistry:
 
     def test_cli_imports_no_implementation_modules(self) -> None:
         tree = ast.parse((SRC / "cli.py").read_text(encoding="utf-8"))
-        banned = {"codeproof_ai.analysis.python", "codeproof_ai.llm.anthropic_",
-                  "codeproof_ai.llm.openai_", "codeproof_ai.llm.replay"}
-        leaked = {
-            node.module
-            for node in ast.walk(tree)
-            if isinstance(node, ast.ImportFrom)
-            and node.module
-            and any(node.module.startswith(b) for b in banned)
-        }
+        imported: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module:
+                # `from 패키지 import 모듈` 꼴도 모듈 이름으로 센다
+                imported |= {node.module, *(f"{node.module}.{a.name}" for a in node.names)}
+            elif isinstance(node, ast.Import):
+                imported |= {a.name for a in node.names}
+        leaked = imported & {c.__module__ for c in self.IMPLEMENTATIONS}
         assert not leaked, f"cli.py 가 구현 모듈을 import 한다: {sorted(leaked)}"
 
 

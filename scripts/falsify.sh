@@ -56,7 +56,7 @@ PASS=0; FAIL=0; FAILED_NAMES=()
 #   break_X   그 불변식을 깨는 최소 변경
 #   guard_X   가드. 깨끗한 트리에서 **통과**하고 깨뜨린 뒤 **실패**해야 한다.
 
-SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict convention docs-tree docs-results-prose selection-headline selection-table selection-repeats fp-counts-floor pair-table pair-sentence pair-block generated figures-generated figures-beside stale-figure out-dash pairs-ladder-label pair-ladder-note agents-points landing-page landing-css landing-blob landing-numbers mutants-unknown
+SCENARIOS=(layering runner registry registry-derived proof-label proof-vacuous corpus-strict convention docs-tree docs-results-prose selection-headline selection-table selection-repeats fp-counts-floor pair-table pair-sentence pair-block generated figures-generated figures-beside stale-figure out-dash pairs-ladder-label pair-ladder-note agents-points landing-page landing-css landing-blob landing-numbers mutants-unknown
            readme-scoreboard scoreboard-primary misses-complement
            example-rule-slack scoreboard-interval near-miss-rule landing-highlights landing-markers
            agent-contract span-match llm-symbol import-format import-manifest import-rejected
@@ -89,7 +89,9 @@ SCENARIOS=(layering runner registry proof-label proof-vacuous corpus-strict conv
            review-guard-scope review-citation-lines review-corroboration-who review-corroboration-nearest
            span-near-reference review-convention review-unfold review-rejected review-out-path
            review-unknown-shape review-single-runner review-claim-words ollama-digest ollama-request ollama-timeout
+           ollama-lazy ollama-pin-once ollama-pin-before-answer
            gemini-model-check gemini-tools gemini-home gemini-login gemini-effort runner-timeout
+           runner-timeout-limit gemini-blocked
            xauthor-s2-constants xauthor-box-files xauthor-s2-refused-closes xauthor-brief-whole
            xauthor-s2-dropped)
 
@@ -106,6 +108,12 @@ break_runner() {
     >> src/codeproof_ai/eval/runner.py
 }
 guard_runner() { uv run pytest tests/architecture/test_single_runner.py -q; }
+
+claim_registry-derived() { echo "cli.py 는 새로 더한 공급자도 직접 만들지 않는다 — 금지 목록은 registry 에서 뽑는다 (손 목록은 Ollama 를 놓쳤다)"; }
+break_registry-derived() {
+  printf '\n_leak = OllamaReviewProvider()  # falsify.sh\n' >> src/codeproof_ai/cli.py
+}
+guard_registry-derived() { uv run pytest tests/architecture/test_registry.py -q -k cli; }
 
 claim_registry() { echo "cli.py 는 구현체를 직접 생성하지 않는다 — A3"; }
 break_registry() {
@@ -995,8 +1003,20 @@ break_review-claim-words() { perl -0pi -e 's/("> 결함을 확인하는 보고�
 guard_review-claim-words() { uv run pytest "$_RT" -q -k never_claims; }
 
 claim_ollama-digest() { echo "로컬 모델은 digest 로 고정하고 호출마다 다시 본다 — 같은 태그도 다시 받으면 다른 가중치다 (D6)"; }
-break_ollama-digest() { perl -0pi -e 's/        if self\._digest\(\) != self\.digest:/        if False:/' "$_OLL"; }
+break_ollama-digest() { perl -0pi -e 's/        if self\._current_digest\(\) != pinned:/        if False:/' "$_OLL"; }
 guard_ollama-digest() { uv run pytest tests/llm/test_ollama.py -q -k weights_that_change; }
+
+claim_ollama-lazy() { echo "Ollama 공급자의 생성은 서버에 닿지 않는다 — 생성 때 닿던 판이 서버 없는 CI 에서 registry 시험을 깨뜨렸다"; }
+break_ollama-lazy() { perl -0pi -e 's/        self\._pinned: str \| None = None/        self._pinned: str | None = self._current_digest()/' "$_OLL"; }
+guard_ollama-lazy() { uv run pytest tests/llm/test_ollama.py -q -k no_server_is_reported; }
+
+claim_ollama-pin-once() { echo "digest 는 한 번 고정한다 — 호출마다 다시 고정하면 매니페스트 뒤에 바뀐 가중치를 못 본다 (D6)"; }
+break_ollama-pin-once() { perl -0pi -e 's/        if self\._pinned is None:/        if True:/' "$_OLL"; }
+guard_ollama-pin-once() { uv run pytest tests/llm/test_ollama.py -q -k pin_is_taken_once; }
+
+claim_ollama-pin-before-answer() { echo "첫 호출도 답을 받기 전에 고정한다 — 받은 뒤 고정하면 첫 호출의 digest 비교가 공허하다"; }
+break_ollama-pin-before-answer() { perl -0pi -e 's/        pinned = self\.digest\n//; s/!= pinned:/!= self.digest:/' "$_OLL"; }
+guard_ollama-pin-before-answer() { uv run pytest tests/llm/test_ollama.py -q -k weights_that_change_mid_run; }
 
 claim_ollama-request() { echo "로컬 모델 요청은 추론 수준을 명시한다 — 모델 기본값에 맡기지 않는다 (D4)"; }
 break_ollama-request() { perl -0pi -e 's/            "think": THINK\[effort\],\n//' "$_OLL"; }
@@ -1026,9 +1046,17 @@ claim_gemini-effort() { echo "gemini 의 effort 는 low · high 뿐이다 — �
 break_gemini-effort() { perl -0pi -e 's/      \*\) die "gemini 의 effort 는 low · high 뿐이다 \(CLI 의 thinkingLevel\) - \$EFFORT" ;;/      *) THINK=LOW ;;/' "$_RWA"; }
 guard_gemini-effort() { uv run pytest "$_GT" -q -k effort_the_cli_cannot_set; }
 
-claim_runner-timeout() { echo "실행기는 timeout 이 없으면 시작 전에 멈추고 설치 방법을 말한다 — macOS 에는 없다"; }
-break_runner-timeout() { perl -0pi -e 's/command -v timeout > \/dev\/null \|\| die "timeout 을 찾을 수 없다 - macOS 는 brew install coreutils"/true/' "$_RWA"; }
-guard_runner-timeout() { uv run pytest "$_GT" -q -k without_timeout; }
+claim_runner-timeout() { echo "실행기는 GNU timeout 이 없어도 돈다 — 맥 기본 상태(면접관의 review --agent)에는 없다"; }
+break_runner-timeout() { perl -0pi -e 's/  \|\| timeout\(\) \{ perl/  || timeout_off() { perl/' "$_RWA"; }
+guard_runner-timeout() { uv run pytest "$_GT" -q -k without_gnu_timeout; }
+
+claim_runner-timeout-limit() { echo "대체 경로도 멈춘 호출을 제한시간에 끝낸다 — 상한을 잃으면 한 건이 실행 전체를 붙잡는다"; }
+break_runner-timeout-limit() { perl -0pi -e 's/alarm shift; exec/shift; exec/' "$_RWA"; }
+guard_runner-timeout-limit() { uv run pytest "$_GT" -q -k fallback_still_ends_a_hung_call; }
+
+claim_gemini-blocked() { echo "gemini 의 막힌 답(status=error)은 지적 0건이 아니라 실패다 — 막히기 전 조각에 findings 가 있어도"; }
+break_gemini-blocked() { perl -0pi -e 's/    if result\.get\("status"\) != "success":/    if False:/' "$_AO"; }
+guard_gemini-blocked() { uv run pytest "$_GT" -q -k blocked_answer; }
 
 claim_xauthor-s2-constants() { echo "2단계 선언 수치(일곱 바퀴 · 10분류 · 창 스무 개)는 시험이 고정한다 (§7.10d 2단계)"; }
 break_xauthor-s2-constants() { perl -0pi -e 's/^ROUNDS = 7 /ROUNDS = 70 /m' "$_XR"; }

@@ -44,22 +44,41 @@ class TestOllamaProvider:
         """🔴 태그는 다시 받으면 다른 가중치다 - 식별자에 digest 를 싣는다 (D6)."""
         with FakeOllama(digest="sha256:" + "cd" * 32) as fake:
             p = OllamaReviewProvider("qwen3:4b", host=fake.host)
-        assert p.model_id == "qwen3:4b@" + "cd" * 6
+            assert p.model_id == "qwen3:4b@" + "cd" * 6
 
     def test_weights_that_change_mid_run_are_refused(self) -> None:
+        """처음 부른 호출에서도 본다 - 답을 받은 뒤 고정하면 첫 호출의 비교가 공허하다."""
         with FakeOllama() as fake:
             p = OllamaReviewProvider("qwen3:4b", host=fake.host)
             fake.digest_after_chat = "sha256:" + "ef" * 32
             with pytest.raises(OllamaError, match="가중치가 바뀌었다"):
                 p.review(TARGET, effort="none")
 
-    def test_a_missing_model_says_how_to_get_it(self) -> None:
-        with FakeOllama(model="gemma3:4b") as fake, pytest.raises(OllamaError, match="ollama pull"):
-            OllamaReviewProvider("qwen3:4b", host=fake.host)
+    def test_the_pin_is_taken_once(self) -> None:
+        """🔴 매니페스트에 적은 뒤 다시 받은 가중치로 답하면 다른 모델이다 - 한 번만 고정한다."""
+        with FakeOllama() as fake:
+            p = OllamaReviewProvider("qwen3:4b", host=fake.host)
+            pinned = p.model_id  # 매니페스트 · identity 가 여기서 읽는다
+            fake.digest = "sha256:" + "ef" * 32  # 그 사이에 ollama pull
+            with pytest.raises(OllamaError, match="가중치가 바뀌었다"):
+                p.review(TARGET, effort="none")
+            assert p.model_id == pinned
 
-    def test_no_server_says_how_to_start_it(self) -> None:
+    def test_a_missing_model_says_how_to_get_it(self) -> None:
+        with FakeOllama(model="gemma3:4b") as fake:
+            p = OllamaReviewProvider("qwen3:4b", host=fake.host)
+            with pytest.raises(OllamaError, match="ollama pull"):
+                p.config_signature()
+
+    def test_no_server_is_reported_at_first_use_not_at_creation(self) -> None:
+        """🔴 생성은 서버에 닿지 않는다 (Anthropic · OpenAI 처럼) - 처음 쓸 때 켜는 법을 말한다.
+
+        [실측] 생성 때 닿던 판은 서버 없는 CI 에서 registry 시험을 깨뜨렸다.
+        로컬에서는 검증용으로 띄운 서버가 그것을 가렸다.
+        """
+        p = OllamaReviewProvider("qwen3:4b", host="http://127.0.0.1:9")
         with pytest.raises(OllamaError, match="닿지 않는다"):
-            OllamaReviewProvider("qwen3:4b", host="http://127.0.0.1:9")
+            p.config_signature()
 
     def test_a_slow_answer_is_not_called_unreachable(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """[실측] 600초를 넘긴 답을 「서버에 닿지 않는다」로 안내했다 - 늦음과 없음은 다르다."""
