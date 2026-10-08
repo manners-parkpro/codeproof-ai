@@ -14,6 +14,7 @@ import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from codeproof_ai import serve
 from codeproof_ai.analysis.registry import (
     UnknownAnalyzerError,
     create_analyzer,
@@ -22,7 +23,7 @@ from codeproof_ai.analysis.registry import available as analyzer_available
 from codeproof_ai.corpus.decoy import pair_dirs, validate_corpus
 from codeproof_ai.corpus.mutants import breaks, load_mutants, mutant_alias
 from codeproof_ai.domain.reviewer import ReviewerKind
-from codeproof_ai.eval import crossauthor
+from codeproof_ai.eval import crossauthor, explorer
 from codeproof_ai.eval.bait import BaitStatus, measure
 from codeproof_ai.eval.export import DOCSTRING_MODES, export_for_agent, sample_digest
 from codeproof_ai.eval.figures import BANNER as FIGURE_BANNER
@@ -52,6 +53,7 @@ from codeproof_ai.eval.report import (
     render_figures,
     render_highlights,
     render_measurements,
+    reviewer_pair,
     spread_of,
 )
 from codeproof_ai.eval.runner import (
@@ -260,6 +262,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     _add_report_parser(sub)
     _add_xauthor_report_parser(sub)
+    sv = sub.add_parser(
+        "serve", help="대시보드를 내 컴퓨터에서 열고 붙여 넣은 코드를 리뷰한다 (127.0.0.1)"
+    )
+    sv.add_argument("--port", type=int, default=8765)
+    sv.add_argument("--docs", default="docs", help="대시보드 폴더 (index.html)")
     _add_export_parser(sub)
     _add_pack_parser(sub)
 
@@ -1454,12 +1461,47 @@ def _cmd_report(
     if out == "-" or not selections:
         return _emit_generated(body, out, check=check)
     drawn = render_figures(selections, graders, samples, sections, ladder=ladder, glance=glance)
-    outputs = {out: body, **{str(figures / name): svg for name, svg in drawn.items()}}
+    # 대시보드의 기록된 리뷰 · 브라우저 Ruff 표 - 점수판과 같은 짝 · 같은 분석기 (eval/explorer.py)
+    data = Path(out).parent / "data"
+    made = {explorer.RUFF: explorer.ruff_rules(an.version().version, an.rule_categories())}
+    if (pair := reviewer_pair(sections)) is not None:
+        featured = [e.pair_id for e in glance.examples] if glance is not None else []
+        made[explorer.REVIEWS] = explorer.reviews(pair, samples, featured)
+    outputs = {
+        out: body,
+        **{str(figures / name): svg for name, svg in drawn.items()},
+        **{str(data / name): text for name, text in made.items()},
+    }
     codes = [_emit_generated(text, path, check=check) for path, text in outputs.items()]
-    headline = next((s for s in spreads if s.select == "ALL"), None)
-    highlights = render_highlights(headline, glance)
+    highlights = render_highlights(spreads, glance)
     landing = _emit_block(Path(out).parent / LANDING, highlights, check=check)
-    return max(*codes, landing, _stale_figures(figures, drawn, check=check))
+    stale = (
+        _stale_generated(figures, drawn, check=check),
+        _stale_generated(
+            data, made, check=check, pattern="*.js", banner=explorer.BANNER, what="데이터"
+        ),
+    )
+    return max(*codes, landing, *stale)
+
+
+def _cmd_serve(docs: Path, port: int) -> int:
+    """대시보드 + `/api/review` - `codeproof review` 와 같은 경로 (serve.py)."""
+    if not (docs / "index.html").is_file():
+        print(f"대시보드가 없다: {docs / 'index.html'}", file=sys.stderr)
+        return 2
+    try:
+        server = serve.ReviewServer(docs, port)
+    except OSError as exc:
+        print(f"포트 {port} 를 열지 못했다 - {exc}", file=sys.stderr)
+        return 2
+    print(f"대시보드: http://{serve.HOST}:{server.server_address[1]}/ - Ctrl+C 로 끈다", flush=True)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
+    return 0
 
 
 def _cmd_xauthor_report(
@@ -1561,24 +1603,27 @@ def _emit_block(page: Path, block: str, *, check: bool) -> int:
     return 0
 
 
-def _stale_figures(figures: Path, drawn: Mapping[str, str], *, check: bool) -> int:
-    """🔴 더는 만들지 않는 그림을 남기지 않는다 - 남으면 문서가 옛 숫자를 계속 싣는다.
+def _stale_generated(
+    folder: Path, drawn: Mapping[str, str], *, check: bool, pattern: str = "*.svg",
+    banner: str = FIGURE_BANNER, what: str = "그림",
+) -> int:
+    """🔴 더는 만들지 않는 생성물을 남기지 않는다 - 남으면 문서가 옛 숫자를 계속 싣는다.
 
     [실측] 에이전트 비교를 하지 않게 된 뒤에도 옛 agents.svg 가 남아 `--check` 가 통과했다.
-    생성물 표시(첫 줄)가 있는 그림만 본다 - `--figures` 가 가리키는 곳의 다른 그림은
-    건드리지 않는다.
+    생성물 표시(첫머리)가 있는 파일만 본다 - 그 폴더의 다른 파일은 건드리지 않는다.
+    대시보드 데이터도 같다 - 에이전트 묶음이 빠지면 기록된 리뷰가 점수판 없이 남는다.
     """
     stale = sorted(
-        p for p in figures.glob("*.svg")
-        if p.name not in drawn and p.read_text(encoding="utf-8").startswith(FIGURE_BANNER)
+        p for p in folder.glob(pattern)
+        if p.name not in drawn and p.read_text(encoding="utf-8").startswith(banner)
     )
     for p in stale:
         if check:
-            print(f"{p} 는 더는 만들지 않는 그림이다 - `uv run codeproof report` 로 지운다",
+            print(f"{p} 는 더는 만들지 않는 {what}다 - `uv run codeproof report` 로 지운다",
                   file=sys.stderr)
         else:
             p.unlink()
-            print(f"{p} 를 지웠다 - 더는 만들지 않는 그림이다")
+            print(f"{p} 를 지웠다 - 더는 만들지 않는 {what}다")
     return int(check and bool(stale))
 
 
@@ -1673,6 +1718,7 @@ _COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
         Path(a.corpus), a.analyzer, a.ruff_select, a.out, check=a.check, agents=Path(a.agents),
         figures=Path(a.figures) if a.figures else Path(a.out).parent / "figures",
     ),
+    "serve": lambda a: _cmd_serve(Path(a.docs), a.port),
     "xauthor-report": lambda a: _cmd_xauthor_report(
         Path(a.corpus), Path(a.agents), (Path(a.reference_corpus), Path(a.reference_agents)),
         Path(a.issues), a.out, check=a.check,

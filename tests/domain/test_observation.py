@@ -59,6 +59,15 @@ class TestGrouping:
         obs = group_runs("t", [[_f("a")], [_f("a")]])
         assert len(obs.observed[0].variants) == 2
 
+    def test_each_original_keeps_the_run_that_said_it(self) -> None:
+        """🔴 한 실행이 같은 묶음에 둘을 내면 `runs` 로는 원본을 실행별로 가를 수 없다."""
+        first, second, third = _f("a", line=10), _f("a", line=12), _f("a", line=40)
+        (seen,) = group_runs("t", [[first, second], [], [third]]).observed
+        assert seen.variant_runs == (0, 0, 2)
+        assert seen.said_in(0) == (first, second)
+        assert seen.said_in(1) == ()
+        assert seen.said_in(2) == (third,)
+
     def test_rate_is_occurrence_not_confidence(self) -> None:
         obs = group_runs("t", [[_f("a")], [], [], []])
         assert obs.observed[0].rate == 0.25

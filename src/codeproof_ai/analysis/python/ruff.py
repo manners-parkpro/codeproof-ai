@@ -21,13 +21,16 @@ from codeproof_ai.domain.location import Location, Position, Span
 from codeproof_ai.domain.run import ToolVersion
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Mapping, Sequence
     from pathlib import Path
 
     from codeproof_ai.domain.target import ReviewTarget
 
 # 🔴 대상 판을 정한다 - 없으면 Ruff 는 3.10 으로 본다 (version.py)
 _TARGET = f"py{TARGET_PYTHON[0]}{TARGET_PYTHON[1]}"
+
+SYNTAX_ERROR = "invalid-syntax"
+"""⚠ Ruff 의 구문 오류 코드 - 룰 코드가 아니다. 브라우저 Ruff(WebAssembly)도 같은 값을 준다."""
 
 # Ruff severity -> 내부 규약
 _SEVERITY: dict[str, Severity] = {
@@ -162,6 +165,9 @@ class RuffAnalyzer:
         src = "cat=tool" if self._categories else "cat=prefix"
         return f"ruff(select={'+'.join(self.select)},target={_TARGET},{noqa},{src})"
 
+    def rule_categories(self) -> Mapping[str, Category]:
+        return dict(self._categories)
+
     def _category(self, code: str) -> Category:
         """도구가 말한 분류를 쓰고, 없으면 접두사로 degrade 한다."""
         found = self._categories.get(code)
@@ -213,8 +219,7 @@ class RuffAnalyzer:
         out: list[Finding] = []
         for item in payload:
             code = str(item.get("code") or "")
-            # ⚠ 구문 오류는 code == "invalid-syntax" 로 온다 - 룰 코드가 아니다.
-            is_syntax = code == "invalid-syntax"
+            is_syntax = code == SYNTAX_ERROR
 
             src = target.match_file(str(item.get("filename", "")))
             if src is None:

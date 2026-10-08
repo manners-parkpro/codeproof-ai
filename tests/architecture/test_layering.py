@@ -40,8 +40,13 @@ ALLOWED: dict[str, frozenset[str]] = {
     "store": frozenset({"domain", "eval"}),
     # review 는 정답 없는 코드의 지적과 근거를 낸다 - 실행은 eval 의 run_reviewer 한 곳으로 (E00)
     "review": frozenset({"domain", "analysis", "llm", "verify", "eval", "reviewers"}),
+    # serve 는 review 를 HTTP 로 내준다 - 리뷰 경로는 review 하나다
+    "serve": frozenset({"review"}),
     "cli": frozenset(
-        {"domain", "analysis", "llm", "verify", "eval", "corpus", "store", "reviewers", "review"}
+        {
+            "domain", "analysis", "llm", "verify", "eval", "corpus", "store", "reviewers",
+            "review", "serve",
+        }
     ),
 }
 

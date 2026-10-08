@@ -455,7 +455,7 @@ def examples_svg(examples: Sequence[Example], *, pairs: int, kinds: int) -> str:
 
     🔴 예시를 손으로 고르지 않는다 - 고르는 규칙은 `glance` 에 있고 그림에도 적는다.
     """
-    title = "안전장치 한 줄만 다른 코드 쌍 — 리뷰어는 지운 쪽만 지적해야 맞다"
+    title = "안전장치 하나만 다른 코드 쌍 — 리뷰어는 버그 쪽만 지적해야 맞다"
     body = [
         _t(20, 30, title, "title"),
         _t(20, 50, f"직접 쓴 파이썬 코드 {pairs}쌍 · 헷갈리기 쉬운 유형 {kinds}가지 · "

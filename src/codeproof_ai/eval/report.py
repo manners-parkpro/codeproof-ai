@@ -347,7 +347,7 @@ def _pair_ladder_section(ladder: Sequence[PairRung]) -> str:
     return "\n".join([*lines, "", *notes, ""])
 
 
-def _reviewer_pair(agents: Sequence[AgentSection]) -> tuple[AgentSection, AgentSection] | None:
+def reviewer_pair(agents: Sequence[AgentSection]) -> tuple[AgentSection, AgentSection] | None:
     """리뷰어만 다른 첫 짝 - 손잡이 비교(같은 리뷰어)는 그림에 싣지 않는다."""
     return next(
         ((a, b) for a, b in combinations(agents, 2) if comparable(a, b) and a.agent != b.agent),
@@ -376,7 +376,7 @@ def at_a_glance(
     agents: Sequence[AgentSection], samples: Sequence[LabeledSample]
 ) -> Glance | None:
     """리뷰어만 다른 첫 짝의 점수판과 예시 (`glance`). 짝이 없거나 값이 없으면 None."""
-    if (pair := _reviewer_pair(agents)) is None:
+    if (pair := reviewer_pair(agents)) is None:
         return None
     a, b = pair
     names = (DISPLAY.get(a.agent, a.run.reviewer), DISPLAY.get(b.agent, b.run.reviewer))
@@ -493,29 +493,29 @@ HIGHLIGHTS = (
 """손으로 쓰는 랜딩 페이지 안의 생성 구간 표시 - report 는 그 사이만 바꾼다 (F5b)."""
 
 
-def render_highlights(spread: Spread | None, found: Glance | None) -> str:
-    """랜딩 페이지 첫 화면의 핵심 발견 카드 - 숫자는 생성물과 같은 계산에서 온다 (F5b).
+CAVEAT = (
+    "짝은 Claude 와 함께 만들었다 — Claude 에 유리할 수 있어 Codex 가 설계한 짝으로 "
+    "다시 재고 있다."
+)
+"""주 지표 카드의 한계 한 줄 - 교차 저자 측정(DESIGN §7.10d)을 싣으면 그 결과로 바꾼다."""
 
-    🔴 문장도 값에서 만든다 - 「더 많았다」 같은 방향 말을 손으로 쓰면 다시 잰 뒤 방향이 바뀌어도
-       문장이 남는다.
+
+def render_highlights(spreads: Sequence[Spread], found: Glance | None) -> str:
+    """랜딩 페이지 첫 화면 - 답 · 주 지표 카드 · 핵심 발견 카드. 숫자는 생성물의 계산이다 (F5b).
+
+    🔴 문장도 값에서 만든다 - 「앞섰다」 · 「차이가 남았다」 · 「대신」 같은 방향 말을 손으로 쓰면
+       다시 잰 뒤 방향이 바뀌어도 문장이 남는다.
     """
-    cards: list[tuple[str, str]] = []
-    if spread is not None:
-        big = (
-            spread.verdict if spread.verdict.endswith("배")
-            else f"{spread.safety_fp} 대 {spread.injected_fp}"
-        )
-        cards.append((
-            big,
-            "같은 Ruff 경고를 채점 규칙만 바꿔 셌더니, 안전한 코드에서 헛경고로 센 수가 "
-            f"<b>{spread.safety_fp}건</b>과 <b>{spread.injected_fp}건</b>으로 갈렸다.",
-        ))
+    picked = {s.select: s for s in spreads}
+    lines = _headline(found) if found is not None else []
+    cards = [_spread_card(picked["ALL"], picked.get("S"))] if "ALL" in picked else []
     if found is not None:
         cards += _agent_cards(found)
-    lines = ['  <div class="cards">']
-    for big, text in cards:
+    lines.append('  <div class="cards">')
+    for eyebrow, big, text in cards:
         lines += [
             '    <div class="card">',
+            f'      <p class="eyebrow">{eyebrow}</p>',
             f'      <p class="big">{escape(big)}</p>',
             f"      <p>{text}</p>",
             "    </div>",
@@ -524,40 +524,110 @@ def render_highlights(spread: Spread | None, found: Glance | None) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _agent_cards(found: Glance) -> list[tuple[str, str]]:
+def _headline(found: Glance) -> list[str]:
+    """주 지표 카드 - 수집 전에 선언한 하나 (DESIGN §7.10b). 답 문장 · 막대 · 차이와 구간 · 조건.
+
+    🔴 답은 두 AI 의 비교만 말한다 - 린터(Ruff)를 잰 채점 규칙 카드와 한 문장에 묶으면 린터의 값이
+       AI 의 값으로 읽힌다 (F3 · 독립 검토). 숫자는 바로 옆 막대가 든다.
+    """
     board = found.board
     a, b = (escape(n) for n in board.names)
-    primary = next(r for r in board.rows if r.primary)
+    row = next(r for r in board.rows if r.primary)
+    leader = a if row.diff.point > 0 else b
+    if not row.distinguishable:
+        claim = "두 AI 를 같은 짝으로 비교하면 버그만 정확히 짚은 비율은 구별되지 않았다."
+    elif row.stable:
+        claim = (
+            f"두 AI 를 같은 짝으로 비교하면 버그만 정확히 짚은 비율은 {leader} 가 앞섰고, "
+            f"지적 위치를 결함 근처 {board.slacks[-1]}줄까지 넓혀 세도 차이가 남았다."
+        )
+    else:
+        claim = (
+            f"두 AI 를 같은 짝으로 비교하면 버그만 정확히 짚은 비율은 {leader} 가 앞섰지만, "
+            "세는 규칙에 따라 판정이 바뀌어 순위를 주장하지 않는다."
+        )
+    lo, hi = row.diff.lo * 100, row.diff.hi * 100
+    reading = (
+        f"0 을 포함하지 않는다 — 이 {board.pairs}쌍에서는 우연으로 보기 어렵다"
+        if row.distinguishable
+        else "0 을 포함한다 — 이 표본으로는 구별되지 않는다"
+    )
+    runs = board.runs[0] if board.runs[0] == board.runs[1] else f"{board.runs[0]} · {board.runs[1]}"
+    models = " · ".join(escape(m) for m in board.models)
+    return [
+        f'  <p class="answer"><b>답</b> {claim}</p>',
+        '  <div class="headline">',
+        f'    <p class="label">{escape(row.label)} — {escape(row.meaning)}</p>',
+        *(
+            f'    <div class="bar"><span class="who">{name}</span><b>{share.strict:.1%}</b>'
+            f'<span class="track"><i class="fill {side}" style="width:{share.strict * 100:.1f}%">'
+            "</i></span></div>"
+            for name, share, side in ((a, row.a, "a"), (b, row.b, "b"))
+        ),
+        f'    <p class="diff"><b>{row.diff.point * 100:+.1f}%p</b> 95% 구간 {lo:+.1f} ~ {hi:+.1f}%p'
+        f" · {reading}</p>",
+        f'    <p class="note">파이썬 짝 {board.pairs}쌍 · 짝마다 {runs}번 리뷰 · 한 번 리뷰했을 때 '
+        f"기대할 수 있는 비율 · 모델 {models} · {escape(board.conditions)}</p>",
+        f'    <p class="note">한계 — 차이에는 모델과 제품(도구 · 권한)이 함께 들어 있다. '
+        f"{escape(CAVEAT)}</p>",
+        "  </div>",
+    ]
+
+
+def _spread_card(spread: Spread, security: Spread | None) -> tuple[str, str, str]:
+    """채점 규칙 카드 - 린터(Ruff)를 잰 값이다. 두 정의에 이름을 붙인다 (Qodo 벤치마크 · 이 저장소).
+
+    🔴 AI 리뷰어의 값이 아니다 - 눈썹 글에 린터라고 적는다. 린터는 같은 코드에 늘 같은 경고를 내서
+       차이가 전부 채점 규칙에서 나온다 - 채점 규칙의 몫을 린터로 잰 이유다.
+    """
+    big = spread.verdict if spread.verdict.endswith("배") else (
+        f"{spread.injected_fp} 대 {spread.safety_fp}"
+    )
+    text = (
+        "린터는 같은 코드에 늘 같은 경고를 낸다 — 그 경고를 Qodo 벤치마크처럼 「결함 없는 코드의 "
+        f"경고는 전부 헛경고」로 세면 <b>{spread.injected_fp}건</b>, 「안전하다고 증명한 범위 안을 "
+        f"버그라 한 것」만 세면 <b>{spread.safety_fp}건</b>이다 (전체 규칙)."
+    )
+    if security is not None:
+        same = "로 같다" if security.safety_fp == security.injected_fp else "이다"
+        text += f" 보안 규칙만 고르면 {security.injected_fp} 대 {security.safety_fp}{same}."
+    return "린터(Ruff) 경고를 두 채점 규칙으로 세면", big, text
+
+
+def _agent_cards(found: Glance) -> list[tuple[str, str, str]]:
+    """보조 카드 둘 - 버그를 짚은 비율의 사다리 · 헛경고. 주 지표가 아니다 (사후 보조)."""
+    board = found.board
+    a, b = (escape(n) for n in board.names)
     alarm = next(r for r in board.rows if r.verdicts == tuple(v.value for v in ALARM))
     caught = board.rows[0]
-    leader = a if primary.a.strict >= primary.b.strict else b
-    more = a if alarm.a.strict > alarm.b.strict else b
-    pair = f"{alarm.a.strict:.1%} 대 {alarm.b.strict:.1%}"
-    if alarm.a.strict == alarm.b.strict:
-        trade = f"안전한 코드에 헛경고는 같았다 ({alarm.a.strict:.1%})."
-    elif more == leader:
-        trade = f"대신 안전한 코드에 헛경고는 {leader} 가 더 많았다 ({pair})."
-    else:
-        trade = f"안전한 코드에 헛경고도 {leader} 가 더 적었다 ({pair})."
-    cards = [(
-        f"{primary.a.strict:.1%} 대 {primary.b.strict:.1%}",
-        f"안전한 코드는 통과시키고 버그만 정확히 짚은 비율 — {a} 대 {b}. {trade}",
-    )]
-    side = found.near.side if found.near is not None else (
-        0 if caught.a.loose - caught.a.strict >= caught.b.loose - caught.b.strict else 1
-    )
-    share, name = (caught.a, caught.b)[side], (a, b)[side]
+    near = board.slacks[-1]
+    rise = caught.a.loose > caught.a.strict and caught.b.loose > caught.b.strict
+    stays = caught.stable and caught.distinguishable
+    big = ("둘 다 오르고, " if rise else "") + ("차이는 남는다" if stays else "차이는 흔들린다")
     text = (
-        f"{name} 가 버그를 짚은 비율 — 결함 줄과 정확히 겹친 지적만 세면 앞, 근처 "
-        f"{board.slacks[-1]}줄까지 세면 뒤. 같은 리뷰를 세는 규칙만 바꿨다."
+        f"결함 줄과 겹친 지적만 인정하면 {a} {caught.a.strict:.1%} · {b} {caught.b.strict:.1%}, "
+        f"근처 {near}줄까지 인정하면 {a} {caught.a.loose:.1%} · {b} {caught.b.loose:.1%}."
     )
     if found.near is not None:
         short = escape(found.near.pair_id.split("-", 1)[0])
+        who = (a, b)[found.near.side]
         text += (
-            f" 예: {short} 에서는 {board.runs[side]}회 모두 결함 근처를 가리켰지만 「놓침」으로 "
-            f"셌다 — {found.near.slack}줄만 넓혀도 「짚음」이다."
+            f" 예: {short} 에서 {who} 는 {board.runs[found.near.side]}회 모두 결함 근처를 "
+            f"가리켰지만 「놓침」으로 셌다 — {found.near.slack}줄만 넓혀도 「짚음」이다."
         )
-    cards.append((f"{share.strict:.1%} → {share.loose:.1%}", text))
+    eyebrow = "버그를 짚은 비율(헛경고는 따지지 않음)은 몇 줄 차이까지 같은 지적으로 치느냐에 따라"
+    cards = [(eyebrow, big, text)]
+    more = a if alarm.a.strict > alarm.b.strict else b
+    caught_more = a if caught.a.strict > caught.b.strict else b
+    said = "안전하다고 증명한 범위를 버그라 한 비율은"
+    if alarm.a.strict == alarm.b.strict:
+        eyebrow, note = "헛경고는", f"{said} 같았다."
+    else:
+        eyebrow = "대신 헛경고는" if more == caught_more else "헛경고는"
+        note = f"{said} {more} 가 더 높았다."
+        if more == caught_more:
+            note += " 많이 짚는 쪽이 헛경고도 더 냈다."
+    cards.append((eyebrow, f"{alarm.a.strict:.1%} 대 {alarm.b.strict:.1%}", note))
     return cards
 
 
@@ -595,7 +665,7 @@ def render_figures(
             figures["examples.svg"] = examples_svg(
                 glance.examples, pairs=glance.board.pairs, kinds=glance.kinds
             )
-    if (pair := _reviewer_pair(agents)) is not None:
+    if (pair := reviewer_pair(agents)) is not None:
         a, b = pair
         grader = next(g for g in a.graders if g.name == HEADLINE_GRADER)
         rates = [

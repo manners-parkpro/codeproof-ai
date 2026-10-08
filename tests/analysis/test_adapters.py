@@ -10,6 +10,7 @@ from codeproof_ai.analysis.python.ast_index import PythonSymbolIndex
 from codeproof_ai.analysis.python.mypy_ import MypyAnalyzer
 from codeproof_ai.analysis.python.ruff import RuffAnalyzer
 from codeproof_ai.analysis.python.version import TARGET_PYTHON
+from codeproof_ai.domain.finding import Category
 from codeproof_ai.domain.target import ReviewTarget, SourceFile
 
 
@@ -60,6 +61,14 @@ class TestRuffAdapter:
     def test_finds_a_real_violation(self) -> None:
         findings = RuffAnalyzer(select=("F",)).analyze(_target("import os\n"))
         assert any(f.rule_id == "F401" for f in findings)
+
+    def test_a_syntax_error_comes_as_the_syntax_code(self) -> None:
+        """⚠ 구문 오류는 룰 코드가 아니라 `SYNTAX_ERROR` 로 온다 - 대시보드의 브라우저 Ruff 가
+        같은 값(`docs/data/ruff.js`)으로 「구문 오류」를 따로 센다. Ruff 가 이름을 바꾸면 운다."""
+        findings = RuffAnalyzer(select=("F",)).analyze(_target("def broken(\n"))
+        assert [(f.rule_id, f.category) for f in findings] == [
+            (ruff_module.SYNTAX_ERROR, Category.OTHER)
+        ]
 
     def test_column_is_zero_based_characters(self) -> None:
         """Ruff JSON 은 1-based 문자. 내부 규약은 0-based."""

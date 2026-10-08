@@ -926,6 +926,7 @@ src/codeproof_ai/
 │   ├── report.py            #   측정값 생성 — 산문에 베끼지 않는다
 │   ├── figures.py           #   생성 그림 (SVG) — report 와 같은 계산 · 받은 값만 그린다
 │   ├── glance.py            #   점수판 · 예시 짝 — 같은 짝 판정을 다시 묶는다 · 예시는 규칙으로 고른다
+│   ├── explorer.py          #   대시보드의 기록된 리뷰 · 브라우저 Ruff 표 — 점수판과 같은 판정 · 회차마다 그 회차의 원문
 │   ├── export.py            #   코퍼스 → 에이전트 입력 (§7.10)
 │   ├── gate.py              #   codex 가 쓴 쌍의 관문 — 기계로 보는 것만 (§7.10d)
 │   ├── crossauthor.py       #   codex 가 쓴 쌍의 선언한 분석 — 결과 전에 고정 · 선언과 다른 입력은 거절 (§7.10d)
@@ -938,6 +939,7 @@ src/codeproof_ai/
 ├── corpus/plan.py           #   확장 계획 — 칸별 목표, 테스트가 코퍼스 · DESIGN 과 대조 (§3.5)
 ├── store/{schema,sqlite}.py # SQLite — 매니페스트 없는 결과를 외래키가 거부 (F1)
 ├── review.py                # 정답 없는 코드 — 지적과 근거 · 채점하지 않는다 (verify 의 첫 소비자)
+├── serve.py                 # 대시보드 + /api/review — 127.0.0.1 · Host · Origin · JSON 만 · 한 번에 하나
 └── cli.py                   # 명령 목록은 §11 · `codeproof --help` (산문이 세면 낡는다)
 ```
 
@@ -1757,12 +1759,13 @@ README 에 **반드시** 들어가야 한다 — README 에는 한 줄씩(「재
 | `analysis` | Ruff · mypy 어댑터 · AST 심볼 인덱스 · **일괄 분석** · **호스트 격리** |
 | `reviewers` | **통합 Reviewer 층** · SARIF/bandit/native 가져오기 |
 | `verify` | citation · guard(callee 포함) · corroboration · reachability · confidence |
-| `eval` | 채점자 **4종** · **편차** · **짝 채점** · **민감도** · **미끼 측정** · **다회 실행 관점**(기대값 · k-임계) · **짝 차이** · Wilson CI |
+| `eval` | 채점자 **4종** · **편차** · **짝 채점** · **민감도** · **미끼 측정** · **다회 실행 관점**(기대값 · k-임계) · **짝 차이** · Wilson CI · **대시보드 데이터**(기록된 리뷰 · 브라우저 Ruff 분류 — `explorer`) |
 | `store` | SQLite · 매니페스트 없는 결과를 외래키가 거부 (F1) · `config_hash` 재현성 검사 |
 | `corpus` | decoy 템플릿 · 검증기 **13규칙** · 실행 반증(`proof.py`) · 분류 14종 × 가드 위치 4종 (쌍 수는 [MEASUREMENTS](MEASUREMENTS.md)) |
 | `llm` | 스키마 · 프롬프트 · 파서 · replay · **Anthropic/OpenAI 어댑터** · **Ollama 어댑터** (로컬 서버 · 계정 · 키 없음) |
 | `review` | 정답 없는 파일 하나의 지적 + 근거 — 채점하지 않는다. Ruff · mypy · `--agent claude`(측정과 같은 실행기) · `--ollama MODEL`(로컬 · model_api 층) |
-| `cli` | `measure` · `eval` · `import` · `export` · `pack` · `report` · `xauthor-report` · `review` · `doctor` · `history` · `decoy` |
+| `serve` | 대시보드(`docs/`)를 127.0.0.1 에 열고 붙여 넣은 코드를 `review` 와 같은 경로로 리뷰 — Host · Origin · JSON · 본문 길이를 보고, 리뷰는 한 번에 하나 |
+| `cli` | `measure` · `eval` · `import` · `export` · `pack` · `report` · `xauthor-report` · `review` · `serve` · `doctor` · `history` · `decoy` |
 | 테스트 | 지금 수는 CI 기록이 든다 (push 마다 Linux · macOS) |
 
 ### 남은 것
@@ -1858,6 +1861,7 @@ README 에 **반드시** 들어가야 한다 — README 에는 한 줄씩(「재
 | 69 | ③ 을 잡으려고 쓴 시험이 고치기 전 코드에서도 통과했다 — 해시 순서에 기대는 결함은 한 프로세스에서 한 번 보면 운으로 맞는다 [실측] | 시드마다 새 프로세스로 돌려 결과 집합이 하나인지 본다 (`PYTHONHASHSEED` 0~7). 새 시험은 고치기 전 커밋에서 실패하는 것까지 본 뒤에 있다고 말한다 (H3) |
 | 70 | #68 의 로컬 확인(pytest · falsify)이 전부 통과했는데 CI 는 넷 중 셋이 실패했다 — 내가 바꾼 로컬 환경이 결함 둘을 가렸다. ① 실행기가 GNU `timeout` 이 없으면 멈추게 했는데 이 맥에는 brew coreutils 가 있었다 — 맥 기본 상태(CI macOS · 면접관)에는 없어 실행기 시험 13건과 falsify 7개 시나리오가 시작하자마자 멈췄다 ② Ollama 공급자가 생성 때 서버에 닿았는데, 검증용으로 띄운 서버가 기본 포트에 떠 있어 registry 시험이 로컬에서만 통과했다 [실측: CI 로그]. 같은 CI 가 공허한 시험 둘도 드러냈다 — 실행기가 시작하자마자 멈춘 macOS 에서도 「막힌 답」 시험이 통과했다. 그 시험과 「다른 모델의 답」 시험은 가짜 CLI 가 모델 확인 호출에서 실패해, 샘플마다의 판정을 한 번도 부르지 않았다 [실측: 리뷰 호출 0] | timeout 이 없으면 perl 의 alarm 으로 같은 상한을 건다 — 면접관 경로(`review --agent`)가 이 실행기를 부른다. Ollama 는 생성 때 서버에 닿지 않고 처음 쓸 때 digest 를 한 번 고정한다 (Anthropic · OpenAI 의 클라이언트와 같은 선례). 가짜 CLI 의 실패 모드는 한 단계에서만 걸고 시험이 리뷰 호출 수를 센다. 대체 경로는 PATH 에서 timeout 만 뺀 시험이 본다. cli.py 우회 가드의 금지 목록은 registry 에서 뽑는다 — 손으로 적은 목록은 Ollama 를 놓쳤다 [실측]. falsify `runner-timeout-limit` · `gemini-blocked` · `ollama-lazy` · `ollama-pin-once` · `ollama-pin-before-answer` · `registry-derived`. 검증용 서버는 기본이 아닌 포트에 띄우고 시험 전에 끈다 — 로컬 그린은 내가 바꾼 환경을 지운 뒤에야 그린이다 |
 | 71 | CI verify 가 25분을 두 번 넘겨(25분 28초 · 27분 29초) 원인을 찾으면서, 가드 1회의 import 비용(cli → 벤더 SDK 1.1초)을 가드 384회에 곱해 「SDK import 가 원인」이라고 짚었다 — 표본 하나로 전수를 일반화했다. 고쳐 보니 falsify 는 줄지 않았다 [실측: 9분 50초 → 10분 17초]. 시나리오마다 시각을 찍자 중앙 1.3초 · 상위 15개가 44% 였고 (가장 느린 것은 #70 에서 넣은 runner-timeout-limit · 48.6초), CI 에만 있는 비용은 바이트코드였다 — 깨진 소스의 .pyc 를 막으려 끈 바이트코드 쓰기(#66)가 새 venv 에서는 가드마다 pytest 를 소스부터 다시 컴파일하게 했다 [실측: CI 와 같은 상태에서 가드 1회 +0.4초] | 원인을 짚기 전에 분포를 잰다 (시나리오별 시각). 가드 반증을 CI 에서 조각 둘로 나눠 동시에 돈다 — verify.sh 는 그대로 돌고 falsify.sh 만 `FALSIFY_SHARD` 조각을 돈다 (합집합 = 전체 · 서로소를 시험이 본다 · falsify `falsify-shard`). 하네스가 시작 때 site-packages 의 바이트코드를 한 번 만든다 — 깨는 대상이 아니라 낡지 않고, 파이썬이 원래 쓰는 것을 되돌릴 뿐이라 캐시로 가리는 것이 아니다 (H1). runner-timeout-limit 은 깨진 경우를 시간 초과가 아니라 결과(지적이 써진다)로 잡는다 [실측: 48.6 → 22초]. SDK 지연 import 는 명령 시작 시간 개선으로 남겼다 [실측: `codeproof --help` 1.16 → 0.18초 · falsify `sdk-lazy`] |
+| 72 | 대시보드에 코드 입력을 붙이며 드러난 셋. ① 브라우저 Ruff(WebAssembly 0.16.8)가 「지적 없음」을 냈는데 같은 코드 · 같은 설정(ALL · py314)의 CLI 는 관례 지적 다섯이었다 — `Workspace.defaultSettings()` 가 일반 객체가 아니라 `Map` 이라 속성으로 넣은 `select` · `target-version` 이 오류 없이 무시되고 기본 규칙으로 돌았다 [실측: 브라우저 평가]. ② 기록된 리뷰를 회차별로 보여 주려는데 묶인 지적의 대표 문구는 다른 회차의 것일 수 있었다 — 지문이 줄 번호를 빼고 묶는다 (B2). ③ 랜딩 페이지 시험이 스크립트를 아예 금지했다 — 「Pages 와 받은 파일이 같다」를 지키는 수단이었다 (e42862e) | 옵션은 일반 객체로 넘기고, 같은 코드를 CLI 와 대조했다 — 다른 것은 파일 경로가 필요한 INP001 하나다 [실측]. 묶음이 원문마다 회차 번호를 남기고 (`ObservedFinding.variant_runs` · `said_in`), 원문마다의 판정으로 다시 만든 짝 판정이 점수판과 하나라도 다르면 기록 데이터를 만들지 않는다 [실측: 150쌍 x 3회 x 2 리뷰어 900/900 일치]. 원칙은 두고 수단을 바꿨다 — 스크립트는 저장소 파일만 (인라인 · 바깥 주소 없음) · 기록 데이터는 전역 변수 하나를 정하는 스크립트라 `file://` 에서도 읽힌다 [실측: 헤드리스 Chromium] · 바깥에서 받는 것은 「분석」을 누를 때의 WebAssembly 하나이고 SRI 해시로 검증한다 (붙임 코드는 npm 의 같은 판을 저장소에 두고, 판은 uv.lock 의 Ruff 와 같아야 한다 — 시험). 로컬 서버(`serve`)는 127.0.0.1 에만 묶고 Host · Origin · JSON 을 본다 — 다른 사이트가 사용자의 브라우저로 리뷰(계정의 모델 호출)를 보내지 못하게 |
 
 ## 부록 A. 주요 참고문헌
 

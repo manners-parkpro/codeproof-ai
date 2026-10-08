@@ -97,7 +97,12 @@ SCENARIOS=(layering runner registry registry-derived sdk-lazy falsify-shard proo
            xauthor-s2-dropped
            xauthor-read-every-rung xauthor-read-twin xauthor-read-shaky xauthor-twin-hits
            xauthor-declared-runs xauthor-declared-setup xauthor-declared-kinds xauthor-declared-min-kinds
-           xauthor-issues-unknown xauthor-orphan-doc)
+           xauthor-issues-unknown xauthor-orphan-doc
+           explorer-said-run explorer-verdict-check explorer-marks explorer-every-pair data-stale
+           ruff-rules-empty highlights-leader highlights-shaky highlights-trade landing-ruff-pin
+           landing-ruff-sri landing-inline-script serve-origin serve-host serve-json serve-one-at-a-time
+           serve-unknown-agent serve-origin-null serve-body-cap serve-length ruff-syntax-adapter
+           ruff-syntax-data ruff-syntax-js highlights-ai-only explorer-out-range)
 
 claim_layering() { echo "런타임(analysis)은 정답 라벨(eval)을 볼 수 없다 — A1"; }
 break_layering() {
@@ -1146,6 +1151,112 @@ guard_xauthor-issues-unknown() { uv run pytest "$_XANT" -q -k unknown_pair; }
 claim_xauthor-orphan-doc() { echo "묶음 없이 분석 문서만 있으면 낡은 것이다 — 다시 만들 수 없는 숫자를 최신으로 세지 않는다"; }
 break_xauthor-orphan-doc() { perl -0pi -e 's/        if target\.is_file\(\):\n/        if False:\n/' src/codeproof_ai/cli.py; }
 guard_xauthor-orphan-doc() { uv run pytest tests/cli/test_commands.py -q -k before_the_measurement; }
+
+_EX=src/codeproof_ai/eval/explorer.py
+_EXT=tests/eval/test_explorer.py
+_SV=src/codeproof_ai/serve.py
+_SVT=tests/review/test_serve.py
+_HLT=tests/eval/test_highlights.py
+
+claim_explorer-said-run() { echo "기록된 리뷰는 회차마다 그 회차가 낸 원문만 싣는다 — 묶인 지적의 대표 문구는 다른 회차의 것일 수 있다 (교훈 #72)"; }
+break_explorer-said-run() { perl -0pi -e 's/ if r == run\)/ if True)/' src/codeproof_ai/domain/observation.py; }
+guard_explorer-said-run() { uv run pytest tests/domain/test_observation.py -q -k said_it; }
+
+claim_explorer-verdict-check() { echo "원문 판정으로 만든 짝 판정이 점수판과 다르면 기록 데이터를 만들지 않는다 — 화면이 센 값과 모순된다"; }
+break_explorer-verdict-check() { perl -0pi -e 's/if mine is not verdicts\[pid\]:/if False:/' "$_EX"; }
+guard_explorer-verdict-check() { uv run pytest "$_EXT" -q -k scoreboard_did_not_count; }
+
+claim_explorer-marks() { echo "채점하지 않은 지적은 이유(관례 주장 · 정답 라벨 밖)를 갈라 싣는다 (F4 · F4a)"; }
+break_explorer-marks() { perl -0pi -e 's/return "out" if finding\.category\.is_defect_claim else "style"/return "out"/' "$_EX"; }
+guard_explorer-marks() { uv run pytest "$_EXT" -q -k 'marks_say_why or each_outcome'; }
+
+claim_explorer-every-pair() { echo "기록된 리뷰는 고르지 않는다 — 잰 짝 전부를 싣는다"; }
+break_explorer-every-pair() { perl -0pi -e 's/s\.sample_id in measured\)/s.sample_id in measured)[:1]/' "$_EX"; }
+guard_explorer-every-pair() { uv run pytest tests/cli/test_commands.py -q -k dashboard_data_is_generated; }
+
+claim_data-stale() { echo "더는 만들지 않는 대시보드 데이터가 남으면 --check 가 운다 — 점수판 없는 옛 기록을 보여 주지 않게 (F5b)"; }
+break_data-stale() { perl -0pi -e 's/pattern="\*\.js", banner=explorer\.BANNER/pattern="*.nope", banner=explorer.BANNER/' src/codeproof_ai/cli.py; }
+guard_data-stale() { uv run pytest tests/cli/test_commands.py -q -k dashboard_data_is_generated; }
+
+claim_ruff-rules-empty() { echo "도구가 룰 분류를 주지 않으면 브라우저 Ruff 표를 만들지 않는다 — 빈 표는 모든 지적을 결함 주장으로 보이게 한다 (F4a)"; }
+break_ruff-rules-empty() { perl -0pi -e 's/if not categories:/if False:/' "$_EX"; }
+guard_ruff-rules-empty() { uv run pytest "$_EXT" -q -k no_categories_is_refused; }
+
+claim_highlights-leader() { echo "첫 화면의 「앞섰다」는 값에서 고른다 — 다시 잰 뒤 순서가 바뀌면 문장도 바뀐다 (F5b)"; }
+break_highlights-leader() { perl -0pi -e 's/leader = a if row\.diff\.point > 0 else b/leader = a/' src/codeproof_ai/eval/report.py; }
+guard_highlights-leader() { uv run pytest "$_HLT" -q -k other_reviewer; }
+
+claim_highlights-shaky() { echo "주 지표가 사다리에서 흔들리면 첫 화면은 순위를 주장하지 않는다 (A2a)"; }
+break_highlights-shaky() { perl -0pi -e 's/elif row\.stable:/elif True:/' src/codeproof_ai/eval/report.py; }
+guard_highlights-shaky() { uv run pytest "$_HLT" -q -k shaky_ladder; }
+
+claim_highlights-trade() { echo "「대신 헛경고는」은 많이 짚는 쪽이 헛경고도 더 낼 때만 쓴다 — 값에서 고른다 (F5b)"; }
+break_highlights-trade() { perl -0pi -e 's/ if more == caught_more else / if True else /' src/codeproof_ai/eval/report.py; }
+guard_highlights-trade() { uv run pytest "$_HLT" -q -k trade_off_word; }
+
+claim_landing-ruff-pin() { echo "브라우저 Ruff 는 uv.lock 의 Ruff 와 같은 판이다 — 다르면 측정과 다른 도구의 결과다"; }
+break_landing-ruff-pin() { perl -0pi -e 's/ruff-wasm-web\@0\.16\.8\/ruff_wasm_bg\.wasm/ruff-wasm-web\@0.16.7\/ruff_wasm_bg.wasm/' docs/app.js; }
+guard_landing-ruff-pin() { uv run pytest tests/docs/test_consistency.py -q -k pinned_ruff; }
+
+claim_landing-ruff-sri() { echo "받은 Ruff WebAssembly 는 SRI 해시로 검증한다 — 바뀐 바이너리를 실행하지 않는다"; }
+break_landing-ruff-sri() { perl -0pi -e 's/\{ integrity: RUFF_SRI, /{ /' docs/app.js; }
+guard_landing-ruff-sri() { uv run pytest tests/docs/test_consistency.py -q -k pinned_ruff; }
+
+claim_landing-inline-script() { echo "첫 페이지의 스크립트는 저장소 파일만이다 — 인라인 코드도 바깥 주소도 싣지 않는다"; }
+break_landing-inline-script() { perl -0pi -e 's/<script src="app\.js" defer><\/script>/<script src="app.js" defer><\/script>\n<script>document.title = "x";<\/script>/' docs/index.html; }
+guard_landing-inline-script() { uv run pytest tests/docs/test_consistency.py -q -k 'TheLandingPage and outside'; }
+
+claim_serve-origin() { echo "로컬 서버는 다른 출처의 리뷰 요청을 받지 않는다 — 리뷰는 사용자 계정의 모델 호출이다"; }
+break_serve-origin() { perl -0pi -e 's/if origin is not None and origin\.removeprefix\("http:\/\/"\) not in self\._server\(\)\.hosts:/if False:/' "$_SV"; }
+guard_serve-origin() { uv run pytest "$_SVT" -q -k another_origin; }
+
+claim_serve-host() { echo "로컬 서버는 다른 이름(Host)으로 온 요청을 받지 않는다 — DNS rebinding"; }
+break_serve-host() { perl -0pi -e 's/return self\.headers\.get\("Host", ""\) in self\._server\(\)\.hosts/return True/' "$_SV"; }
+guard_serve-host() { uv run pytest "$_SVT" -q -k another_host_name; }
+
+claim_serve-json() { echo "로컬 서버는 JSON 요청만 받는다 — 폼 · text/plain 은 사전 확인 없이 오는 교차 출처 요청이다"; }
+break_serve-json() { perl -0pi -e 's/if not self\.headers\.get\("Content-Type", ""\)\.startswith\("application\/json"\):/if False:/' "$_SV"; }
+guard_serve-json() { uv run pytest "$_SVT" -q -k form_post; }
+
+claim_serve-one-at-a-time() { echo "로컬 서버의 리뷰는 한 번에 하나다 — 에이전트 리뷰는 분 단위이고 계정 한도를 쓴다"; }
+break_serve-one-at-a-time() { perl -0pi -e 's/if not self\._server\(\)\.busy\.acquire\(blocking=False\):/if False:/' "$_SV"; }
+guard_serve-one-at-a-time() { uv run pytest "$_SVT" -q -k second_review; }
+
+claim_serve-unknown-agent() { echo "로컬 서버는 모르는 에이전트 · 모델 이름을 거절한다 — 실행기 인자로 넘어간다"; }
+break_serve-unknown-agent() { perl -0pi -e 's/if agent is not None and agent not in AGENTS:/if False:/' "$_SV"; }
+guard_serve-unknown-agent() { uv run pytest "$_SVT" -q -k unknown_values; }
+
+claim_serve-origin-null() { echo "로컬 서버는 Origin 이 null 인 요청을 받지 않는다 — 샌드박스 iframe · data: 문서는 같은 출처가 아니다"; }
+break_serve-origin-null() { perl -0pi -e 's/if origin is not None and origin\.removeprefix/if origin not in (None, "null") and origin.removeprefix/' "$_SV"; }
+guard_serve-origin-null() { uv run pytest "$_SVT" -q -k origin_of_null; }
+
+claim_serve-body-cap() { echo "로컬 서버는 상한보다 큰 본문을 읽기 전에 거절한다 — 파일 하나를 리뷰하는 화면이다"; }
+break_serve-body-cap() { perl -0pi -e 's/if not 0 < int\(length\) <= MAX_BODY:/if not 0 < int(length):/' "$_SV"; }
+guard_serve-body-cap() { uv run pytest "$_SVT" -q -k over_the_cap; }
+
+claim_serve-length() { echo "로컬 서버는 숫자가 아닌 본문 길이를 411 로 거절한다 — 「²」는 isdigit 이 참이라 처리기 밖에서 터졌다"; }
+break_serve-length() { perl -0pi -e 's/if not length\.isdecimal\(\):/if not length.isdigit():/' "$_SV"; }
+guard_serve-length() { uv run pytest "$_SVT" -q -k not_a_number; }
+
+claim_ruff-syntax-adapter() { echo "Ruff 의 구문 오류 코드는 어댑터 상수와 같다 — 대시보드가 그 값으로 구문 오류를 가른다"; }
+break_ruff-syntax-adapter() { perl -0pi -e 's/^SYNTAX_ERROR = "invalid-syntax"/SYNTAX_ERROR = "syntax-error"/m' src/codeproof_ai/analysis/python/ruff.py; }
+guard_ruff-syntax-adapter() { uv run pytest tests/analysis/test_adapters.py -q -k syntax_code; }
+
+claim_ruff-syntax-data() { echo "브라우저 Ruff 의 분류 데이터는 구문 오류 코드를 싣는다 — 없으면 구문 오류가 결함 주장으로 세어진다"; }
+break_ruff-syntax-data() { perl -0pi -e 's/\n        "syntax": SYNTAX_ERROR,//' "$_EX"; }
+guard_ruff-syntax-data() { uv run pytest "$_EXT" -q -k syntax_code_is_the_adapters; }
+
+claim_ruff-syntax-js() { echo "브라우저 Ruff 화면은 구문 오류를 생성 데이터의 코드로 가른다 — Ruff 는 null 이 아니라 invalid-syntax 를 준다"; }
+break_ruff-syntax-js() { perl -0pi -e 's/d\.code === RULES\.syntax/d.code === null/' docs/app.js; }
+guard_ruff-syntax-js() { uv run pytest tests/docs/test_consistency.py -q -k syntax_errors_apart; }
+
+claim_highlights-ai-only() { echo "첫 화면의 답은 두 AI 의 비교만 말한다 — 린터 측정과 한 문장에 묶으면 린터 값이 AI 값으로 읽힌다"; }
+break_highlights-ai-only() { perl -0pi -e 's/<b>답<\/b> \{claim\}/<b>답<\/b> 린터 경고는 채점 규칙만 바꿔도 갈렸다. {claim}/' src/codeproof_ai/eval/report.py; }
+guard_highlights-ai-only() { uv run pytest "$_HLT" -q -k speaks_only_of_the_two_ais; }
+
+claim_explorer-out-range() { echo "기록된 리뷰의 채점하지 않은 결함 주장은 정답 구간과 겹치지 않는다 — 화면이 그 거리를 적는다"; }
+break_explorer-out-range() { perl -0pi -e 's/"buggy":\[\[\d+,\d+,("[a-z_]+","out")/"buggy":[[1,999,$1/' docs/data/reviews.js; }
+guard_explorer-out-range() { uv run pytest "$_EXT" -q -k outside_the_labeled_range; }
 
 # ── 하네스 ─────────────────────────────────────────────────────────────────
 
