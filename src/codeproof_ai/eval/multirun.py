@@ -115,8 +115,10 @@ def _shares(
     return {p: sum(r[p] in hits for r in by_run) / runs for p in by_run[0]}
 
 
-def _interval(values: list[float], *, resamples: int, seed: int) -> tuple[float, float]:
-    """짝 단위 부트스트랩 95%."""
+def mean_interval(
+    values: Sequence[float], *, resamples: int = RESAMPLES, seed: int = SEED
+) -> tuple[float, float]:
+    """평균의 부트스트랩 95% - 값 하나가 복원추출 단위다 (보통 짝 하나)."""
     rng = random.Random(seed)  # noqa: S311 - 재표집용이다. 보안 난수가 아니고 재현이 목적이다
     boots = sorted(fmean(rng.choices(values, k=len(values))) for _ in range(resamples))
     return boots[round(0.025 * (resamples - 1))], boots[round(0.975 * (resamples - 1))]
@@ -152,7 +154,7 @@ def expectation_of(
     if not shares:
         return Expectation(per_run=(), pairs=0, point=None, interval=None)
     per_run = tuple(sum(v in hits for v in r.values()) for r in by_run)
-    interval = _interval(shares, resamples=resamples, seed=seed)
+    interval = mean_interval(shares, resamples=resamples, seed=seed)
     return Expectation(per_run=per_run, pairs=len(shares), point=fmean(shares), interval=interval)
 
 
@@ -184,6 +186,14 @@ class Difference:
             return None
         lo, hi = self.interval
         return lo > 0 or hi < 0
+
+    @property
+    def reading(self) -> tuple[bool, bool | None]:
+        """방향과 판정 - slack 사다리 전체에서 같아야 「안정」이다 (A2a · DESIGN §7.10b).
+
+        🔴 「흔들린다」의 정의는 이것 하나다 - 비교 절 · 점수판 · 교차 저자 분석이 같은 셈을 쓴다.
+        """
+        return (self.point or 0.0) > 0, self.distinguishable
 
 
 def difference(
@@ -220,16 +230,28 @@ def difference_of(
     seed: int = SEED,
 ) -> Difference:
     """이미 채점한 실행별 짝 판정(`verdicts_by_run`) 둘의 차이 (a - b)."""
+    diffs = list(pair_differences(a, b, hits).values())
+    if not diffs:
+        return Difference(pairs=0, point=None, interval=None)
+    interval = mean_interval(diffs, resamples=resamples, seed=seed)
+    return Difference(pairs=len(diffs), point=fmean(diffs), interval=interval)
+
+
+def pair_differences(
+    a: Sequence[Mapping[str, PairVerdict]],
+    b: Sequence[Mapping[str, PairVerdict]],
+    hits: frozenset[PairVerdict] = CORRECT_ONLY,
+) -> dict[str, float]:
+    """짝마다 「N회 중 묶음에 든 비율」의 차이 (a - b) - 짝 부트스트랩이 복원추출하는 단위다.
+
+    🔴 짝 집합이 다르면 거부한다 - 한쪽에만 있는 짝을 빼면 비교 대상이 조용히 바뀐다.
+    """
     sa = _shares(a, hits) if a else {}
     sb = _shares(b, hits) if b else {}
     if sa.keys() != sb.keys():
         msg = f"두 리뷰어의 짝이 다르다 ({len(sa)} vs {len(sb)}) - 같은 짝 위에서만 비교한다"
         raise ValueError(msg)
-    if not sa:
-        return Difference(pairs=0, point=None, interval=None)
-    diffs = [sa[p] - sb[p] for p in sa]
-    interval = _interval(diffs, resamples=resamples, seed=seed)
-    return Difference(pairs=len(diffs), point=fmean(diffs), interval=interval)
+    return {p: sa[p] - sb[p] for p in sa}
 
 
 def thresholds(runs: int) -> tuple[tuple[str, int], ...]:

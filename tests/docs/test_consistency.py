@@ -581,7 +581,8 @@ class TestCliSurfaceMatchesDocs:
         pytest.fail("서브명령을 찾지 못했다")
 
     def test_documented_commands_exist(self) -> None:
-        documented = set(re.findall(r"codeproof ([a-z]+)", _all_docs()))
+        # 하이픈 명령(`xauthor-report`)을 자르면 없는 명령 `xauthor` 로 읽힌다
+        documented = set(re.findall(r"codeproof ([a-z][a-z-]*)", _all_docs()))
         unknown = documented - self._real_commands()
         assert not unknown, f"문서에만 있는 명령: {sorted(unknown)}"
 
@@ -612,7 +613,7 @@ class TestCliSurfaceMatchesDocs:
 
         bad: list[str] = []
         for cmd, flags in re.findall(
-            r"codeproof (\w+)((?:\s+--?[\w-]+(?:[ =][^\s]+)?)*)", _all_docs()
+            r"codeproof ([a-z][\w-]*)((?:\s+--?[\w-]+(?:[ =][^\s]+)?)*)", _all_docs()
         ):
             if cmd not in real:
                 continue

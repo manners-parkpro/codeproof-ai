@@ -799,7 +799,7 @@ def _comparison_section(
         d = difference(ra.outcomes, rb.outcomes, samples, ProvableSafetyGrader(overlap_slack=slack))
         diff, iv, verdict = _pp(d)
         lines.append(f"| {slack} | {diff} | {iv} | {verdict} |")
-        seen.add(((d.point or 0.0) > 0, d.distinguishable))
+        seen.add(d.reading)
     lines += [
         "",
         "🔴 흔들린다 — slack 에 따라 차이의 방향이나 판정이 바뀐다. 단일 slack 값으로 결론을 "

@@ -85,6 +85,7 @@ usage() {
   --runs N     샘플당 반복 횟수 (기본 1). <sample_id>.<i>.json 으로 쓴다
   --limit N    앞에서 N개 샘플만 (파일럿용)
   --timeout S  한 건 제한시간 (기본 240초)
+  --blind      진행 줄에 지적 수를 찍지 않는다 - 측정 중에는 결과를 보지 않는다 (DESIGN §7.10d)
 
 🔴 n=1 로는 변동을 말할 수 없다 (F8). 파일럿이 아니면 --runs 를 올린다.
 USAGE
@@ -95,7 +96,7 @@ die() { echo "${RED}$*${OFF}" >&2; exit 2; }
 
 [[ $# -lt 3 ]] && usage
 AGENT=$1; IN=$2; OUT=$3; shift 3
-RUNS=1; LIMIT=0; MODEL=""; EFFORT=""; TIMEOUT=240
+RUNS=1; LIMIT=0; MODEL=""; EFFORT=""; TIMEOUT=240; PROGRESS=counts
 while [[ $# -gt 0 ]]; do
   case $1 in
     --effort)  EFFORT=$2; shift 2 ;;
@@ -103,6 +104,7 @@ while [[ $# -gt 0 ]]; do
     --runs)    RUNS=$2; shift 2 ;;
     --limit)   LIMIT=$2; shift 2 ;;
     --timeout) TIMEOUT=$2; shift 2 ;;
+    --blind)   PROGRESS=blind; shift ;;
     *) echo "${RED}모르는 옵션: $1${OFF}" >&2; usage ;;
   esac
 done
@@ -263,7 +265,8 @@ diffs=$(python3 "$HELPER" record "$RUN_JSON" \
     isolation="$ISOLATION" permission="$PERMISSION" \
     prompt_hash="$(manifest prompt_hash)" instruction_hash="$(manifest instruction_hash)" \
     schema_hash="$(manifest schema_hash)" docstrings="$DOCSTRINGS" identity="$IDENTITY" \
-    timeout_s="$TIMEOUT" runner_sha="$RUNNER_SHA" started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)")
+    timeout_s="$TIMEOUT" runner_sha="$RUNNER_SHA" progress="$PROGRESS" \
+    started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)")
 case $? in
   0) ;;
   3)
@@ -342,7 +345,12 @@ for box in "${BOXES[@]}"; do
 
     if info=$(python3 "$HELPER" extract "$AGENT" "$rp" "$RESOLVED" "$dest" \
         "$IN/MANIFEST.json" "$sid" 2>> "$rp.err"); then
-      printf '  [%3d/%3d] %s%-46s%s 지적 %s\n' "$I" "$TOTAL" "$DIM" "$sid" "$OFF" "$info"
+      # 🔴 측정 중에는 결과를 보지 않는다 - 지적 수가 보이면 멈출지 · 더 돌릴지가 결과에 끌린다 (§7.10d)
+      if [[ $PROGRESS == blind ]]; then
+        printf '  [%3d/%3d] %s%-46s%s 리뷰 완료\n' "$I" "$TOTAL" "$DIM" "$sid" "$OFF"
+      else
+        printf '  [%3d/%3d] %s%-46s%s 지적 %s\n' "$I" "$TOTAL" "$DIM" "$sid" "$OFF" "$info"
+      fi
       ((DONE++)); STREAK=0
     else
       printf '  [%3d/%3d] %s%-46s 실패%s %s\n' "$I" "$TOTAL" "$RED" "$sid" "$OFF" \

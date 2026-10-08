@@ -22,6 +22,7 @@ from codeproof_ai.analysis.registry import available as analyzer_available
 from codeproof_ai.corpus.decoy import pair_dirs, validate_corpus
 from codeproof_ai.corpus.mutants import breaks, load_mutants, mutant_alias
 from codeproof_ai.domain.reviewer import ReviewerKind
+from codeproof_ai.eval import crossauthor
 from codeproof_ai.eval.bait import BaitStatus, measure
 from codeproof_ai.eval.export import DOCSTRING_MODES, export_for_agent, sample_digest
 from codeproof_ai.eval.figures import BANNER as FIGURE_BANNER
@@ -258,6 +259,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     _add_report_parser(sub)
+    _add_xauthor_report_parser(sub)
     _add_export_parser(sub)
     _add_pack_parser(sub)
 
@@ -311,6 +313,33 @@ def _add_report_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser])
         "--figures",
         default=None,
         help="생성 그림(SVG) 디렉터리 - 기본은 --out 옆의 figures/ (--out - 이면 그리지 않는다)",
+    )
+
+
+def _add_xauthor_report_parser(
+    sub: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    """교차 저자 코퍼스의 선언한 분석 - 셈은 결과를 보기 전에 고정했다 (`eval/crossauthor.py`)."""
+    xr = sub.add_parser(
+        "xauthor-report",
+        help="교차 저자 코퍼스의 선언한 분석 문서를 생성한다 (셈은 결과 전에 고정)",
+    )
+    xr.add_argument("--corpus", default="corpus/xauthor/codex")
+    xr.add_argument("--agents", default="results/xauthor/agent", help="두 리뷰어의 묶음")
+    xr.add_argument("--reference-corpus", default="corpus/decoys")
+    xr.add_argument(
+        "--reference-agents", default="results/agent", help="견줄 측정의 묶음 - 설정이 같아야 한다"
+    )
+    xr.add_argument(
+        "--issues",
+        default="results/xauthor/label-issues",
+        help="판정자마다 <이름>.txt - 라벨 문제가 있는 쌍 (줄마다 하나). 없으면 민감도가 없다",
+    )
+    xr.add_argument("--out", default="results/xauthor/MEASUREMENTS.md")
+    xr.add_argument(
+        "--check",
+        action="store_true",
+        help="쓰지 않고 최신인지만 확인한다 (다르면 exit 1)",
     )
 
 
@@ -1433,6 +1462,78 @@ def _cmd_report(
     return max(*codes, landing, _stale_figures(figures, drawn, check=check))
 
 
+def _cmd_xauthor_report(
+    corpus: Path, agents: Path, reference: tuple[Path, Path], issues: Path, out: str, *,
+    check: bool,
+) -> int:
+    """🔴 선언한 분석을 그대로 돈다 - 측정 뒤에 고를 손잡이가 없다 (DESIGN §7.10d ⑧).
+
+    묶음은 `report` 와 같은 경로로 재생한다 (`_agent_sections` - 잰 샘플 · 지문 · 모자란 회차).
+    두 리뷰어가 다 차기 전에는 아무 값도 내지 않는다 - 채점은 다 찬 뒤 한 번이다.
+    """
+    target = Path(out)
+    if not (agents.is_dir() and any(p.is_dir() for p in agents.iterdir())):
+        if target.is_file():
+            print(
+                f"🔴 {agents} 에 묶음이 없는데 {target} 가 있다 - 다시 만들 수 없는 숫자다",
+                file=sys.stderr,
+            )
+            return 1
+        print(f"{agents} 에 묶음이 없다 - 측정 전이라 낼 것이 없다")
+        return 0
+    samples = load_decoy_samples(corpus)
+    sections = _agent_sections(agents, samples)
+    if sections is None:
+        return 2
+    pair = crossauthor.pick(sections)
+    if pair is None or len(sections) != len(pair):
+        print(
+            f"🔴 {agents} 에 같은 샘플을 잰 claude · codex 묶음이 하나씩만 있어야 한다 "
+            f"(지금 {len(sections)}개) - 채점은 둘 다 찬 뒤 한 번이다",
+            file=sys.stderr,
+        )
+        return 2
+    ref = _reference_pair(*reference, docstrings=pair[0].docstrings)
+    found = _label_issues(issues)
+    problems = crossauthor.problems(pair, ref[0], samples, found) if ref else []
+    if ref is None or problems:
+        print("🔴 선언과 다른 입력이다 - 「미완」이고 값을 내지 않는다", file=sys.stderr)
+        for line in problems:
+            print(f"  - {line}", file=sys.stderr)
+        return 2
+    body = crossauthor.render(pair, samples, ref, found, corpus=str(corpus), where=str(issues))
+    return _emit_generated(body, out, check=check, command="xauthor-report")
+
+
+def _reference_pair(
+    corpus: Path, agents: Path, *, docstrings: str
+) -> tuple[tuple[AgentSection, AgentSection], list[LabeledSample]] | None:
+    """견줄 측정 (목표 150쌍) - 같은 손잡이의 claude · codex 묶음. 없으면 None."""
+    samples = load_decoy_samples(corpus)
+    pair = crossauthor.pick(_agent_sections(agents, samples) or [], docstrings=docstrings)
+    if pair is None:
+        print(f"  🔴 {agents} 에 견줄 묶음(같은 손잡이의 claude · codex)이 없다", file=sys.stderr)
+        return None
+    return pair, samples
+
+
+def _label_issues(root: Path) -> dict[str, frozenset[str]]:
+    """판정자마다 라벨 문제가 있는 쌍 - `<판정자>.txt` 의 줄마다 쌍 하나 (`#` 줄은 주석).
+
+    🔴 없는 쌍 이름은 `crossauthor.problems` 가 거절한다 - 오타가 조용히 「뺀 쌍 0」이 된다.
+    """
+    if not root.is_dir():
+        return {}
+    return {
+        f.stem: frozenset(
+            line.strip()
+            for line in f.read_text(encoding="utf-8").split("\n")
+            if line.strip() and not line.lstrip().startswith("#")
+        )
+        for f in sorted(root.glob("*.txt"))
+    }
+
+
 def _emit_block(page: Path, block: str, *, check: bool) -> int:
     """손으로 쓰는 페이지 안의 생성 구간 - 표시(`HIGHLIGHTS`) 사이만 바꾼다. 다르면 --check 는 1.
 
@@ -1481,7 +1582,7 @@ def _stale_figures(figures: Path, drawn: Mapping[str, str], *, check: bool) -> i
     return int(check and bool(stale))
 
 
-def _emit_generated(body: str, out: str, *, check: bool) -> int:
+def _emit_generated(body: str, out: str, *, check: bool, command: str = "report") -> int:
     """생성물을 쓰거나, 쓰지 않고 최신인지만 본다 (다르면 1)."""
     if out == "-":
         print(body, end="")
@@ -1494,7 +1595,7 @@ def _emit_generated(body: str, out: str, *, check: bool) -> int:
             print(f"{target} 는 최신이다")
             return 0
         print(
-            f"{target} 가 낡았다 - `uv run codeproof report` 로 다시 만든다",
+            f"{target} 가 낡았다 - `uv run codeproof {command}` 로 다시 만든다",
             file=sys.stderr,
         )
         return 1
@@ -1571,6 +1672,10 @@ _COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
     "report": lambda a: _cmd_report(
         Path(a.corpus), a.analyzer, a.ruff_select, a.out, check=a.check, agents=Path(a.agents),
         figures=Path(a.figures) if a.figures else Path(a.out).parent / "figures",
+    ),
+    "xauthor-report": lambda a: _cmd_xauthor_report(
+        Path(a.corpus), Path(a.agents), (Path(a.reference_corpus), Path(a.reference_agents)),
+        Path(a.issues), a.out, check=a.check,
     ),
     "export": lambda a: _cmd_export(Path(a.corpus), Path(a.out), a.prompt, a.docstrings),
     "pack": lambda a: _cmd_pack(Path(a.corpus), Path(a.src), Path(a.out), runs=a.runs),
