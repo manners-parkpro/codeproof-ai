@@ -147,7 +147,8 @@ TP 와 FP 를 가른다 (DESIGN §7.9).
 mypy 텍스트(1-based 바이트) · ast(0-based 바이트) · SARIF(1-based 문자).
 **같은 mypy 실행이 텍스트와 JSON 에서 다른 컬럼을 낸다.**
 
-- 변환은 `analysis/<lang>/<tool>.py` 어댑터 **안에서만**. 어댑터 하나가 변환 하나를 책임진다.
+- 변환은 도구 출력을 읽는 어댑터 **안에서만** — `analysis/<lang>/<tool>.py` 와 가져온 지적의 `reviewers/formats.py`.
+  어댑터 하나가 변환 하나를 책임진다.
 - **비ASCII 회귀 테스트를 지우지 않는다.** 없으면 이 버그는 조용히 산다.
 - ⚠ mypy `--native-parser` 가 곧 기본값 → 컬럼 의미 변동 가능. 핀 테스트로 감지한다.
 
@@ -234,6 +235,8 @@ mypy --output=json --show-error-end --show-absolute-path --no-error-summary
 
 ### C3. diff
 
+PR(diff) 리뷰를 만들 때의 규칙이다 — 지금은 diff 경로가 없다 (DESIGN §11 「범위 밖」).
+
 ```bash
 git diff --no-color --no-ext-diff --find-renames --unified=0 BASE...HEAD
 ```
@@ -245,7 +248,7 @@ git diff --no-color --no-ext-diff --find-renames --unified=0 BASE...HEAD
 ### C4. 도달성은 v1 에서 파일 안까지만
 
 파이썬 전용 호출그래프 도구가 전멸했다(PyCG · JarvisCG · Pyre/Pysa 전부 아카이브).
-함수 단위(LibCST+jedi 직접 조합)를 v1 에서 시작하지 마라 — 그 레이어를 소유해야 하고,
+파일 밖까지 잇는 호출그래프(LibCST+jedi 직접 조합)를 v1 에서 시작하지 마라 — 그 레이어를 소유해야 하고,
 거기 예산을 태우면 논지를 못 만든다.
 
 ---
