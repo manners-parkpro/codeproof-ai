@@ -40,6 +40,7 @@ import sys
 import tempfile
 import time
 import tomllib
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -753,9 +754,16 @@ def summarize(out: Path) -> dict[str, Any]:
     (바퀴 2~8 을 모두 받아들인 분류)다 - `kinds_filled` 는 받아들인 쌍이 하나라도 있는 분류라,
     통째로 뺄 분류(`dropped`)도 센다. 옮길 쌍을 이것으로 고르면 구성비가 선언과 갈린다 (F5a).
     """
-    zero = {"sessions": 0, "cut_sessions": 0, "turns": 0, **dict.fromkeys(USAGE_KEYS, 0)}
+    zero = {
+        "sessions": 0, "cut_sessions": 0, "idle_sessions": 0, "turns": 0,
+        **dict.fromkeys(USAGE_KEYS, 0),
+    }
     totals = {c: dict(zero) for c in CATEGORIES}
     rows = []
+    events = events_of(out)
+    idle = Counter(
+        (e.get("pair"), e.get("step")) for e in events if e.get("event") == "credit_cut_idle"
+    )
     for d in pair_dirs(out):
         records = [_load(q) for q in sorted(d.iterdir()) if SESSION_RECORD.match(q.name)]
         for r in records:
@@ -768,7 +776,13 @@ def summarize(out: Path) -> dict[str, Any]:
         reasons = sorted(cut.glob("*.reason")) if cut.exists() else []
         for q in reasons:  # 끊긴 세션은 호출로만 센다 - 쓴 토큰은 기록이 없어 모른다
             step = q.name.split("-", 1)[1].removesuffix(".reason")
-            totals["write" if step.startswith("write-") else step]["cut_sessions"] += 1
+            t = totals["write" if step.startswith("write-") else step]
+            # 충전 전 재시도는 모델에 닿지 않았다 - 호출과 따로 센다 (기록의 이유는 둘 다 credits)
+            if idle[d.name, step]:
+                idle[d.name, step] -= 1
+                t["idle_sessions"] += 1
+            else:
+                t["cut_sessions"] += 1
         rows.append({
             "pair": d.name, "kind": pair_kind(d), "round": pair_round(d),
             "outcome": outcome_of(d) or "진행 중",
@@ -776,7 +790,6 @@ def summarize(out: Path) -> dict[str, Any]:
             "not_counted": [q.read_text(encoding="utf-8").strip() for q in reasons],
         })
     filled = sorted({r["kind"] for r in rows if r["outcome"] == "accepted"})
-    events = events_of(out)
     summary: dict[str, Any] = {
         "kinds_filled": len(filled), "kinds": filled, "windows_used": windows_used(out),
         "credit_cuts": sum(e.get("event") == "credit_cut" for e in events),

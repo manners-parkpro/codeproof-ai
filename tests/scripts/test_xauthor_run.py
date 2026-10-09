@@ -430,6 +430,26 @@ class TestSummary:
         assert cut_sessions == [1, 1]
         assert (s["totals"]["write"]["sessions"], s["totals"]["write"]["input_tokens"]) == (1, 10)
 
+    def test_retries_before_the_refill_are_not_calls(self, tmp_path: Path) -> None:
+        """🔴 충전 전 재시도는 모델에 닿지 않았다 - 「쌍당 호출」에 섞이면 부풀려진다.
+
+        cut/ 의 이유는 끊김과 같은 credits 다 - 이벤트(credit_cut_idle)로 가른다.
+        """
+        out = tmp_path / "out"
+        self._pair(out, "XC001", "bounded_input", None, [])
+        cut = out / "XC001" / "cut"
+        cut.mkdir()
+        for n in range(1, 4):
+            (cut / f"{n:02d}-write-1.reason").write_text("credits\n", encoding="utf-8")
+        events = [{"event": "credit_cut", "pair": "XC001", "step": "write-1"}] + [
+            {"event": "credit_cut_idle", "pair": "XC001", "step": "write-1"}
+        ] * 2
+        (out / "events.jsonl").write_text(
+            "".join(json.dumps(e) + "\n" for e in events), encoding="utf-8"
+        )
+        write = xr.summarize(out)["totals"]["write"]
+        assert (write["cut_sessions"], write["idle_sessions"]) == (1, 2)
+
 
 # ── 흐름 - 가짜 codex 로 세션 → 관문 → 감사 → 재현 → 마무리를 돈다 (유료 호출 없음) ──────────────
 

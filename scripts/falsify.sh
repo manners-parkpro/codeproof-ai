@@ -102,7 +102,7 @@ SCENARIOS=(layering runner registry registry-derived sdk-lazy falsify-shard proo
            claude-audit-measured-first claude-audit-env claude-audit-refusal claude-audit-overwrite
            claude-audit-version
            xauthor-move-accepted xauthor-move-complete xauthor-move-min-kinds xauthor-move-ended
-           xauthor-move-overwrite xauthor-move-pair-files
+           xauthor-move-overwrite xauthor-move-pair-files xauthor-run-idle-calls
            explorer-said-run explorer-verdict-check explorer-marks explorer-every-pair data-stale
            ruff-rules-empty highlights-leader highlights-shaky highlights-trade landing-ruff-pin
            landing-ruff-sri landing-inline-script serve-origin serve-host serve-json serve-one-at-a-time
@@ -1233,6 +1233,10 @@ guard_xauthor-move-overwrite() { uv run pytest "$_XMT" -q -k not_overwritten; }
 claim_xauthor-move-pair-files() { echo "쌍 파일 다섯만 옮긴다 — 저자의 메모가 코퍼스에 섞이면 쌍이 규격과 달라진다 (§7.10d)"; }
 break_xauthor-move-pair-files() { perl -0pi -e 's/            for name in xr\.PAIR_FILES:\n/            for name in sorted(p.name for p in src.iterdir()):\n/' "$_XM"; }
 guard_xauthor-move-pair-files() { uv run pytest "$_XMT" -q -k byte_for_byte; }
+
+claim_xauthor-run-idle-calls() { echo "충전 전 재시도는 호출로 세지 않는다 — 모델에 닿지 않은 시도가 공개할 「쌍당 호출」을 부풀린다 (§7.10d 1단계 · 타당성)"; }
+break_xauthor-run-idle-calls() { perl -0pi -e 's/            if idle\[d\.name, step\]:\n/            if False:\n/' "$_XR"; }
+guard_xauthor-run-idle-calls() { uv run pytest tests/scripts/test_xauthor_run.py -q -k retries_before_the_refill_are_not_calls; }
 
 _EX=src/codeproof_ai/eval/explorer.py
 _EXT=tests/eval/test_explorer.py
