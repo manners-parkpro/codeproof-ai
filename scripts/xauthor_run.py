@@ -381,12 +381,15 @@ def _tail(text: str, n: int = 20) -> str:
 
 def run_group(
     cmd: list[str], *, env: dict[str, str], timeout: float,
-    stdout: Any = subprocess.PIPE, stderr: Any = subprocess.PIPE,
+    stdout: Any = subprocess.PIPE, stderr: Any = subprocess.PIPE, cwd: Path | None = None,
 ) -> tuple[int, bool, str, str]:
-    """프로세스 그룹으로 띄운다 - 시간이 넘거나 하네스가 멈추면 손자 프로세스까지 끝낸다."""
-    proc = subprocess.Popen(  # noqa: S603 - 인자는 이 파일과 xauthor.py 가 만든다
+    """프로세스 그룹으로 띄운다 - 시간이 넘거나 하네스가 멈추면 손자 프로세스까지 끝낸다.
+
+    `cwd` 는 claude 감사가 쓴다 (scripts/claude_audit.py) - codex 는 `-C` 로 받는다.
+    """
+    proc = subprocess.Popen(  # noqa: S603 - 인자는 이 파일과 xauthor.py · claude_audit.py 가 만든다
         cmd, stdout=stdout, stderr=stderr, stdin=subprocess.DEVNULL, env=env,
-        text=True, start_new_session=True,
+        text=True, start_new_session=True, cwd=cwd,
     )
     try:
         out, err = proc.communicate(timeout=timeout)

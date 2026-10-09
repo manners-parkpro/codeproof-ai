@@ -98,6 +98,9 @@ SCENARIOS=(layering runner registry registry-derived sdk-lazy falsify-shard proo
            xauthor-read-every-rung xauthor-read-twin xauthor-read-shaky xauthor-twin-hits
            xauthor-declared-runs xauthor-declared-setup xauthor-declared-kinds xauthor-declared-min-kinds
            xauthor-issues-unknown xauthor-orphan-doc
+           claude-audit-model claude-audit-coverage claude-audit-in-only claude-audit-threat-model
+           claude-audit-measured-first claude-audit-env claude-audit-refusal claude-audit-overwrite
+           claude-audit-version
            explorer-said-run explorer-verdict-check explorer-marks explorer-every-pair data-stale
            ruff-rules-empty highlights-leader highlights-shaky highlights-trade landing-ruff-pin
            landing-ruff-sri landing-inline-script serve-origin serve-host serve-json serve-one-at-a-time
@@ -1162,6 +1165,45 @@ guard_xauthor-issues-unknown() { uv run pytest "$_XANT" -q -k unknown_pair; }
 claim_xauthor-orphan-doc() { echo "묶음 없이 분석 문서만 있으면 낡은 것이다 — 다시 만들 수 없는 숫자를 최신으로 세지 않는다"; }
 break_xauthor-orphan-doc() { perl -0pi -e 's/        if target\.is_file\(\):\n/        if False:\n/' src/codeproof_ai/cli.py; }
 guard_xauthor-orphan-doc() { uv run pytest tests/cli/test_commands.py -q -k before_the_measurement; }
+
+_CA=scripts/claude_audit.py
+_CAT=tests/scripts/test_claude_audit.py
+
+claim_claude-audit-model() { echo "claude 감사는 고정한 모델의 답만 싣는다 — 다른 모델의 감사가 claude 측정의 감사로 실린다 (§7.10d 측정 뒤 · D5)"; }
+break_claude-audit-model() { perl -0pi -e 's/    if model not in seen:\n/    if False:\n/' "$_CA"; }
+guard_claude-audit-model() { uv run pytest "$_CAT" -q -k another_model; }
+
+claim_claude-audit-coverage() { echo "판정자는 지적마다 한 번씩 판정해야 읽는다 — 빠진 판정은 「IN 아님」으로 읽혀 라벨 문제가 사라진다 (§7.10d 측정 뒤)"; }
+break_claude-audit-coverage() { perl -0pi -e 's/    if sorted\(v\["finding"\] for v in items\) != list\(range\(1, count \+ 1\)\):\n/    if False:\n/' "$_CA"; }
+guard_claude-audit-coverage() { uv run pytest "$_CAT" -q -k missing_or_extra; }
+
+claim_claude-audit-in-only() { echo "라벨 문제 목록에는 IN 판정만 든다 — 위협 모델 밖 재현이 주 지표에서 쌍을 지운다 (§7.10d 민감도)"; }
+break_claude-audit-in-only() { perl -0pi -e 's/v\["verdict"\] == "IN"/v["verdict"] in ("IN", "OUT")/' "$_CA"; }
+guard_claude-audit-in-only() { uv run pytest "$_CAT" -q -k only_an_in; }
+
+claim_claude-audit-threat-model() { echo "판정 머리말은 감사 머리말의 위협 모델을 그대로 싣는다 — 손으로 줄인 위협 모델은 덮는 범위 안 결함을 거른다 (G3a1)"; }
+break_claude-audit-threat-model() { perl -0pi -e 's/평범한 하위 타입을 포함한다/하위 타입을 포함한다/' results/xauthor/judge_head.md; }
+guard_claude-audit-threat-model() { uv run pytest "$_CAT" -q -k verbatim; }
+
+claim_claude-audit-measured-first() { echo "claude 감사는 측정이 끝난 뒤에만 돈다 — claude 는 측정 전에 쌍 내용에 관여하지 않는다 (§7.10d 시도 · 렌즈)"; }
+break_claude-audit-measured-first() { perl -0pi -e 's/got = measured_model\(corpus, agents\)/got = model/' "$_CA"; }
+guard_claude-audit-measured-first() { uv run pytest "$_CAT" -q -k waits_for_the_measurement; }
+
+claim_claude-audit-env() { echo "claude 감사 세션은 띄운 세션의 환경을 물려받지 않는다 — CLAUDE_CODE_EFFORT_LEVEL 이 effort 를 바꾸고 부모 세션의 소켓이 샌다 (A2b)"; }
+break_claude-audit-env() { perl -0pi -e 's/env=environment\(\), timeout=TIMEOUT_S/env=dict(__import__("os").environ), timeout=TIMEOUT_S/' "$_CA"; }
+guard_claude-audit-env() { uv run pytest "$_CAT" -q -k isolated; }
+
+claim_claude-audit-refusal() { echo "거절은 1급 기록으로 남기고 다시 묻지 않는다 — 다시 물으면 필터를 넘기는 재시도가 된다 (D5)"; }
+break_claude-audit-refusal() { perl -0pi -e 's/refused = isinstance\(envelope, dict\) and envelope\.get\("stop_reason"\) == "refusal"/refused = False/' "$_CA"; }
+guard_claude-audit-refusal() { uv run pytest "$_CAT" -q -k refusal; }
+
+claim_claude-audit-overwrite() { echo "판정은 한 번이다 — 다시 돌린 판정이 앞의 라벨 문제 목록을 조용히 덮지 않는다 (§7.10d 측정 뒤)"; }
+break_claude-audit-overwrite() { perl -0pi -e 's/        if path\.exists\(\) and path\.read_text\(encoding="utf-8"\) != body:\n/        if False:\n/' "$_CA"; }
+guard_claude-audit-overwrite() { uv run pytest "$_CAT" -q -k not_overwritten; }
+
+claim_claude-audit-version() { echo "claude 감사는 격리 설치한 측정 판만 부른다 — 자동 업데이트된 판은 측정한 제품이 아니다 (§7.10d 측정)"; }
+break_claude-audit-version() { perl -0pi -e 's/    if \(found := cli_version\(\)\) != CLAUDE_VERSION:\n/    if False:\n/' "$_CA"; }
+guard_claude-audit-version() { uv run pytest "$_CAT" -q -k another_cli_version; }
 
 _EX=src/codeproof_ai/eval/explorer.py
 _EXT=tests/eval/test_explorer.py
