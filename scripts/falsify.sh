@@ -103,7 +103,7 @@ SCENARIOS=(layering runner registry registry-derived sdk-lazy falsify-shard proo
            claude-audit-version
            xauthor-move-accepted xauthor-move-complete xauthor-move-min-kinds xauthor-move-ended
            xauthor-move-overwrite xauthor-move-pair-files xauthor-run-idle-calls
-           xauthor-publish-mask-home xauthor-publish-secret
+           xauthor-publish-mask-home xauthor-publish-secret xauthor-run-amend
            explorer-said-run explorer-verdict-check explorer-marks explorer-every-pair data-stale
            ruff-rules-empty highlights-leader highlights-shaky highlights-trade landing-ruff-pin
            landing-ruff-sri landing-inline-script serve-origin serve-host serve-json serve-one-at-a-time
@@ -1157,7 +1157,7 @@ claim_xauthor-declared-kinds() { echo "분류마다 선언한 쌍 수가 아니�
 break_xauthor-declared-kinds() { perl -0pi -e 's/if n != PAIRS_PER_KIND\]/if False]/' "$_XAN"; }
 guard_xauthor-declared-kinds() { uv run pytest "$_XANT" -q -k every_kind_must_be_full; }
 
-claim_xauthor-declared-min-kinds() { echo "남은 분류가 10 미만이면 「미완」이다 (§7.10d 2단계)"; }
+claim_xauthor-declared-min-kinds() { echo "남은 분류가 8 미만이면 「미완」이다 (§7.10d 2단계 · 10 에서 낮춤 — 수집 중 보정 2026-10-09)"; }
 break_xauthor-declared-min-kinds() { perl -0pi -e 's/if len\(counts\) < MIN_KINDS:/if len(counts) < 0:/' "$_XAN"; }
 guard_xauthor-declared-min-kinds() { uv run pytest "$_XANT" -q -k too_few_kinds; }
 
@@ -1219,7 +1219,7 @@ claim_xauthor-move-complete() { echo "바퀴 2~8 을 다 채운 분류만 옮긴
 break_xauthor-move-complete() { perl -0pi -e 's/return \[k for k in kinds if xr\.alive\(k, 2 \+ xr\.ROUNDS, stage2\)\]/return list(kinds)/' "$_XM"; }
 guard_xauthor-move-complete() { uv run pytest "$_XMT" -q -k missed_a_round; }
 
-claim_xauthor-move-min-kinds() { echo "다 채운 분류가 10 미만이면 「미완」이라 옮기지 않는다 (§7.10d 「2단계」)"; }
+claim_xauthor-move-min-kinds() { echo "다 채운 분류가 8 미만이면 「미완」이라 옮기지 않는다 (§7.10d 「2단계」 · 수집 중 보정 2026-10-09)"; }
 break_xauthor-move-min-kinds() { perl -0pi -e 's/    if len\(kinds\) < MIN_KINDS:\n/    if False:\n/' "$_XM"; }
 guard_xauthor-move-min-kinds() { uv run pytest "$_XMT" -q -k fewer_complete; }
 
@@ -1249,6 +1249,10 @@ guard_xauthor-publish-mask-home() { uv run pytest "$_XPT" -q -k machine_paths; }
 claim_xauthor-publish-secret() { echo "비밀로 보이는 것이 하나라도 있으면 아무것도 쓰지 않는다 — push 는 되돌릴 수 없다 (§7.10d 「공개」)"; }
 break_xauthor-publish-secret() { perl -0pi -e 's/    if found or out is None:\n/    if out is None:\n/' "$_XP"; }
 guard_xauthor-publish-secret() { uv run pytest "$_XPT" -q -k stops_everything; }
+
+claim_xauthor-run-amend() { echo "측정 전에 낮춘 하한은 이어 받은 RUN.json 에도 고쳐 적고 보정을 남긴다 — 기록이 쓰지 않는 상한을 적지 않게 (C1a · 수집 중 보정 2026-10-09)"; }
+break_xauthor-run-amend() { perl -0pi -e 's/            caps\[key\] = value\n//' "$_XR"; }
+guard_xauthor-run-amend() { uv run pytest tests/scripts/test_xauthor_run.py -q -k lowered_cap; }
 
 _EX=src/codeproof_ai/eval/explorer.py
 _EXT=tests/eval/test_explorer.py
