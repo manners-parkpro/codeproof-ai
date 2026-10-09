@@ -11,7 +11,7 @@
     4  사람이 봐야 한다 - 설정이 RUN.json 과 다르다 · 카탈로그 설명이 바뀌었다 ·
        감사 결과를 읽지 못했다 · 상자가 없다
     5  멈춤 규칙 - 1단계: 크레딧 창을 여섯 개 넘게 쓴다 (선언 「1단계 · 타당성」) ·
-       2단계: 창을 스무 개 넘게 쓴다 · 남은 분류가 10 미만이다 (「미완」)
+       2단계: 창을 스무 개 넘게 쓴다 · 남은 분류가 MIN_KINDS 미만이다 (「미완」)
 
 🔴 claude 는 쌍 내용에 관여하지 않는다 - 이 파일은 codex 를 부르고, 관문 · 재현 스크립트를
    권한 프로필 아래서 돌리고, 끝난 쌍을 복사만 한다. 프로필 · 환경 · 플래그는 xauthor.py 한 곳.
@@ -69,7 +69,10 @@ ATTEMPTS = 3          # 쌍마다 시도 (선언 「시도 · 렌즈」)
 FAILED_PER_KIND = 4   # 분류마다 버리는 쌍
 MAX_WINDOWS = 6       # 1단계 크레딧 창 (선언 「1단계 · 타당성」)
 ROUNDS = 7            # 2단계 바퀴 - 2~8 (선언 「2단계」 - 일곱 바퀴)
-MIN_KINDS = 10        # 2단계에서 남은 분류가 이보다 적으면 「미완」 (선언 「2단계」)
+MIN_KINDS = 8         # 2단계에서 남은 분류가 이보다 적으면 「미완」 (선언 「2단계」)
+AMENDED = {"min_kinds": (MIN_KINDS, "수집 중 보정 2026-10-09 - 안전 필터 거절이 분류를 닫아 "
+                         "10 에서 낮췄다 (DESIGN §7.10d · 측정값 없이)")}
+"""측정 전에 고친 상한 - 이어 돌 때 RUN.json 의 caps 를 바꾸고 무엇을 고쳤는지 남긴다 (`amend`)."""
 STAGE2_MAX_WINDOWS = 20  # 창 상한 - 승인 추정 13~15 에 여유를 둔 멈춤 지점 (2단계 시작 전 보정 ⑥)
 GATE_TIMEOUT_S = 30 * 60
 REPRO_TIMEOUT_S = 90  # 교차 패밀리 감사의 재현과 같다 (scripts/cross_family_repro.py)
@@ -700,6 +703,21 @@ def _first_start() -> dict[str, str]:
     return {"wheel_sha256": wheel_sha, "model_note": check_catalog()}
 
 
+def amend(rec: dict[str, Any]) -> None:
+    """🔴 기록이 거짓을 적지 않게 - 측정 전에 고친 상한은 caps 를 지금 값으로 바꾸고 보정을 남긴다.
+
+    고정 worktree 의 실행기가 적은 caps 를 새 실행기가 이어 받는다. 그대로 두면 RUN.json 이
+    쓰지 않는 상한을 적는다 (C1a 와 같은 이유). 같은 보정은 한 번만 남는다.
+    """
+    caps = rec.get("caps", {})
+    for key, (value, why) in AMENDED.items():
+        if key in caps and caps[key] != value:
+            rec.setdefault("amendments", []).append(
+                {"at": _now(), "cap": key, "from": caps[key], "to": value, "why": why}
+            )
+            caps[key] = value
+
+
 def preflight(out: Path, stage2: dict[str, Any] | None = None) -> Path:
     """판 · 고정 문서 · RUN.json · venv · 카탈로그 - 하나라도 어긋나면 시작하지 않는다.
 
@@ -715,6 +733,7 @@ def preflight(out: Path, stage2: dict[str, Any] | None = None) -> Path:
         rec = _load(run_json)
         if diffs := [k for k in SIGNED if rec.get(k) != fields[k]]:
             raise Stop(HUMAN, f"RUN.json 의 설정과 다르다: {diffs}")
+        amend(rec)
         if not (VENV / "bin" / "codeproof").exists():
             raise Stop(HUMAN, f"venv 가 없다 - {VENV} (다시 만들면 다른 하네스일 수 있다)")
     else:
@@ -925,7 +944,7 @@ def run_stage2(out: Path, after: Path) -> int:
         for rnd in range(2, 2 + ROUNDS):
             live = [k for k in kinds if alive(k, rnd, out)]
             if len(live) < MIN_KINDS:
-                why = f"바퀴 {rnd} 에 남은 분류가 {len(live)}개다 - 10 미만이라 「미완」"
+                why = f"바퀴 {rnd} 에 남은 분류가 {len(live)}개다 - {MIN_KINDS} 미만이라 「미완」"
                 raise Stop(STOP, why)
             _round_start(out, rnd)
             for kind in live:
@@ -945,7 +964,8 @@ def run_stage2(out: Path, after: Path) -> int:
                                   prior=accepted_briefs(kind, earlier)))
         complete = [k for k in kinds if alive(k, 2 + ROUNDS, out)]
         if len(complete) < MIN_KINDS:
-            raise Stop(STOP, f"8쌍을 채운 분류가 {len(complete)}개다 - 10 미만이라 「미완」")
+            why = f"8쌍을 채운 분류가 {len(complete)}개다 - {MIN_KINDS} 미만이라 「미완」"
+            raise Stop(STOP, why)
     except Stop as stop:
         _event(out, "stop", rc=stop.rc, why=str(stop))
         print(f"rc={stop.rc} · {stop}", file=sys.stderr)

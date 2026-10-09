@@ -175,11 +175,27 @@ class TestStage2Inputs:
         assert xr.stage2_kinds(tmp_path) == ["bounded_input"]
 
     def test_the_declared_stage2_numbers_are_pinned(self) -> None:
-        """선언 「2단계」 · 시작 전 보정 ⑥ - 일곱 바퀴 · 10분류 미만은 미완 · 창 스무 개에서 멈춘다.
+        """선언 「2단계」 · 시작 전 보정 ⑥ - 일곱 바퀴 · 8분류 미만은 미완 · 창 스무 개에서 멈춘다.
 
-        1단계 상수는 흐름 시험이 고정한다. 2단계 시험은 이 값들을 바꿔 끼워 써서 고정하지 못한다.
+        하한은 10 에서 8 로 낮췄다 (수집 중 보정 2026-10-09). 1단계 상수는 흐름 시험이 고정한다.
+        2단계 시험은 이 값들을 바꿔 끼워 써서 고정하지 못한다.
         """
-        assert (xr.ROUNDS, xr.MIN_KINDS, xr.STAGE2_MAX_WINDOWS) == (7, 10, 20)
+        assert (xr.ROUNDS, xr.MIN_KINDS, xr.STAGE2_MAX_WINDOWS) == (7, 8, 20)
+
+    def test_a_lowered_cap_is_recorded_once_on_resume(self) -> None:
+        """🔴 이어 받은 RUN.json 이 쓰지 않는 상한을 적지 않게 - 보정을 남기고 한 번만 센다."""
+        rec: dict[str, Any] = {"caps": {"min_kinds": 10, "rounds": 7}}
+        xr.amend(rec)
+        xr.amend(rec)
+        assert rec["caps"] == {"min_kinds": xr.MIN_KINDS, "rounds": 7}
+        got = [(a["cap"], a["from"], a["to"]) for a in rec["amendments"]]
+        assert got == [("min_kinds", 10, xr.MIN_KINDS)]
+
+    def test_a_record_without_the_cap_is_left_alone(self) -> None:
+        """1단계 RUN.json 에는 그 상한이 없다 - 보정을 지어내지 않는다."""
+        rec: dict[str, Any] = {"caps": {"attempts": 3}}
+        xr.amend(rec)
+        assert rec == {"caps": {"attempts": 3}}
 
     @pytest.mark.parametrize("attempt", [1, 2])
     def test_every_attempt_carries_the_briefs(self, attempt: int) -> None:
@@ -801,7 +817,7 @@ class TestFlowWithAFakeCodex:
     def test_a_kind_that_misses_a_round_is_dropped_and_the_stage_is_incomplete(
         self, pair: Any, monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """🔴 바퀴 하나를 못 채운 분류는 8쌍이 못 된다 - 이후 바퀴는 안 쓴다 (10 미만은 미완)."""
+        """🔴 바퀴 하나를 못 채운 분류는 8쌍이 못 된다 - 이후 바퀴는 안 쓴다 (하한 미만은 미완)."""
         after = self._stage1(pair.out.parent, "accepted")
         out = self._stage2(pair, monkeypatch)
         self._configure(pair, no_pair=True)
