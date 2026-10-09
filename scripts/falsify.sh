@@ -101,6 +101,8 @@ SCENARIOS=(layering runner registry registry-derived sdk-lazy falsify-shard proo
            claude-audit-model claude-audit-coverage claude-audit-in-only claude-audit-threat-model
            claude-audit-measured-first claude-audit-env claude-audit-refusal claude-audit-overwrite
            claude-audit-version
+           xauthor-move-accepted xauthor-move-complete xauthor-move-min-kinds xauthor-move-ended
+           xauthor-move-overwrite xauthor-move-pair-files
            explorer-said-run explorer-verdict-check explorer-marks explorer-every-pair data-stale
            ruff-rules-empty highlights-leader highlights-shaky highlights-trade landing-ruff-pin
            landing-ruff-sri landing-inline-script serve-origin serve-host serve-json serve-one-at-a-time
@@ -1204,6 +1206,33 @@ guard_claude-audit-overwrite() { uv run pytest "$_CAT" -q -k not_overwritten; }
 claim_claude-audit-version() { echo "claude 감사는 격리 설치한 측정 판만 부른다 — 자동 업데이트된 판은 측정한 제품이 아니다 (§7.10d 측정)"; }
 break_claude-audit-version() { perl -0pi -e 's/    if \(found := cli_version\(\)\) != CLAUDE_VERSION:\n/    if False:\n/' "$_CA"; }
 guard_claude-audit-version() { uv run pytest "$_CAT" -q -k another_cli_version; }
+
+_XM=scripts/xauthor_move.py
+_XMT=tests/scripts/test_xauthor_move.py
+
+claim_xauthor-move-accepted() { echo "코퍼스로 옮기는 쌍은 받아들인 쌍뿐이다 — 재확인에서 버린 쌍이 섞여도 report 는 쌍 수만 센다 (§7.10d)"; }
+break_xauthor-move-accepted() { perl -0pi -e 's/xr\.pair_kind\(d\) == kind and xr\.outcome_of\(d\) == "accepted"/xr.pair_kind(d) == kind/' "$_XM"; }
+guard_xauthor-move-accepted() { uv run pytest "$_XMT" -q -k every_round; }
+
+claim_xauthor-move-complete() { echo "바퀴 2~8 을 다 채운 분류만 옮긴다 — 한 바퀴를 못 채운 분류는 통째로 뺀다 (§7.10d 「2단계」)"; }
+break_xauthor-move-complete() { perl -0pi -e 's/return \[k for k in kinds if xr\.alive\(k, 2 \+ xr\.ROUNDS, stage2\)\]/return list(kinds)/' "$_XM"; }
+guard_xauthor-move-complete() { uv run pytest "$_XMT" -q -k missed_a_round; }
+
+claim_xauthor-move-min-kinds() { echo "다 채운 분류가 10 미만이면 「미완」이라 옮기지 않는다 (§7.10d 「2단계」)"; }
+break_xauthor-move-min-kinds() { perl -0pi -e 's/    if len\(kinds\) < MIN_KINDS:\n/    if False:\n/' "$_XM"; }
+guard_xauthor-move-min-kinds() { uv run pytest "$_XMT" -q -k fewer_complete; }
+
+claim_xauthor-move-ended() { echo "2단계가 끝나기 전에는 옮기지 않는다 — 바퀴를 채우는 중인 분류로 구성비가 갈린다 (F5a)"; }
+break_xauthor-move-ended() { perl -0pi -e 's/    if not \(stage2 \/ "summary\.json"\)\.is_file\(\):\n/    if False:\n/' "$_XM"; }
+guard_xauthor-move-ended() { uv run pytest "$_XMT" -q -k must_have_ended; }
+
+claim_xauthor-move-overwrite() { echo "쌍이 있는 코퍼스에는 복사를 시작하기 전에 멈춘다 — 빼면 다 복사한 뒤 이름 바꾸기에서 깨져 임시 폴더가 남는다 (§7.10d)"; }
+break_xauthor-move-overwrite() { perl -0pi -e 's/    if target\.exists\(\) and any\(target\.iterdir\(\)\):\n/    if False:\n/' "$_XM"; }
+guard_xauthor-move-overwrite() { uv run pytest "$_XMT" -q -k not_overwritten; }
+
+claim_xauthor-move-pair-files() { echo "쌍 파일 다섯만 옮긴다 — 저자의 메모가 코퍼스에 섞이면 쌍이 규격과 달라진다 (§7.10d)"; }
+break_xauthor-move-pair-files() { perl -0pi -e 's/            for name in xr\.PAIR_FILES:\n/            for name in sorted(p.name for p in src.iterdir()):\n/' "$_XM"; }
+guard_xauthor-move-pair-files() { uv run pytest "$_XMT" -q -k byte_for_byte; }
 
 _EX=src/codeproof_ai/eval/explorer.py
 _EXT=tests/eval/test_explorer.py
