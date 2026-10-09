@@ -103,6 +103,7 @@ SCENARIOS=(layering runner registry registry-derived sdk-lazy falsify-shard proo
            claude-audit-version
            xauthor-move-accepted xauthor-move-complete xauthor-move-min-kinds xauthor-move-ended
            xauthor-move-overwrite xauthor-move-pair-files xauthor-run-idle-calls
+           xauthor-publish-mask-home xauthor-publish-secret
            explorer-said-run explorer-verdict-check explorer-marks explorer-every-pair data-stale
            ruff-rules-empty highlights-leader highlights-shaky highlights-trade landing-ruff-pin
            landing-ruff-sri landing-inline-script serve-origin serve-host serve-json serve-one-at-a-time
@@ -1237,6 +1238,17 @@ guard_xauthor-move-pair-files() { uv run pytest "$_XMT" -q -k byte_for_byte; }
 claim_xauthor-run-idle-calls() { echo "충전 전 재시도는 호출로 세지 않는다 — 모델에 닿지 않은 시도가 공개할 「쌍당 호출」을 부풀린다 (§7.10d 1단계 · 타당성)"; }
 break_xauthor-run-idle-calls() { perl -0pi -e 's/            if idle\[d\.name, step\]:\n/            if False:\n/' "$_XR"; }
 guard_xauthor-run-idle-calls() { uv run pytest tests/scripts/test_xauthor_run.py -q -k retries_before_the_refill_are_not_calls; }
+
+_XP=scripts/xauthor_publish.py
+_XPT=tests/scripts/test_xauthor_publish.py
+
+claim_xauthor-publish-mask-home() { echo "공개할 작성 기록은 홈 경로를 가린다 — 빠지면 사용자 이름이 든 로컬 경로가 공개 이력에 남는다 (§7.10d 「공개」)"; }
+break_xauthor-publish-mask-home() { perl -0pi -e 's/    \(re\.compile\(re\.escape\(str\(Path\.home\(\)\)\)\), "~"\),\n//' "$_XP"; }
+guard_xauthor-publish-mask-home() { uv run pytest "$_XPT" -q -k machine_paths; }
+
+claim_xauthor-publish-secret() { echo "비밀로 보이는 것이 하나라도 있으면 아무것도 쓰지 않는다 — push 는 되돌릴 수 없다 (§7.10d 「공개」)"; }
+break_xauthor-publish-secret() { perl -0pi -e 's/    if found or out is None:\n/    if out is None:\n/' "$_XP"; }
+guard_xauthor-publish-secret() { uv run pytest "$_XPT" -q -k stops_everything; }
 
 _EX=src/codeproof_ai/eval/explorer.py
 _EXT=tests/eval/test_explorer.py
