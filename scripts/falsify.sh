@@ -101,6 +101,9 @@ SCENARIOS=(layering runner registry registry-derived sdk-lazy falsify-shard proo
            claude-audit-model claude-audit-coverage claude-audit-in-only claude-audit-threat-model
            claude-audit-measured-first claude-audit-env claude-audit-refusal claude-audit-overwrite
            claude-audit-version
+           xauthor-move-accepted xauthor-move-complete xauthor-move-min-kinds xauthor-move-ended
+           xauthor-move-overwrite xauthor-move-pair-files xauthor-run-idle-calls
+           xauthor-publish-mask-home xauthor-publish-secret
            explorer-said-run explorer-verdict-check explorer-marks explorer-every-pair data-stale
            ruff-rules-empty highlights-leader highlights-shaky highlights-trade landing-ruff-pin
            landing-ruff-sri landing-inline-script serve-origin serve-host serve-json serve-one-at-a-time
@@ -1204,6 +1207,48 @@ guard_claude-audit-overwrite() { uv run pytest "$_CAT" -q -k not_overwritten; }
 claim_claude-audit-version() { echo "claude 감사는 격리 설치한 측정 판만 부른다 — 자동 업데이트된 판은 측정한 제품이 아니다 (§7.10d 측정)"; }
 break_claude-audit-version() { perl -0pi -e 's/    if \(found := cli_version\(\)\) != CLAUDE_VERSION:\n/    if False:\n/' "$_CA"; }
 guard_claude-audit-version() { uv run pytest "$_CAT" -q -k another_cli_version; }
+
+_XM=scripts/xauthor_move.py
+_XMT=tests/scripts/test_xauthor_move.py
+
+claim_xauthor-move-accepted() { echo "코퍼스로 옮기는 쌍은 받아들인 쌍뿐이다 — 재확인에서 버린 쌍이 섞여도 report 는 쌍 수만 센다 (§7.10d)"; }
+break_xauthor-move-accepted() { perl -0pi -e 's/xr\.pair_kind\(d\) == kind and xr\.outcome_of\(d\) == "accepted"/xr.pair_kind(d) == kind/' "$_XM"; }
+guard_xauthor-move-accepted() { uv run pytest "$_XMT" -q -k every_round; }
+
+claim_xauthor-move-complete() { echo "바퀴 2~8 을 다 채운 분류만 옮긴다 — 한 바퀴를 못 채운 분류는 통째로 뺀다 (§7.10d 「2단계」)"; }
+break_xauthor-move-complete() { perl -0pi -e 's/return \[k for k in kinds if xr\.alive\(k, 2 \+ xr\.ROUNDS, stage2\)\]/return list(kinds)/' "$_XM"; }
+guard_xauthor-move-complete() { uv run pytest "$_XMT" -q -k missed_a_round; }
+
+claim_xauthor-move-min-kinds() { echo "다 채운 분류가 10 미만이면 「미완」이라 옮기지 않는다 (§7.10d 「2단계」)"; }
+break_xauthor-move-min-kinds() { perl -0pi -e 's/    if len\(kinds\) < MIN_KINDS:\n/    if False:\n/' "$_XM"; }
+guard_xauthor-move-min-kinds() { uv run pytest "$_XMT" -q -k fewer_complete; }
+
+claim_xauthor-move-ended() { echo "2단계가 끝나기 전에는 옮기지 않는다 — 바퀴를 채우는 중인 분류로 구성비가 갈린다 (F5a)"; }
+break_xauthor-move-ended() { perl -0pi -e 's/    if not \(stage2 \/ "summary\.json"\)\.is_file\(\):\n/    if False:\n/' "$_XM"; }
+guard_xauthor-move-ended() { uv run pytest "$_XMT" -q -k must_have_ended; }
+
+claim_xauthor-move-overwrite() { echo "쌍이 있는 코퍼스에는 복사를 시작하기 전에 멈춘다 — 빼면 다 복사한 뒤 이름 바꾸기에서 깨져 임시 폴더가 남는다 (§7.10d)"; }
+break_xauthor-move-overwrite() { perl -0pi -e 's/    if target\.exists\(\) and any\(target\.iterdir\(\)\):\n/    if False:\n/' "$_XM"; }
+guard_xauthor-move-overwrite() { uv run pytest "$_XMT" -q -k not_overwritten; }
+
+claim_xauthor-move-pair-files() { echo "쌍 파일 다섯만 옮긴다 — 저자의 메모가 코퍼스에 섞이면 쌍이 규격과 달라진다 (§7.10d)"; }
+break_xauthor-move-pair-files() { perl -0pi -e 's/            for name in xr\.PAIR_FILES:\n/            for name in sorted(p.name for p in src.iterdir()):\n/' "$_XM"; }
+guard_xauthor-move-pair-files() { uv run pytest "$_XMT" -q -k byte_for_byte; }
+
+claim_xauthor-run-idle-calls() { echo "충전 전 재시도는 호출로 세지 않는다 — 모델에 닿지 않은 시도가 공개할 「쌍당 호출」을 부풀린다 (§7.10d 1단계 · 타당성)"; }
+break_xauthor-run-idle-calls() { perl -0pi -e 's/            if idle\[d\.name, step\]:\n/            if False:\n/' "$_XR"; }
+guard_xauthor-run-idle-calls() { uv run pytest tests/scripts/test_xauthor_run.py -q -k retries_before_the_refill_are_not_calls; }
+
+_XP=scripts/xauthor_publish.py
+_XPT=tests/scripts/test_xauthor_publish.py
+
+claim_xauthor-publish-mask-home() { echo "공개할 작성 기록은 홈 경로를 가린다 — 빠지면 사용자 이름이 든 로컬 경로가 공개 이력에 남는다 (§7.10d 「공개」)"; }
+break_xauthor-publish-mask-home() { perl -0pi -e 's/    \(re\.compile\(re\.escape\(str\(Path\.home\(\)\)\)\), "~"\),\n//' "$_XP"; }
+guard_xauthor-publish-mask-home() { uv run pytest "$_XPT" -q -k machine_paths; }
+
+claim_xauthor-publish-secret() { echo "비밀로 보이는 것이 하나라도 있으면 아무것도 쓰지 않는다 — push 는 되돌릴 수 없다 (§7.10d 「공개」)"; }
+break_xauthor-publish-secret() { perl -0pi -e 's/    if found or out is None:\n/    if out is None:\n/' "$_XP"; }
+guard_xauthor-publish-secret() { uv run pytest "$_XPT" -q -k stops_everything; }
 
 _EX=src/codeproof_ai/eval/explorer.py
 _EXT=tests/eval/test_explorer.py
