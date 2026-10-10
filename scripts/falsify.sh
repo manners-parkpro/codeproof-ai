@@ -109,6 +109,7 @@ SCENARIOS=(layering runner registry registry-derived sdk-lazy falsify-shard proo
            xauthor-publish-escaped xauthor-publish-quoted xauthor-publish-user xauthor-publish-residual xauthor-publish-account-id
            xauthor-publish-email-escape xauthor-publish-example-case xauthor-publish-worktree xauthor-publish-home-account
            xauthor-publish-roots xauthor-publish-duplicate xauthor-publish-staging xauthor-publish-blocked runner-cli-absolute xauthor-min-kinds-pin
+           measure-refusal-claude measure-refusal-codex
            explorer-said-run explorer-verdict-check explorer-marks explorer-every-pair data-stale
            ruff-rules-empty highlights-leader highlights-shaky highlights-trade landing-ruff-pin
            landing-ruff-sri landing-inline-script serve-origin serve-host serve-json serve-one-at-a-time
@@ -1366,6 +1367,14 @@ guard_runner-cli-absolute() { uv run pytest "$_GT" -q -k relative_cli; }
 claim_xauthor-min-kinds-pin() { echo "분석 · 옮기기의 하한(8분류)은 시험이 고정한다 — 실행기와 갈리면 2단계는 끝났는데 옮기기 · 보고서가 「미완」이다 (§7.10d · 수집 중 보정 2026-10-09)"; }
 break_xauthor-min-kinds-pin() { perl -0pi -e 's/^MIN_KINDS = 8$/MIN_KINDS = 10/m' "$_XAN"; }
 guard_xauthor-min-kinds-pin() { uv run pytest "$_XANT" -q -k Pinned; }
+
+claim_measure-refusal-claude() { echo "측정 중 claude 의 거절은 구동기가 찾아 멈춘다 — 다음 세션이 같은 샘플을 다시 물어 필터를 넘긴 답만 남는다 (§7.10d 측정 · 보정 2026-10-10)"; }
+break_measure-refusal-claude() { perl -0pi -e 's/    if envelope\.get\("stop_reason"\) == "refusal":\n        return "stop_reason refusal"\n//' "$_AO"; }
+guard_measure-refusal-claude() { uv run pytest tests/scripts/test_agent_output.py -q -k claude_refusal_is_found; }
+
+claim_measure-refusal-codex() { echo "측정 중 codex 의 거절(content was flagged)은 구동기가 찾아 멈춘다 — 다시 물으면 필터를 넘기는 재시도가 된다 (§7.10d 측정 · 보정 2026-10-10)"; }
+break_measure-refusal-codex() { perl -0pi -e 's/ and CODEX_FLAGGED in said else None/ and False else None/' "$_AO"; }
+guard_measure-refusal-codex() { uv run pytest tests/scripts/test_agent_output.py -q -k codex_flagged; }
 
 claim_xauthor-run-amend() { echo "측정 전에 낮춘 하한은 이어 받은 RUN.json 에도 고쳐 적고 보정을 남긴다 — 기록이 쓰지 않는 상한을 적지 않게 (C1a · 수집 중 보정 2026-10-09)"; }
 break_xauthor-run-amend() { perl -0pi -e 's/            caps\[key\] = value\n//' "$_XR"; }

@@ -12,6 +12,7 @@
     extract <agent> <raw-prefix> <model> <dest> <MANIFEST.json> <sample_id>
                                             원본 -> {"findings": [...]} + 잰 코드의 지문 옆 파일
     audit <out-dir>                         상자 밖 접근 흔적
+    refusals <out-dir> <agent> <model>      안전 필터가 거절한 시도 - 있으면 rc 6 (다시 묻지 않는다)
     accepted-model <agent-models.json> <agent>   받아들인 기준 모델 (없으면 빈 줄)
     gemini-settings <model> <LOW|HIGH>      gemini 시스템 설정 - 측정 조건을 강제한다
     resolve-gemini <probe.jsonl> <model>    그 모델이 실제로 답했는가 -> 모델 ID
@@ -122,6 +123,16 @@ def _models_in(envelope: dict[str, object]) -> set[str]:
     return out
 
 
+def answering_models(envelope: dict[str, object]) -> set[str]:
+    """modelUsage 의 항목마다 모델 하나 (canonicalModel 이 있으면 그것)."""
+    usage = envelope.get("modelUsage")
+    return {
+        str(entry["canonicalModel"]) if isinstance(entry, dict) and entry.get("canonicalModel")
+        else str(key)
+        for key, entry in (usage.items() if isinstance(usage, dict) else ())
+    }
+
+
 def pinned_problem(envelope: dict[str, object], model: str) -> str | None:
     """🔴 고정한 모델 **하나만** 답해야 한다 - 아니면 그 이유 (호출부가 실패로 센다).
 
@@ -131,12 +142,7 @@ def pinned_problem(envelope: dict[str, object], model: str) -> str | None:
     센다 (canonicalModel). [실측 · 목표 150쌍 claude 원본 1862개] 전부 고정 모델 한 항목이었다 -
     보조 모델이 섞인 적이 없다.
     """
-    usage = envelope.get("modelUsage")
-    seen = {
-        str(entry["canonicalModel"]) if isinstance(entry, dict) and entry.get("canonicalModel")
-        else str(key)
-        for key, entry in (usage.items() if isinstance(usage, dict) else ())
-    }
+    seen = answering_models(envelope)
     if model not in seen:
         return f"고정한 모델이 답하지 않았다: 고정={model} 응답={sorted(seen)}"
     if seen != {model}:
@@ -428,6 +434,60 @@ def extract_codex(last_message: str, events: str) -> tuple[dict[str, object], st
     return payload, f"cmds={cmds}"
 
 
+CODEX_FLAGGED = "content was flagged"
+"""codex 안전 필터의 거절 문구 [실측 · 저자 단계 XC010 audit · XC073 write-1 - `error` ·
+`turn.failed` 이벤트의 "This content was flagged for possible cybersecurity risk. …"] -
+xauthor_run.REFUSED 와 같다."""
+
+
+def refusal(agent: str, prefix: str, model: str) -> str | None:
+    """원본 시도 하나가 안전 필터 거절인가 - 거절이면 그 이유 (DESIGN §7.10d 「측정」).
+
+    🔴 거절은 다시 묻지 않는다 - 그 회차가 비므로 측정은 「미완」이다. 실행기는 실패한 샘플을
+       다음 세션에 다시 부르므로 구동기가 세션마다 `refusals` 로 훑고 다음 세션 전에 멈춘다.
+    claude 는 `stop_reason` refusal 과 고정 모델 옆에 다른 모델이 든 봉투 (거절 대체), codex 는
+    오류 이벤트의 거절 문구다. gemini 는 교차 저자 측정에 없어 보지 않는다.
+    ⚠ claude CLI 의 같은 모델 재시도는 목표 150쌍과 조건을 같게 두려고 끄지 않는다 - 기록에
+      보이지 않는다.
+    """
+    if agent == "claude":
+        return _claude_refusal(Path(prefix + ".claude.json"), model)
+    if agent == "codex":
+        events = Path(prefix + ".jsonl")
+        said = _codex_error(events.read_text(encoding="utf-8")) if events.is_file() else None
+        return said[:200] if said and CODEX_FLAGGED in said else None
+    return None
+
+
+def _claude_refusal(path: Path, model: str) -> str | None:
+    try:
+        envelope = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(envelope, dict):
+        return None
+    if envelope.get("stop_reason") == "refusal":
+        return "stop_reason refusal"
+    seen = answering_models(envelope)
+    if model in seen and seen != {model}:
+        return f"고정 모델 옆에 다른 모델이 답했다 (거절 대체): {sorted(seen)}"
+    return None
+
+
+def refusals(out: Path, agent: str, model: str) -> list[str]:
+    """출력 디렉터리의 거절된 시도 - `raw/` 의 시도마다 한 줄 (모델 해석 `_resolve` 는 뺀다)."""
+    suffix = {"claude": ".claude.json", "codex": ".jsonl"}.get(agent)
+    if suffix is None:
+        return []
+    found = []
+    for f in sorted((out / "raw").glob(f"*{suffix}")):
+        if f.name.startswith("_"):
+            continue
+        if (why := refusal(agent, str(f)[: -len(suffix)], model)) is not None:
+            found.append(f"{f.name} · {why}")
+    return found
+
+
 def _codex_error(events: str) -> str | None:
     """JSONL 의 마지막 오류 메시지 (`error` · `turn.failed`)."""
     found: str | None = None
@@ -574,6 +634,19 @@ def extract(argv: list[str]) -> str:
     return f"{len(payload['findings'])} {meta}"  # type: ignore[arg-type]
 
 
+def _scan_command(cmd: str, rest: list[str]) -> int:
+    """출력 디렉터리를 훑는 명령 - 상자 밖 접근 흔적 · 거절된 시도 (있으면 rc 6)."""
+    if cmd == "audit":
+        hits = audit(Path(rest[0]))
+        print(json.dumps({"files": len(hits), "hits": hits}, ensure_ascii=False))
+        return 0
+    found = refusals(Path(rest[0]), rest[1], rest[2])
+    if found:
+        print("\n".join(found))
+        return 6
+    return 0
+
+
 def main(argv: list[str]) -> int:
     cmd, *rest = argv
     try:
@@ -595,9 +668,9 @@ def main(argv: list[str]) -> int:
             print(len(boxes))
         elif cmd == "extract":
             print(extract(rest))
-        elif cmd == "audit":
-            hits = audit(Path(rest[0]))
-            print(json.dumps({"files": len(hits), "hits": hits}, ensure_ascii=False))
+        elif cmd in {"audit", "refusals"}:
+            return _scan_command(cmd, rest)
+
         else:
             return _model_guard_command(cmd, rest)
     except RefusedError as exc:
