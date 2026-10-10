@@ -103,10 +103,19 @@ def _path_without(tmp_path: Path, name: str) -> str:
     return str(shadow)
 
 
+GLOBAL = r'''#!/usr/bin/env python3
+import json, os
+with open(os.environ["FAKE_GEMINI_LOG"], "a") as log:
+    log.write(json.dumps({"stage": "GLOBAL", "cwd": os.getcwd()}) + "\n")
+raise SystemExit(1)
+'''
+"""PATH 뒤쪽의 다른 설치 - 불리면 기록하고 실패한다 (자동 업데이트되는 전역 CLI 의 자리)."""
+
+
 def _run(
     tmp_path: Path, *, mode: str = "ok", stage: str = "review", effort: str = "low",
     login: bool = True, without_timeout: bool = False, limit_s: int | None = None,
-    extra: tuple[str, ...] = (),
+    extra: tuple[str, ...] = (), relative: bool = False,
 ) -> tuple[subprocess.CompletedProcess[str], Path]:
     bin_dir, home = tmp_path / "bin", tmp_path / "home"
     bin_dir.mkdir(exist_ok=True)
@@ -120,8 +129,15 @@ def _run(
     path = _path_without(tmp_path, "timeout") if without_timeout else os.environ["PATH"]
     if without_timeout:
         assert shutil.which("timeout", path=path) is None, "남아 있으면 대체 경로를 시험하지 못한다"
+    first = str(bin_dir)
+    if relative:  # 🔴 고정 CLI 를 저장소 기준 상대 경로로 - 상자(cwd)에서는 풀리지 않는다
+        other = tmp_path / "global"
+        other.mkdir()
+        (other / "gemini").write_text(GLOBAL, encoding="utf-8")
+        (other / "gemini").chmod(0o755)
+        first = f"{bin_dir.name}{os.pathsep}{other}"
     env = os.environ | {
-        "PATH": f"{bin_dir}{os.pathsep}{path}", "HOME": str(home),
+        "PATH": f"{first}{os.pathsep}{path}", "HOME": str(home),
         "FAKE_GEMINI_MODE": mode, "FAKE_GEMINI_STAGE": stage, "FAKE_GEMINI_LOG": str(log),
     }
     limit = ["--timeout", str(limit_s)] if limit_s else []
@@ -129,6 +145,7 @@ def _run(
         ["bash", str(RUNNER), "gemini", str(_export(tmp_path)), str(tmp_path / "out"),
          "--effort", effort, "--model", MODEL, *limit, *extra],
         capture_output=True, text=True, env=env, timeout=40 if limit_s else 120, check=False,
+        cwd=tmp_path,
     )
     return r, log
 
@@ -152,6 +169,16 @@ class TestGeminiRunner:
         assert record["agent"] == "gemini"
         assert record["model"] == MODEL
         assert "tools=read_file,grep_search,glob" in record["permission"]
+
+    def test_a_relative_cli_path_still_calls_the_pinned_cli(self, tmp_path: Path) -> None:
+        """🔴 [실측] PATH 의 상대 항목은 저장소 cwd 에서 판을 확인하고 상자 cwd 에서는 다음 항목의
+        전역 CLI 로 풀렸다 - RUN.json 의 판과 실제로 리뷰한 CLI 가 달랐다. 시작 때 절대 경로로
+        고정한다."""
+        r, log = _run(tmp_path, relative=True)
+        assert r.returncode == 0, r.stderr
+        calls = _calls(log)
+        assert "GLOBAL" not in {c["stage"] for c in calls}
+        assert len(calls) == 1 + len(SAMPLES), "해석 한 번 + 샘플마다 리뷰 한 번 - 전부 고정 CLI"
 
     def test_each_call_is_isolated_from_the_users_home(self, tmp_path: Path) -> None:
         """🔴 사용자 설정 · 확장 · 기억을 싣지 않는다 - 로그인 파일만 링크한 새 HOME 이다."""

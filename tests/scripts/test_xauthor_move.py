@@ -73,6 +73,16 @@ def stages(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
     return s1, s2, tmp_path / "corpus" / "codex", tmp_path / "moved.json"
 
 
+def _last(s2: Path) -> Path:
+    """다 채운 분류의 마지막 바퀴 기록 - 앞 기록이 다 복사된 뒤에야 닿는 자리."""
+    return next(
+        d for d in sorted(s2.iterdir(), reverse=True)
+        if d.is_dir() and json.loads((d / "pair.json").read_text(encoding="utf-8")) == {
+            "kind": COMPLETE[-1], "round": 8,
+        }
+    )
+
+
 def _sha(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
@@ -83,8 +93,9 @@ class TestSelect:
         chosen = xm.select(s1, s2)
         assert sorted(chosen) == sorted(COMPLETE)
         for records in chosen.values():
-            assert [xm.xr.pair_round(d) for d in records] == list(range(1, 9))
-            assert {xm.xr.outcome_of(d) for d in records} == {"accepted"}
+            assert [xm.xr.pair_round(d) for d, _ in records] == list(range(1, 9))
+            assert {xm.xr.outcome_of(d) for d, _ in records} == {"accepted"}
+            assert all(src.parent == d / "final" for d, src in records)
 
     def test_a_kind_that_missed_a_round_is_left_out(self, stages: Any) -> None:
         """🔴 한 바퀴를 못 채운 분류는 8쌍이 될 수 없다 - 통째로 뺀다 (선언 「2단계」)."""
@@ -97,6 +108,30 @@ class TestSelect:
         monkeypatch.setattr(xm, "MIN_KINDS", len(COMPLETE) + 1)
         s1, s2, *_ = stages
         with pytest.raises(xm.Stop, match="미완"):
+            xm.select(s1, s2)
+
+    @pytest.mark.parametrize("shape", ["two_in_a_round", "no_first_stage_pair"])
+    def test_one_pair_per_round_or_it_stops(self, stages: Any, shape: str) -> None:
+        """🔴 한 바퀴에 둘이거나 1단계 쌍이 없으면 그 분류가 9쌍 · 7쌍으로 조용히 옮겨진다 -
+        코퍼스 시험 · export · pack 은 모르고, 유료 측정 뒤의 report 가 처음 거절한다."""
+        s1, s2, *_ = stages
+        if shape == "two_in_a_round":
+            _record(s2, 900, COMPLETE[1], 6, "accepted")
+        else:
+            (s1 / "XC002" / "outcome.json").write_text('{"outcome": "failed"}', encoding="utf-8")
+        with pytest.raises(xm.Stop, match="바퀴마다 하나가 아니다"):
+            xm.select(s1, s2)
+
+    @pytest.mark.parametrize("shape", ["missing_file", "two_folders"])
+    def test_a_whole_pair_folder_is_required(self, stages: Any, shape: str) -> None:
+        s1, s2, *_ = stages
+        record = _last(s2)
+        pair = next((record / "final").iterdir())
+        if shape == "missing_file":
+            (pair / "mutants.py").unlink()
+        else:
+            (record / "final" / f"{record.name}-again").mkdir()
+        with pytest.raises(xm.Stop, match="온전한 쌍 폴더"):
             xm.select(s1, s2)
 
     def test_the_second_stage_must_have_ended(self, stages: Any) -> None:
@@ -130,6 +165,29 @@ class TestMove:
         assert not manifest.exists()
         assert not target.with_name(f".{target.name}.moving").exists()  # 복사 전에 멈춘다
 
+    def test_a_copy_that_differs_from_its_source_stops_and_leaves_no_temp(
+        self, stages: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """🔴 깨진 복사를 싣지 않는다 - 멈춘 뒤 코퍼스 옆의 숨은 폴더(.codex.moving)도 지운다.
+
+        그 폴더는 git 이 무시하지 않는다 - 남으면 다음 커밋에 섞인다.
+        """
+        s1, s2, target, manifest = stages
+        chosen = xm.select(s1, s2)
+        real = xm.shutil.copyfile
+
+        def corrupt(src: Path, dst: Path) -> Path:
+            real(src, dst)
+            if Path(dst).name == "proof.py":
+                Path(dst).write_text("# 바뀐 판\n", encoding="utf-8")
+            return Path(dst)
+
+        monkeypatch.setattr(xm.shutil, "copyfile", corrupt)
+        with pytest.raises(xm.Stop, match="원본과 다르다"):
+            xm.move(chosen, target, manifest)
+        assert sorted(p.name for p in target.parent.iterdir()) == []
+        assert not manifest.exists()
+
     def test_check_writes_nothing(self, stages: Any, monkeypatch: pytest.MonkeyPatch) -> None:
         s1, s2, target, manifest = stages
         for name, value in (("STAGE1", s1), ("STAGE2", s2), ("TARGET", target),
@@ -139,3 +197,16 @@ class TestMove:
         assert not target.exists() and not manifest.exists()
         assert xm.main([]) == 0
         assert len(xm.corpus_pairs(target)) == 8 * len(COMPLETE)
+
+    def test_check_finds_a_broken_pair_folder_before_anything_is_copied(
+        self, stages: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """[실측] --check 는 rc 0 인데 본 실행은 중간에 rc 4 로 멈추고 임시 폴더를 남겼다."""
+        s1, s2, target, manifest = stages
+        for name, value in (("STAGE1", s1), ("STAGE2", s2), ("TARGET", target),
+                            ("MANIFEST", manifest)):
+            monkeypatch.setattr(xm, name, value)
+        (next((_last(s2) / "final").iterdir()) / "mutants.py").unlink()
+        assert xm.main(["--check"]) == xm.xr.HUMAN
+        assert xm.main([]) == xm.xr.HUMAN
+        assert not target.parent.exists() or sorted(p.name for p in target.parent.iterdir()) == []

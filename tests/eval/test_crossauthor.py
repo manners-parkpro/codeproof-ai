@@ -173,6 +173,19 @@ def _section(
     )
 
 
+class TestTheDeclaredNumbersArePinned:
+    def test_runs_knob_pairs_per_kind_and_floor(self) -> None:
+        """선언 「측정」 · 「2단계」 - 3회 · neutral · 분류마다 8쌍 · 8분류 미만은 「미완」.
+
+        🔴 하한은 10 에서 8 로 낮췄다 (수집 중 보정 2026-10-09). 실행기 하한
+           (`xauthor_run.MIN_KINDS`)과 갈리면 실행기는 2단계를 정상 종료하는데 옮기기 · 보고서가
+           「미완」이 된다. 다른 시험은 이 값들을 바꿔 끼워 써서 고정하지 못한다.
+        """
+        got = (crossauthor.RUNS, crossauthor.DOCSTRINGS, crossauthor.PAIRS_PER_KIND,
+               crossauthor.MIN_KINDS)
+        assert got == (3, "neutral", 8, 8)
+
+
 class TestTheInputMustBeTheDeclaredOne:
     """🔴 선언과 다른 입력은 「미완」이다 - 값을 내지 않는다 (§7.10d 「측정」)."""
 

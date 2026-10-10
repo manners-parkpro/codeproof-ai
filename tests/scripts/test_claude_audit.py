@@ -17,6 +17,9 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
+from codeproof_ai.eval import crossauthor
+from codeproof_ai.eval.loader import load_decoy_samples
+
 if TYPE_CHECKING:
     from types import ModuleType
 
@@ -59,6 +62,14 @@ class TestAnswer:
         """🔴 다른 모델이 답했으면 감사한 것이 claude 측정의 모델이 아니다 (D5 의 fallbacks)."""
         env = _envelope(modelUsage={"claude-other-2": {"outputTokens": 3}})
         with pytest.raises(ValueError, match="고정한 모델"):
+            ca.answer(env, MODEL, "findings")
+
+    def test_a_second_model_beside_the_pinned_one_is_refused(self) -> None:
+        """🔴 [실측 · 가짜 CLI] 거절 대체의 봉투(고정 모델 출력 0 + 다른 모델)를 감사로 실었다."""
+        env = _envelope(modelUsage={
+            MODEL: {"outputTokens": 0}, "claude-opus-4-8": {"outputTokens": 3},
+        })
+        with pytest.raises(ValueError, match="고정한 모델 밖의 모델도 답했다"):
             ca.answer(env, MODEL, "findings")
 
     def test_an_answer_only_in_the_text_is_unreadable(self) -> None:
@@ -129,14 +140,61 @@ class TestJudgePrompt:
         assert ca.judge_prompt(PAIR, [PROBLEM]).startswith(ca.audit_prompt(PAIR, head) + "\n\n")
 
 
+DECOYS, AGENTS = REPO / "corpus" / "decoys", REPO / "results" / "agent"
+
+
 class TestMeasuredFirst:
-    def test_a_finished_measurement_names_the_claude_model(self) -> None:
-        """목표 150쌍의 두 묶음은 코퍼스 전부를 쟀다 - 같은 재생으로 「끝났다」를 잰다."""
-        got = ca.measured_model(REPO / "corpus" / "decoys", REPO / "results" / "agent")
+    """「측정이 끝났다」는 `xauthor-report` 가 받아들이는 측정이다 (`_xauthor_measured` 하나).
+
+    목표 150쌍의 두 묶음을 대역으로 쓴다 - 분류 구성만 선언(분류마다 8쌍)과 달라 한 분류로 본다.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _one_kind(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        pairs = sum(1 for s in load_decoy_samples(DECOYS) if s.safety is not None)
+        monkeypatch.setattr(crossauthor, "kinds_of", lambda samples: {
+            s.sample_id: "one" for s in samples if s.safety is not None
+        })
+        monkeypatch.setattr(crossauthor, "PAIRS_PER_KIND", pairs)
+        monkeypatch.setattr(crossauthor, "MIN_KINDS", 1)
+
+    @staticmethod
+    def _copy(tmp_path: Path) -> Path:
+        agents = tmp_path / "agents"
+        for b in sorted(AGENTS.iterdir()):
+            shutil.copytree(b, agents / b.name)
+        return agents
+
+    def test_a_finished_measurement_names_the_claude_model(self, tmp_path: Path) -> None:
+        got = ca.measured_model(DECOYS, self._copy(tmp_path), (DECOYS, AGENTS))
         assert got == ca.accepted_model()
 
     def test_without_both_bundles_it_is_not_measured(self, tmp_path: Path) -> None:
-        assert ca.measured_model(REPO / "corpus" / "decoys", tmp_path) is None
+        assert ca.measured_model(DECOYS, tmp_path, (DECOYS, AGENTS)) is None
+
+    def test_a_third_bundle_is_not_a_finished_measurement(self, tmp_path: Path) -> None:
+        """[실측] 손잡이가 다른 세 번째 묶음이 있어도 감사가 돌았다 - 보고서는 「하나씩만」이라
+        rc 2 로 거절한다. 같은 손잡이의 사본이면 짝 고르기(`pick`)가 먼저 None 이다."""
+        agents = self._copy(tmp_path)
+        claude = next(b for b in agents.iterdir() if b.name.startswith("claude"))
+        keep = agents / "claude-code-keep"
+        shutil.copytree(claude, keep)
+        record = json.loads((keep / "RUN.json").read_text(encoding="utf-8"))
+        record["docstrings"] = "keep"
+        (keep / "RUN.json").write_text(json.dumps(record), encoding="utf-8")
+        assert ca.measured_model(DECOYS, agents, (DECOYS, AGENTS)) is None
+
+    def test_fewer_runs_than_declared_is_not_a_finished_measurement(self, tmp_path: Path) -> None:
+        """[실측] `pack --runs 2` 로 묶은 codex 묶음 위에서 감사가 돌았다 - 선언은 3회다."""
+        agents = self._copy(tmp_path)
+        codex = next(b for b in agents.iterdir() if b.name.startswith("codex"))
+        rows = (codex / "findings.jsonl").read_text(encoding="utf-8").splitlines()
+        kept = [r for r in rows if json.loads(r)["run"] < 2]
+        (codex / "findings.jsonl").write_text("\n".join(kept) + "\n", encoding="utf-8")
+        record = json.loads((codex / "RUN.json").read_text(encoding="utf-8"))
+        record["packed_runs"] = "2"
+        (codex / "RUN.json").write_text(json.dumps(record), encoding="utf-8")
+        assert ca.measured_model(DECOYS, agents, (DECOYS, AGENTS)) is None
 
 
 # ── 흐름 - 가짜 claude 로 감사 → 재현 → 판정 → 목록을 돈다 (구독 사용 없음) ──────────────
@@ -161,6 +219,11 @@ with (HERE / "seen.jsonl").open("a") as f:
         "step": step, "env": sorted(os.environ), "cwd": os.getcwd(), "left": os.listdir("."),
         "flags": [a for a in args if a.startswith("--")], "tools": args[args.index("--tools") + 1],
     }) + "\n")
+switches = {k: os.environ.get(k) for k in (
+    "CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK", "CLAUDE_CODE_DISABLE_REFUSAL_RETRY",
+)}
+with (HERE / "switches.jsonl").open("a") as f:
+    f.write(json.dumps(switches) + "\n")
 model = args[args.index("--model") + 1]
 env = {
     "type": "result", "subtype": "success", "is_error": False, "num_turns": 2,
@@ -283,6 +346,53 @@ class TestFlowWithAFakeClaude:
         assert {"--safe-mode", "--strict-mcp-config", "--no-session-persistence"} <= set(
             seen["flags"]
         )
+
+    def test_the_refusal_fallback_and_retry_are_off(self, run: Any) -> None:
+        """🔴 [소스: 2.1.284 바이너리] 켜 두면 거절된 턴을 다른 모델 · 같은 모델로 다시 돌려 거절이
+        기록에 남지 않는다 - 끄는 변수를 매 호출에 준다."""
+        assert run.go(audits=[self._found("NOT REPRODUCED")]) == 0
+        got = json.loads((run.fakes / "switches.jsonl").read_text(encoding="utf-8"))
+        assert got == {
+            "CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK": "1", "CLAUDE_CODE_DISABLE_REFUSAL_RETRY": "1",
+        }
+
+    def test_a_session_cut_short_by_the_harness_is_set_aside_not_overwritten(
+        self, run: Any
+    ) -> None:
+        """🔴 [실측] SIGTERM 뒤 이어 돌면 끝까지 찍힌 봉투를 덮었다 - 원본은 전부 남긴다."""
+        d = run.out / PAIR.name
+        d.mkdir(parents=True)
+        (d / "audit.claude.json").write_text('{"partial": true}', encoding="utf-8")
+        (d / "audit.err").write_text("working...\n", encoding="utf-8")
+        assert run.go(audits=[self._found("NOT REPRODUCED")]) == 0
+        cut = d / "cut"
+        assert (cut / "01-audit.reason").read_text(encoding="utf-8").strip() == "interrupted"
+        assert (cut / "01-audit.claude.json").read_text(encoding="utf-8") == '{"partial": true}'
+        summary = json.loads((run.out / "summary.json").read_text(encoding="utf-8"))
+        assert (summary["sessions"], summary["cut_sessions"]) == (1, 1)
+
+    def test_a_cut_session_is_counted_with_its_usage(self, run: Any) -> None:
+        """[실측] 호출은 2번인데 요약은 1번 · 한 번분 사용량이었다 - 공개할 비용이 줄어든다."""
+        assert run.go(error_at=0) == ca.HUMAN
+        assert run.go() == 0
+        summary = json.loads((run.out / "summary.json").read_text(encoding="utf-8"))
+        assert (summary["sessions"], summary["cut_sessions"]) == (1, 1)
+        assert summary["cut_usage"] == {
+            "input_tokens": 10, "cache_read_input_tokens": 5, "output_tokens": 3,
+        }
+
+    def test_a_broken_repro_harness_stops_before_any_call(
+        self, run: Any, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """🔴 [실측] sandbox 가 깨지면 모든 재현이 「재현 안 됨」으로 굳고 빈 목록이 rc 0 이었다."""
+        broken = _script(run.fakes / "codex-broken", (
+            "import sys\nprint('Error: error loading config.toml', file=sys.stderr)\n"
+            "sys.exit(1)\n"
+        ))
+        monkeypatch.setattr(ca.xa, "CODEX", broken)
+        assert run.go(audits=[self._found("REPRODUCED")]) == ca.HUMAN
+        assert self._calls(run) == 0
+        assert not (run.out / "RUN.json").exists()
 
     def test_the_audit_waits_for_the_measurement(
         self, run: Any, monkeypatch: pytest.MonkeyPatch

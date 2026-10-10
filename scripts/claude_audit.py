@@ -32,15 +32,13 @@ from collections import Counter
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from codeproof_ai.cli import _agent_sections
+from codeproof_ai.cli import _xauthor_measured
 from codeproof_ai.corpus.decoy import pair_dirs
-from codeproof_ai.eval import crossauthor
-from codeproof_ai.eval.loader import load_decoy_samples
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import xauthor as xa
 import xauthor_run as xr
-from agent_output import _models_in
+from agent_output import _models_in, pinned_problem
 from cross_family_prompt import build as audit_prompt
 
 if TYPE_CHECKING:
@@ -54,6 +52,8 @@ JUDGE_HEAD_SHA256 = "39878ddfc4d5245998eebff95cb03453e8a0124157a6cba67836d35eadd
 MODELS = xr.MODELS
 CORPUS = REPO / "corpus" / "xauthor" / "codex"
 AGENTS = REPO / "results" / "xauthor" / "agent"
+REFERENCE = (REPO / "corpus" / "decoys", REPO / "results" / "agent")
+"""견줄 측정 (목표 150쌍) - `xauthor-report` 의 기본값과 같다."""
 ISSUES = REPO / "results" / "xauthor" / "label-issues"
 CANARY = REPO / "corpus" / "decoys"
 CANARY_PAIR = "D115"
@@ -73,8 +73,16 @@ FLAGS = (
     "--permission-mode", "dontAsk", "--tools", "", "--output-format", "json",
 )
 """리뷰 실행기와 같은 격리 (review-with-agent.sh) - 도구만 없다. 코드는 프롬프트에 있다."""
+SWITCHES = {
+    "DISABLE_AUTOUPDATER": "1",
+    "CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK": "1",
+    "CLAUDE_CODE_DISABLE_REFUSAL_RETRY": "1",
+}
+"""CLI 의 동작을 바꾸는 환경 변수. 🔴 거절을 감추는 두 길을 끈다 [소스: 2.1.284 바이너리 문자열] -
+거절 대체(`hL()` - 거절된 턴을 다른 모델로 다시 돈다)와 같은 모델 재시도(`qi()` - 한 번 더
+이어 돈다). 켜 두면 거절이 1급 기록으로 남지 않고 필터를 넘긴 답이 실린다."""
 SIGNED = (
-    "cli", "model", "effort", "flags", "audit_head_sha256", "audit_schema_sha256",
+    "cli", "model", "effort", "flags", "env", "audit_head_sha256", "audit_schema_sha256",
     "judge_head_sha256", "judge_schema_sha256", "prompt_builder_sha256", "profile",
 )
 """실행을 가르는 항목 - 이어 돌 때 하나라도 다르면 멈춘다 (A2b 와 같은 원칙)."""
@@ -92,7 +100,7 @@ def environment() -> dict[str, str]:
     user = getpass.getuser()
     return {
         "PATH": "/usr/bin:/bin", "HOME": str(Path.home()), "USER": user, "LOGNAME": user,
-        "LANG": "en_US.UTF-8", "TMPDIR": tempfile.gettempdir(), "DISABLE_AUTOUPDATER": "1",
+        "LANG": "en_US.UTF-8", "TMPDIR": tempfile.gettempdir(), **SWITCHES,
     }
 
 
@@ -109,16 +117,16 @@ def accepted_model() -> str:
     return str(xr._load(MODELS)["claude"]["model"])
 
 
-def measured_model(corpus: Path, agents: Path) -> str | None:
-    """측정이 끝났으면 claude 묶음의 모델 - 두 리뷰어가 코퍼스의 쌍 전부를 잰 때만. 아니면 None.
+def measured_model(
+    corpus: Path, agents: Path, reference: tuple[Path, Path] = REFERENCE
+) -> str | None:
+    """측정이 끝났으면 claude 묶음의 모델 - `xauthor-report` 가 받아들일 측정일 때만. 아니면 None.
 
-    「끝났다」는 `xauthor-report` 와 같은 재생으로 잰다 (`_agent_sections` · `crossauthor.pick`).
+    🔴 보고서와 같은 판정 하나를 쓴다 (`_xauthor_measured` - 묶음 수 · 3회 · 손잡이 · 쌍 전부 ·
+       설정). 라벨 문제 목록은 이 감사가 만드는 것이라 비워서 묻는다.
     """
-    samples = load_decoy_samples(corpus)
-    pair = crossauthor.pick(_agent_sections(agents, samples) or [], crossauthor.DOCSTRINGS)
-    if pair is None or any(x.unmeasured_pairs for x in pair):
-        return None
-    return dict(pair[0].setup).get("model")
+    got = _xauthor_measured(corpus, agents, reference, {})
+    return None if got is None else dict(got[0][0].setup).get("model")
 
 
 def answer(envelope: object, model: str, key: str) -> dict[str, Any]:
@@ -132,9 +140,8 @@ def answer(envelope: object, model: str, key: str) -> dict[str, Any]:
     if envelope.get("is_error"):
         detail = f"{envelope.get('subtype')} {str(envelope.get('result'))[:200]}"
         raise ValueError(f"is_error: {detail}")
-    seen = _models_in(envelope)
-    if model not in seen:
-        raise ValueError(f"고정한 모델이 답하지 않았다: 고정={model} 응답={sorted(seen)}")
+    if reason := pinned_problem(envelope, model):
+        raise ValueError(reason)
     out = envelope.get("structured_output")
     if not (isinstance(out, dict) and isinstance(out.get(key), list)):
         raise ValueError(f"스키마 모양의 답({key})이 없다")
@@ -166,11 +173,15 @@ def session(
     """claude 한 번 - 끝난 세션은 다시 부르지 않는다. 읽지 못한 답은 세지 않고 사람에게 넘긴다.
 
     🔴 거절(`stop_reason: refusal`)은 1급 기록이다 (D5) - 끝난 세션으로 남기고 다시 묻지 않는다.
+    🔴 하네스가 끊겨 남은 흔적(봉투 · stderr)은 덮지 않고 cut/ 으로 옮긴다 - 원본을 전부 남기고,
+       요약이 그 호출도 센다 (xauthor_run.session 과 같다).
     """
     record = d / f"{step}.json"
     if record.exists():
         return dict(xr._load(record))
     raw, err, last = (d / f"{step}{s}" for s in (".claude.json", ".err", ".last.json"))
+    if raw.exists():
+        xr.abandon(d, step, "interrupted", Path(), None)
     (d / f"{step}.prompt.md").write_text(prompt, encoding="utf-8")
     box = Path(tempfile.mkdtemp(prefix="claude-audit-"))
     started = time.time()
@@ -272,13 +283,35 @@ def write_issues(root: Path, found: dict[str, list[str]], refused: list[str]) ->
         path.write_text(body, encoding="utf-8")
 
 
+def _cut(d: Path, usage: Counter[str]) -> int:
+    """cut/ 으로 옮긴 세션 수 - 봉투를 읽을 수 있으면 그 사용량도 더한다 (호출은 났다)."""
+    reasons = sorted((d / "cut").glob("*.reason")) if (d / "cut").is_dir() else []
+    for q in reasons:
+        try:
+            envelope = json.loads(q.with_suffix(".claude.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        for k, v in ((envelope.get("usage") or {}) if isinstance(envelope, dict) else {}).items():
+            if isinstance(v, int):
+                usage[k] += v
+    return len(reasons)
+
+
 def summarize(out: Path) -> dict[str, Any]:
-    """세션 · 지적 · 재현 · 판정 · 두 판정자의 일치 - 사용량은 필드마다 따로 더한다 (D2)."""
+    """세션 · 지적 · 재현 · 판정 · 두 판정자의 일치 - 사용량은 필드마다 따로 더한다 (D2).
+
+    `sessions` 는 기록된 세션, `cut_sessions` 는 cut/ 으로 옮긴 호출 (읽지 못한 답 · 시간 초과 ·
+    끊김)이다 - 둘 다 구독 사용량이라 `cut_usage` 를 따로 싣는다.
+    """
     usage: Counter[str] = Counter()
+    cut_usage: Counter[str] = Counter()
     verdicts: dict[str, Counter[str]] = {j: Counter() for j in JUDGES}
-    pairs = findings = reproduced = agree = compared = sessions = 0
+    pairs = findings = reproduced = agree = compared = sessions = cut_sessions = 0
     refused: list[str] = []
-    for d in sorted(p for p in out.iterdir() if (p / "audit.json").is_file()):
+    for d in sorted(p for p in out.iterdir() if p.is_dir()):
+        cut_sessions += _cut(d, cut_usage)
+        if not (d / "audit.json").is_file():
+            continue
         pairs += 1
         recs = {s: xr._load(d / f"{s}.json") for s in ("audit", *(f"judge-{j}" for j in JUDGES))
                 if (d / f"{s}.json").is_file()}
@@ -300,9 +333,11 @@ def summarize(out: Path) -> dict[str, Any]:
                 compared += 1
                 agree += a["verdict"] == b["verdict"]
     return {
-        "pairs": pairs, "sessions": sessions, "findings": findings, "reproduced": reproduced,
+        "pairs": pairs, "sessions": sessions, "cut_sessions": cut_sessions,
+        "findings": findings, "reproduced": reproduced,
         "verdicts": {j: dict(c) for j, c in verdicts.items()},
         "agreement": f"{agree}/{compared}", "refused": refused, "usage": dict(usage),
+        "cut_usage": dict(cut_usage),
     }
 
 
@@ -321,6 +356,7 @@ def cli_version() -> str:
 def signed(model: str) -> dict[str, str]:
     return {
         "cli": CLAUDE_VERSION, "model": model, "effort": EFFORT, "flags": " ".join(FLAGS),
+        "env": " ".join(f"{k}={v}" for k, v in sorted(SWITCHES.items())),
         "audit_head_sha256": xr._sha256(xr.AUDIT_HEAD),
         "audit_schema_sha256": xr._sha256(xr.AUDIT_SCHEMA),
         "judge_head_sha256": xr._sha256(JUDGE_HEAD),
@@ -330,8 +366,19 @@ def signed(model: str) -> dict[str, str]:
     }
 
 
-def preflight(out: Path, model: str, *, canary: bool) -> None:
-    """고정 문서 · venv · RUN.json - 하나라도 어긋나면 시작하지 않는다."""
+def harness_reproduces(pair: Path) -> bool:
+    """재현 하네스 자기 점검 (모델 없이) - REPRODUCED 만 찍는 스크립트가 재현돼야 한다.
+
+    🔴 sandbox · venv 가 깨지면 모든 재현이 「재현 안 됨」으로 기록되고, 판정 없이 빈 목록이
+       굳는다 (판정은 한 번이다). 감사는 2단계에서 며칠 뒤 돈다 - 시작 전에 한 번 본다.
+    """
+    probe = {"kind": "probe", "lines": "1", "summary": "-", "evidence": "-",
+             "repro": 'print("REPRODUCED")\n'}
+    return bool(xr.repro_one(pair, probe, VENV)["reproduced"])
+
+
+def preflight(out: Path, model: str, *, canary: bool, probe: Path) -> None:
+    """고정 문서 · venv · 재현 하네스 · RUN.json - 하나라도 어긋나면 시작하지 않는다."""
     if (found := cli_version()) != CLAUDE_VERSION:
         raise Stop(HUMAN, f"claude 판이 다르다: {found!r} (선언 {CLAUDE_VERSION})")
     fixed = (xr._sha256(xr.AUDIT_HEAD), xr._sha256(JUDGE_HEAD))
@@ -339,6 +386,9 @@ def preflight(out: Path, model: str, *, canary: bool) -> None:
         raise Stop(HUMAN, "고정 문서가 커밋한 판과 다르다 - audit_head.md · judge_head.md")
     if not (VENV / "bin" / "python").exists():
         raise Stop(HUMAN, f"재현 venv 가 없다 - {VENV}")
+    if not harness_reproduces(probe):
+        why = "재현 하네스가 확실한 재현을 재현하지 못했다 - codex sandbox · venv 를 본다"
+        raise Stop(HUMAN, why)
     fields = signed(model)
     run_json = out / "RUN.json"
     if run_json.exists():
@@ -382,7 +432,9 @@ def run(
             if got != model:
                 raise Stop(HUMAN, f"측정한 claude({got}) 와 받아들인 모델({model}) 이 다르다")
             pairs = pair_dirs(corpus)
-        preflight(out, model, canary=canary)
+        if not pairs:
+            raise Stop(HUMAN, "감사할 쌍이 없다")
+        preflight(out, model, canary=canary, probe=pairs[0])
         for pair in pairs:
             run_pair(pair, out, model)
         summary = summarize(out)

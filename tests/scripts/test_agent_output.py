@@ -113,6 +113,16 @@ class TestClaudeModelIsPinned:
         with pytest.raises(ao.RefusedError, match="고정한 모델이 답하지 않았다"):
             ao.extract_claude(_envelope("claude-opus-5-5"), "claude-fable-5-1")
 
+    def test_a_second_model_beside_the_pinned_one_is_refused(self) -> None:
+        """🔴 거절 대체 - 고정 모델이 거절한 턴을 다른 모델이 이어 답하면 두 모델이 다 든다."""
+        env = _envelope()
+        env["modelUsage"] = {
+            "claude-fable-5-1": {"outputTokens": 0, "canonicalModel": "claude-fable-5-1"},
+            "claude-opus-4-8": {"outputTokens": 3},
+        }
+        with pytest.raises(ao.RefusedError, match="고정한 모델 밖의 모델도 답했다"):
+            ao.extract_claude(env, "claude-fable-5-1")
+
     def test_error_envelope_is_refused(self) -> None:
         with pytest.raises(ao.RefusedError, match="is_error"):
             ao.extract_claude(_envelope(is_error=True), "claude-fable-5-1")

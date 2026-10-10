@@ -1536,10 +1536,31 @@ def _cmd_xauthor_report(
             return 1
         print(f"{agents} 에 묶음이 없다 - 측정 전이라 낼 것이 없다")
         return 0
+    found = _label_issues(issues)
+    got = _xauthor_measured(corpus, agents, reference, found)
+    if got is None:
+        return 2
+    pair, samples, ref = got
+    body = crossauthor.render(pair, samples, ref, found, corpus=str(corpus), where=str(issues))
+    return _emit_generated(body, out, check=check, command="xauthor-report")
+
+
+def _xauthor_measured(
+    corpus: Path, agents: Path, reference: tuple[Path, Path],
+    issues: Mapping[str, frozenset[str]],
+) -> tuple[
+    tuple[AgentSection, AgentSection], list[LabeledSample],
+    tuple[tuple[AgentSection, AgentSection], list[LabeledSample]],
+] | None:
+    """측정이 선언대로 다 찼는가 - 아니면 이유를 찍고 None.
+
+    🔴 `xauthor-report` 와 측정 뒤 claude 감사(`scripts/claude_audit.py`)가 이 판정 하나를 쓴다 -
+       감사가 더 느슨하면 보고서가 「미완」으로 거절할 측정 위에서 유료 감사가 돈다.
+    """
     samples = load_decoy_samples(corpus)
     sections = _agent_sections(agents, samples)
     if sections is None:
-        return 2
+        return None
     pair = crossauthor.pick(sections)
     if pair is None or len(sections) != len(pair):
         print(
@@ -1547,17 +1568,15 @@ def _cmd_xauthor_report(
             f"(지금 {len(sections)}개) - 채점은 둘 다 찬 뒤 한 번이다",
             file=sys.stderr,
         )
-        return 2
+        return None
     ref = _reference_pair(*reference, docstrings=pair[0].docstrings)
-    found = _label_issues(issues)
-    problems = crossauthor.problems(pair, ref[0], samples, found) if ref else []
+    problems = crossauthor.problems(pair, ref[0], samples, issues) if ref else []
     if ref is None or problems:
         print("🔴 선언과 다른 입력이다 - 「미완」이고 값을 내지 않는다", file=sys.stderr)
         for line in problems:
             print(f"  - {line}", file=sys.stderr)
-        return 2
-    body = crossauthor.render(pair, samples, ref, found, corpus=str(corpus), where=str(issues))
-    return _emit_generated(body, out, check=check, command="xauthor-report")
+        return None
+    return pair, samples, ref
 
 
 def _reference_pair(
