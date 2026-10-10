@@ -122,6 +122,29 @@ def _models_in(envelope: dict[str, object]) -> set[str]:
     return out
 
 
+def pinned_problem(envelope: dict[str, object], model: str) -> str | None:
+    """🔴 고정한 모델 **하나만** 답해야 한다 - 아니면 그 이유 (호출부가 실패로 센다).
+
+    고정한 모델이 있는지만 보면 거절 대체의 답이 고정 모델의 답으로 실린다 - CLI 가 거절된
+    턴을 다른 모델로 다시 돌리면 modelUsage 에 두 모델이 다 든다 [소스: claude-code 2.1.284
+    바이너리 문자열 `hL()` · `XCo()` - 끄는 환경 변수가 없으면 켜져 있다]. 항목마다 모델 하나로
+    센다 (canonicalModel). [실측 · 목표 150쌍 claude 원본 1862개] 전부 고정 모델 한 항목이었다 -
+    보조 모델이 섞인 적이 없다.
+    """
+    usage = envelope.get("modelUsage")
+    seen = {
+        str(entry["canonicalModel"]) if isinstance(entry, dict) and entry.get("canonicalModel")
+        else str(key)
+        for key, entry in (usage.items() if isinstance(usage, dict) else ())
+    }
+    if model not in seen:
+        return f"고정한 모델이 답하지 않았다: 고정={model} 응답={sorted(seen)}"
+    if seen != {model}:
+        why = "고정한 모델 밖의 모델도 답했다 (거절 대체일 수 있다)"
+        return f"{why}: 고정={model} 응답={sorted(seen)}"
+    return None
+
+
 def resolve_claude(envelope: dict[str, object]) -> str:
     """`--model best`(또는 별칭) 호출의 응답에서 실제로 답한 모델 ID.
 
@@ -277,9 +300,8 @@ def extract_claude(envelope: dict[str, object], model: str) -> tuple[dict[str, o
         detail = f"{envelope.get('subtype')} {str(envelope.get('result'))[:200]}"
         raise RefusedError(f"is_error: {detail}")
     # 🔴 다른 모델이 답했으면 측정 대상이 바뀐 것이다 (D5 의 fallbacks 와 같은 이유).
-    seen = _models_in(envelope)
-    if model not in seen:
-        raise RefusedError(f"고정한 모델이 답하지 않았다: 고정={model} 응답={sorted(seen)}")
+    if reason := pinned_problem(envelope, model):
+        raise RefusedError(reason)
     payload = envelope.get("structured_output")
     if not (isinstance(payload, dict) and isinstance(payload.get("findings"), list)):
         payload = last_findings_object(str(envelope.get("result") or ""))

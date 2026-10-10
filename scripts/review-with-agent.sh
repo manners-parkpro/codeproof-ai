@@ -42,7 +42,8 @@
 #    ACCEPT_MODEL_CHANGE=1 로 기준을 옮기거나 --model 로 명시한다. 해석된 모델의
 #    설명(codex 는 카탈로그 설명)은 RUN.json 의 model_note 에 남는다.
 #    호출마다 해석하면 실행 도중 새 모델이 나올 때 한 실행이 두 모델로 갈린다.
-#    claude 는 호출마다 modelUsage 를 대조해 다른 모델이 답했으면 실패로 센다.
+#    claude 는 호출마다 modelUsage 를 대조해 고정 모델 하나만 답하지 않았으면 실패로 센다
+#    (거절 대체는 고정 모델 옆에 다른 모델을 싣는다 - agent_output.pinned_problem).
 #
 # 🔴 출력 스키마는 **model_api 와 같은 것**을 강제한다 (export 의 SCHEMA.json).
 #
@@ -115,6 +116,12 @@ for f in PROMPT.md SCHEMA.json MANIFEST.json; do
   [[ -f "$IN/$f" ]] || die "$IN/$f 가 없다 - codeproof export 를 (다시) 돌린다"
 done
 command -v "$AGENT" > /dev/null || die "$AGENT 를 찾을 수 없다"
+# 🔴 CLI 를 시작 때 절대 경로로 한 번 고정한다 - 판 확인 · 모델 해석 · 리뷰가 같은 실행 파일을 부른다.
+#    PATH 에 상대 항목이 있으면 리뷰를 도는 상자(cwd)에서 다른 CLI 가 풀리는데, RUN.json 에는 저장소에서
+#    확인한 판이 적혔다 [실측: 저장소 cwd 는 고정판 · 상자 cwd 는 PATH 다음의 전역판 · 절대 경로면 고정판].
+#    리뷰 호출은 그대로다 - 절대 경로 PATH 에서는 같은 실행 파일이라 RUNNER_VERSION 을 올리지 않는다.
+CLI=$(command -v "$AGENT")
+[[ $CLI == /* ]] || CLI="$(cd "$(dirname "$CLI")" && pwd)/${CLI##*/}"
 command -v python3 > /dev/null || die "python3 를 찾을 수 없다"
 # 🔴 macOS 에는 GNU timeout 이 없다 [실측: CI macOS] - 없으면 perl 의 alarm 으로 같은 상한을 건다.
 #    면접관 경로(codeproof review --agent)가 이 실행기를 부르므로 coreutils 를 요구하지 않는다.
@@ -149,7 +156,7 @@ python3 "$HELPER" digests "$IN/MANIFEST.json" "$IN" > /dev/null \
   || die "$IN/MANIFEST.json 에 샘플 지문이 없다 - codeproof export 를 다시 돌린다"
 
 cli_version() {
-  "$AGENT" --version 2>/dev/null | head -1 | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+' | head -1
+  "$CLI" --version 2>/dev/null | head -1 | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+' | head -1
 }
 
 case $AGENT in
@@ -198,7 +205,7 @@ resolve_model() {
       local box probe
       box=$(mktemp -d)
       probe="$OUT/raw/_resolve"
-      ( cd "$box" && DISABLE_AUTOUPDATER=1 timeout 120 claude -p 'Reply with the single word: ok' \
+      ( cd "$box" && DISABLE_AUTOUPDATER=1 timeout 120 "$CLI" -p 'Reply with the single word: ok' \
           --model "${MODEL:-best}" --effort low --safe-mode --strict-mcp-config \
           --no-session-persistence --permission-mode dontAsk --tools "" \
           --output-format json < /dev/null > "$probe.claude.json" 2> "$probe.err" )
@@ -207,7 +214,7 @@ resolve_model() {
       ;;
     codex)
       # 해석에 쓴 카탈로그를 남긴다 - 같은 CLI 버전에서도 원격 카탈로그는 바뀐다.
-      timeout 120 codex debug models 2> "$OUT/raw/_resolve.err" > "$OUT/raw/_resolve.codex.json" \
+      timeout 120 "$CLI" debug models 2> "$OUT/raw/_resolve.err" > "$OUT/raw/_resolve.codex.json" \
         || return 1
       python3 "$HELPER" resolve-codex "$EFFORT" ${MODEL:+"$MODEL"} < "$OUT/raw/_resolve.codex.json"
       ;;
@@ -219,7 +226,7 @@ resolve_model() {
       printf '%s\n' "$box" > "$OUT/raw/_resolve.box"   # 감사가 상자 안 경로를 밖으로 세지 않게
       gemini_home "$gh" "$want" || return 1
       ( cd "$box" && HOME="$gh" GEMINI_CLI_SYSTEM_SETTINGS_PATH="$gh/system/settings.json" \
-          NO_BROWSER=true timeout 120 gemini -p 'Reply with the single word: ok' -m "$want" \
+          NO_BROWSER=true timeout 120 "$CLI" -p 'Reply with the single word: ok' -m "$want" \
           "${GEMINI_FLAGS[@]}" < /dev/null > "$OUT/raw/_resolve.gemini.jsonl" 2> "$OUT/raw/_resolve.err" )
       rm -rf "$box" "$gh"
       python3 "$HELPER" resolve-gemini "$OUT/raw/_resolve.gemini.jsonl" "$want"
@@ -283,14 +290,14 @@ run_agent() {  # $1=상자  $2=원본 접두사
   printf '%s\n' "$box" > "$rp.box"
   case $AGENT in
     claude)
-      ( cd "$box" && DISABLE_AUTOUPDATER=1 timeout "$TIMEOUT" claude -p "$PROMPT" \
+      ( cd "$box" && DISABLE_AUTOUPDATER=1 timeout "$TIMEOUT" "$CLI" -p "$PROMPT" \
           --model "$RESOLVED" --effort "$EFFORT" \
           --safe-mode --strict-mcp-config --no-session-persistence \
           --permission-mode dontAsk --tools Read,Grep,Glob \
           --output-format json --json-schema "$SCHEMA" \
           < /dev/null > "$rp.claude.json" 2> "$rp.err" ) ;;
     codex)
-      ( cd "$box" && timeout "$TIMEOUT" codex exec \
+      ( cd "$box" && timeout "$TIMEOUT" "$CLI" exec \
           --ignore-user-config --ignore-rules --ephemeral --skip-git-repo-check \
           --sandbox read-only --color never \
           -m "$RESOLVED" -c "model_reasoning_effort=\"$EFFORT\"" \
@@ -302,7 +309,7 @@ run_agent() {  # $1=상자  $2=원본 접두사
       local gh; gh=$(mktemp -d)
       gemini_home "$gh" "$RESOLVED" || { echo "gemini HOME 을 만들지 못했다" > "$rp.err"; return; }
       ( cd "$box" && HOME="$gh" GEMINI_CLI_SYSTEM_SETTINGS_PATH="$gh/system/settings.json" \
-          NO_BROWSER=true timeout "$TIMEOUT" gemini -p "$PROMPT" -m "$RESOLVED" \
+          NO_BROWSER=true timeout "$TIMEOUT" "$CLI" -p "$PROMPT" -m "$RESOLVED" \
           "${GEMINI_FLAGS[@]}" < /dev/null > "$rp.gemini.jsonl" 2> "$rp.err" )
       rm -rf "$gh" ;;
   esac

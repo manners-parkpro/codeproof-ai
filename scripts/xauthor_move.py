@@ -10,7 +10,8 @@
 
 🔴 claude 는 측정 전에 쌍 내용에 관여하지 않는다 - 저자가 남긴 final/ 의 쌍 파일 다섯만
    바이트 그대로 복사한다. 덧붙은 메모 · __pycache__ 는 작성 기록에 남는다.
-🔴 옮기기는 한 번이다 - 쌍이 있는 코퍼스에는 쓰지 않는다. 임시 폴더에 다 쓴 뒤 이름을 바꾼다.
+🔴 옮기기는 한 번이다 - 쌍이 있는 코퍼스에는 쓰지 않는다. 임시 폴더에 다 쓴 뒤 이름을 바꾸고,
+   깨지면 임시 폴더를 지운다 (코퍼스 옆의 숨은 폴더는 git 이 무시하지 않는다).
 """
 
 from __future__ import annotations
@@ -43,8 +44,11 @@ def complete_kinds(stage2: Path) -> list[str]:
     return [k for k in kinds if xr.alive(k, 2 + xr.ROUNDS, stage2)]
 
 
-def select(stage1: Path, stage2: Path) -> dict[str, list[Path]]:
-    """분류마다 받아들인 쌍의 기록을 바퀴 순으로 - 선언과 다르면 멈춘다 (「미완」)."""
+def select(stage1: Path, stage2: Path) -> dict[str, list[tuple[Path, Path]]]:
+    """분류마다 받아들인 쌍의 (기록, final/ 의 쌍 폴더)를 바퀴 순으로 - 선언과 다르면 멈춘다.
+
+    쌍 폴더도 여기서 찾는다 - `--check` 가 통과했는데 복사가 중간에 멈추지 않게.
+    """
     if not (stage2 / "summary.json").is_file():
         why = "2단계가 끝나지 않았다 - summary.json 이 없다 (끝났는지 「미완」인지 본다)"
         raise Stop(xr.HUMAN, why)
@@ -52,14 +56,14 @@ def select(stage1: Path, stage2: Path) -> dict[str, list[Path]]:
     if len(kinds) < MIN_KINDS:
         raise Stop(xr.STOP, f"8쌍을 채운 분류가 {len(kinds)}개다 - {MIN_KINDS} 미만이라 「미완」")
     records = [*xr.pair_dirs(stage1), *xr.pair_dirs(stage2)]
-    chosen: dict[str, list[Path]] = {}
+    chosen: dict[str, list[tuple[Path, Path]]] = {}
     for kind in kinds:
         mine = [d for d in records if xr.pair_kind(d) == kind and xr.outcome_of(d) == "accepted"]
         mine.sort(key=xr.pair_round)
         if [xr.pair_round(d) for d in mine] != list(ROUNDS):
             got = [xr.pair_round(d) for d in mine]
             raise Stop(xr.HUMAN, f"{kind} 의 받아들인 쌍이 바퀴마다 하나가 아니다: {got}")
-        chosen[kind] = mine
+        chosen[kind] = [(d, source(d)) for d in mine]
     return chosen
 
 
@@ -71,32 +75,36 @@ def source(record: Path) -> Path:
     return found[0]
 
 
-def move(chosen: dict[str, list[Path]], target: Path, manifest: Path) -> list[dict[str, Any]]:
-    """쌍 파일만 복사하고 해시를 대조한다 - 다 쓴 뒤에 이름을 바꾼다."""
+def move(
+    chosen: dict[str, list[tuple[Path, Path]]], target: Path, manifest: Path
+) -> list[dict[str, Any]]:
+    """쌍 파일만 복사하고 해시를 대조한다 - 다 쓴 뒤에 이름을 바꾸고, 깨지면 임시 폴더를 지운다."""
     if target.exists() and any(target.iterdir()):
         raise Stop(xr.HUMAN, f"{target} 가 비어 있지 않다 - 옮기기는 한 번이다")
     tmp = target.with_name(f".{target.name}.moving")
     shutil.rmtree(tmp, ignore_errors=True)
     rows = []
-    for kind, records in chosen.items():
-        for record in records:
-            src = source(record)
-            dest = tmp / src.name
-            dest.mkdir(parents=True)
-            files = {}
-            for name in xr.PAIR_FILES:
-                shutil.copyfile(src / name, dest / name)
-                files[name] = xr._sha256(dest / name)
-                if files[name] != xr._sha256(src / name):
-                    raise Stop(xr.HUMAN, f"{dest / name} 가 원본과 다르다")
-            rows.append({
-                "pair": src.name, "kind": kind, "round": xr.pair_round(record),
-                "record": f"{record.parent.name}/{record.name}", "files": files,
-            })
-    if target.exists():
-        target.rmdir()
-    target.parent.mkdir(parents=True, exist_ok=True)
-    tmp.rename(target)
+    try:
+        for kind, pairs in chosen.items():
+            for record, src in pairs:
+                dest = tmp / src.name
+                dest.mkdir(parents=True)
+                files = {}
+                for name in xr.PAIR_FILES:
+                    shutil.copyfile(src / name, dest / name)
+                    files[name] = xr._sha256(dest / name)
+                    if files[name] != xr._sha256(src / name):
+                        raise Stop(xr.HUMAN, f"{dest / name} 가 원본과 다르다")
+                rows.append({
+                    "pair": src.name, "kind": kind, "round": xr.pair_round(record),
+                    "record": f"{record.parent.name}/{record.name}", "files": files,
+                })
+        if target.exists():
+            target.rmdir()
+        target.parent.mkdir(parents=True, exist_ok=True)
+        tmp.rename(target)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)  # 이름을 바꾼 뒤에는 없다
     xr._json(manifest, {
         "what": "DESIGN §7.10d - codex 가 쓴 쌍을 코퍼스로 (scripts/xauthor_move.py · 복사만)",
         "pairs": rows,
@@ -111,7 +119,7 @@ def main(argv: list[str]) -> int:
     try:
         chosen = select(STAGE1, STAGE2)
         for kind, records in chosen.items():
-            print(f"{kind}: " + " · ".join(f"{d.parent.name}/{d.name}" for d in records))
+            print(f"{kind}: " + " · ".join(f"{d.parent.name}/{d.name}" for d, _ in records))
         if argv:
             return xr.DONE
         rows = move(chosen, TARGET, MANIFEST)

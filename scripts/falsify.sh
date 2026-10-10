@@ -104,6 +104,11 @@ SCENARIOS=(layering runner registry registry-derived sdk-lazy falsify-shard proo
            xauthor-move-accepted xauthor-move-complete xauthor-move-min-kinds xauthor-move-ended
            xauthor-move-overwrite xauthor-move-pair-files xauthor-run-idle-calls
            xauthor-publish-mask-home xauthor-publish-secret xauthor-run-amend
+           claude-audit-no-fallback claude-audit-no-retry claude-audit-interrupted claude-audit-cut-count claude-audit-harness claude-audit-measured-gate claude-audit-measured-count pinned-single-model
+           xauthor-move-rounds xauthor-move-source xauthor-move-check-sources xauthor-move-hash xauthor-move-cleanup
+           xauthor-publish-escaped xauthor-publish-quoted xauthor-publish-user xauthor-publish-residual xauthor-publish-account-id
+           xauthor-publish-email-escape xauthor-publish-example-case xauthor-publish-worktree xauthor-publish-home-account
+           xauthor-publish-roots xauthor-publish-duplicate xauthor-publish-staging xauthor-publish-blocked runner-cli-absolute xauthor-min-kinds-pin
            explorer-said-run explorer-verdict-check explorer-marks explorer-every-pair data-stale
            ruff-rules-empty highlights-leader highlights-shaky highlights-trade landing-ruff-pin
            landing-ruff-sri landing-inline-script serve-origin serve-host serve-json serve-one-at-a-time
@@ -1102,7 +1107,7 @@ claim_gemini-blocked() { echo "gemini 의 막힌 답(status=error)은 지적 0�
 break_gemini-blocked() { perl -0pi -e 's/    if result\.get\("status"\) != "success":/    if False:/' "$_AO"; }
 guard_gemini-blocked() { uv run pytest "$_GT" -q -k blocked_answer; }
 
-claim_xauthor-s2-constants() { echo "2단계 선언 수치(일곱 바퀴 · 10분류 · 창 스무 개)는 시험이 고정한다 (§7.10d 2단계)"; }
+claim_xauthor-s2-constants() { echo "2단계 선언 수치(일곱 바퀴 · 8분류 · 창 스무 개)는 시험이 고정한다 (§7.10d 2단계 · 수집 중 보정 2026-10-09)"; }
 break_xauthor-s2-constants() { perl -0pi -e 's/^ROUNDS = 7 /ROUNDS = 70 /m' "$_XR"; }
 guard_xauthor-s2-constants() { uv run pytest tests/scripts/test_xauthor_run.py -q -k declared_stage2_numbers; }
 
@@ -1173,8 +1178,8 @@ _CA=scripts/claude_audit.py
 _CAT=tests/scripts/test_claude_audit.py
 
 claim_claude-audit-model() { echo "claude 감사는 고정한 모델의 답만 싣는다 — 다른 모델의 감사가 claude 측정의 감사로 실린다 (§7.10d 측정 뒤 · D5)"; }
-break_claude-audit-model() { perl -0pi -e 's/    if model not in seen:\n/    if False:\n/' "$_CA"; }
-guard_claude-audit-model() { uv run pytest "$_CAT" -q -k another_model; }
+break_claude-audit-model() { perl -0pi -e 's/    if reason := pinned_problem\(envelope, model\):\n        raise ValueError\(reason\)\n//' "$_CA"; }
+guard_claude-audit-model() { uv run pytest "$_CAT" -q -k "another_model or second_model"; }
 
 claim_claude-audit-coverage() { echo "판정자는 지적마다 한 번씩 판정해야 읽는다 — 빠진 판정은 「IN 아님」으로 읽혀 라벨 문제가 사라진다 (§7.10d 측정 뒤)"; }
 break_claude-audit-coverage() { perl -0pi -e 's/    if sorted\(v\["finding"\] for v in items\) != list\(range\(1, count \+ 1\)\):\n/    if False:\n/' "$_CA"; }
@@ -1208,6 +1213,38 @@ claim_claude-audit-version() { echo "claude 감사는 격리 설치한 측정 �
 break_claude-audit-version() { perl -0pi -e 's/    if \(found := cli_version\(\)\) != CLAUDE_VERSION:\n/    if False:\n/' "$_CA"; }
 guard_claude-audit-version() { uv run pytest "$_CAT" -q -k another_cli_version; }
 
+claim_claude-audit-no-fallback() { echo "claude 감사는 거절 대체를 끈다 — 켜 두면 거절된 턴을 다른 모델이 다시 돌아 거절이 기록에 남지 않는다 (D5 · 2.1.284)"; }
+break_claude-audit-no-fallback() { perl -0pi -e 's/    "CLAUDE_CODE_DISABLE_REFUSAL_FALLBACK": "1",\n//' "$_CA"; }
+guard_claude-audit-no-fallback() { uv run pytest "$_CAT" -q -k refusal_fallback_and_retry; }
+
+claim_claude-audit-no-retry() { echo "claude 감사는 같은 모델 거절 재시도를 끈다 — 켜 두면 거절된 요청을 한 번 더 이어 돌아 필터를 넘긴 답만 실린다 (D5 · 2.1.284)"; }
+break_claude-audit-no-retry() { perl -0pi -e 's/    "CLAUDE_CODE_DISABLE_REFUSAL_RETRY": "1",\n//' "$_CA"; }
+guard_claude-audit-no-retry() { uv run pytest "$_CAT" -q -k refusal_fallback_and_retry; }
+
+claim_claude-audit-interrupted() { echo "하네스가 끊겨 남은 세션 흔적은 덮지 않고 cut/ 으로 옮긴다 — 원본 봉투를 전부 남기고 그 호출도 센다 (§7.10d 측정 뒤)"; }
+break_claude-audit-interrupted() { perl -0pi -e 's/    if raw\.exists\(\):\n        xr\.abandon\(d, step, "interrupted", Path\(\), None\)\n//' "$_CA"; }
+guard_claude-audit-interrupted() { uv run pytest "$_CAT" -q -k cut_short; }
+
+claim_claude-audit-cut-count() { echo "cut/ 으로 옮긴 세션도 요약이 호출 · 사용량으로 센다 — 빠지면 공개할 감사 비용이 실제보다 작다 (D2 · §7.10d 공개)"; }
+break_claude-audit-cut-count() { perl -0pi -e 's/        cut_sessions \+= _cut\(d, cut_usage\)\n//' "$_CA"; }
+guard_claude-audit-cut-count() { uv run pytest "$_CAT" -q -k cut_session; }
+
+claim_claude-audit-harness() { echo "재현 하네스가 확실한 재현을 재현하지 못하면 감사를 시작하지 않는다 — 깨진 sandbox 가 모든 지적을 「재현 안 됨」으로 굳힌다 (§7.10d 측정 뒤)"; }
+break_claude-audit-harness() { perl -0pi -e 's/    if not harness_reproduces\(probe\):\n/    if False:\n/' "$_CA"; }
+guard_claude-audit-harness() { uv run pytest "$_CAT" -q -k broken_repro_harness; }
+
+claim_claude-audit-measured-gate() { echo "claude 감사의 「측정이 끝났다」는 보고서가 받아들이는 측정이다 — 선언과 다른 측정(2회 등) 위에서 유료 감사가 돌지 않게 (§7.10d 측정 뒤)"; }
+break_claude-audit-measured-gate() { perl -0pi -e 's/    if ref is None or problems:\n/    if ref is None:\n/' src/codeproof_ai/cli.py; }
+guard_claude-audit-measured-gate() { uv run pytest "$_CAT" -q -k fewer_runs; }
+
+claim_claude-audit-measured-count() { echo "묶음이 claude · codex 하나씩이어야 측정이 끝난 것이다 — 손잡이가 다른 묶음이 섞여도 감사가 돌았다 (§7.10d 측정 뒤)"; }
+break_claude-audit-measured-count() { perl -0pi -e 's/    if pair is None or len\(sections\) != len\(pair\):\n/    if pair is None:\n/' src/codeproof_ai/cli.py; }
+guard_claude-audit-measured-count() { uv run pytest "$_CAT" -q -k third_bundle; }
+
+claim_pinned-single-model() { echo "고정한 모델 하나만 답해야 싣는다 — 거절 대체의 봉투에는 두 모델이 다 들어 「있는가」만 보면 대체 모델의 답이 실린다 (D5 · 측정 · 감사)"; }
+break_pinned-single-model() { perl -0pi -e 's/    if seen != \{model\}:\n/    if False:\n/' "$_AO"; }
+guard_pinned-single-model() { uv run pytest tests/scripts/test_agent_output.py "$_CAT" -q -k second_model; }
+
 _XM=scripts/xauthor_move.py
 _XMT=tests/scripts/test_xauthor_move.py
 
@@ -1232,8 +1269,28 @@ break_xauthor-move-overwrite() { perl -0pi -e 's/    if target\.exists\(\) and a
 guard_xauthor-move-overwrite() { uv run pytest "$_XMT" -q -k not_overwritten; }
 
 claim_xauthor-move-pair-files() { echo "쌍 파일 다섯만 옮긴다 — 저자의 메모가 코퍼스에 섞이면 쌍이 규격과 달라진다 (§7.10d)"; }
-break_xauthor-move-pair-files() { perl -0pi -e 's/            for name in xr\.PAIR_FILES:\n/            for name in sorted(p.name for p in src.iterdir()):\n/' "$_XM"; }
+break_xauthor-move-pair-files() { perl -0pi -e 's/                for name in xr\.PAIR_FILES:\n/                for name in sorted(p.name for p in src.iterdir()):\n/' "$_XM"; }
 guard_xauthor-move-pair-files() { uv run pytest "$_XMT" -q -k byte_for_byte; }
+
+claim_xauthor-move-rounds() { echo "분류마다 바퀴마다 받아들인 쌍이 하나씩이어야 옮긴다 — 둘이거나 빠지면 9쌍 · 7쌍이 조용히 옮겨지고 유료 측정 뒤에야 드러난다 (§7.10d)"; }
+break_xauthor-move-rounds() { perl -0pi -e 's/        if \[xr\.pair_round\(d\) for d in mine\] != list\(ROUNDS\):\n/        if False:\n/' "$_XM"; }
+guard_xauthor-move-rounds() { uv run pytest "$_XMT" -q -k one_pair_per_round; }
+
+claim_xauthor-move-source() { echo "저자의 final/ 에 온전한 쌍 폴더가 하나일 때만 옮긴다 — 빠진 파일 · 두 폴더를 옮기면 쌍이 규격과 다르다 (§7.10d)"; }
+break_xauthor-move-source() { perl -0pi -e 's/    if len\(found\) != 1 or not all\(\(found\[0\] \/ f\)\.is_file\(\) for f in xr\.PAIR_FILES\):\n/    if False:\n/' "$_XM"; }
+guard_xauthor-move-source() { uv run pytest "$_XMT" -q -k whole_pair_folder; }
+
+claim_xauthor-move-check-sources() { echo "--check 가 쌍 폴더까지 본다 — 통과한 뒤 본 실행이 중간에 멈추고 임시 폴더를 남겼다 (§7.10d)"; }
+break_xauthor-move-check-sources() { perl -0pi -e 's/\[\(d, source\(d\)\) for d in mine\]/[(d, d \/ "final") for d in mine]/' "$_XM"; }
+guard_xauthor-move-check-sources() { uv run pytest "$_XMT" -q -k check_finds; }
+
+claim_xauthor-move-hash() { echo "복사본의 해시가 원본과 다르면 멈춘다 — 깨진 복사가 코퍼스로 실린다 (§7.10d)"; }
+break_xauthor-move-hash() { perl -0pi -e 's/                    if files\[name\] != xr\._sha256\(src \/ name\):\n/                    if False:\n/' "$_XM"; }
+guard_xauthor-move-hash() { uv run pytest "$_XMT" -q -k differs_from; }
+
+claim_xauthor-move-cleanup() { echo "복사가 깨지면 임시 폴더를 지운다 — 코퍼스 옆의 숨은 폴더는 git 이 무시하지 않는다 (§7.10d)"; }
+break_xauthor-move-cleanup() { perl -0pi -e 's/        shutil\.rmtree\(tmp, ignore_errors=True\)  # [^\n]*\n/        pass\n/' "$_XM"; }
+guard_xauthor-move-cleanup() { uv run pytest "$_XMT" -q -k differs_from; }
 
 claim_xauthor-run-idle-calls() { echo "충전 전 재시도는 호출로 세지 않는다 — 모델에 닿지 않은 시도가 공개할 「쌍당 호출」을 부풀린다 (§7.10d 1단계 · 타당성)"; }
 break_xauthor-run-idle-calls() { perl -0pi -e 's/            if idle\[d\.name, step\]:\n/            if False:\n/' "$_XR"; }
@@ -1243,12 +1300,72 @@ _XP=scripts/xauthor_publish.py
 _XPT=tests/scripts/test_xauthor_publish.py
 
 claim_xauthor-publish-mask-home() { echo "공개할 작성 기록은 홈 경로를 가린다 — 빠지면 사용자 이름이 든 로컬 경로가 공개 이력에 남는다 (§7.10d 「공개」)"; }
-break_xauthor-publish-mask-home() { perl -0pi -e 's/    \(re\.compile\(re\.escape\(str\(Path\.home\(\)\)\)\), "~"\),\n//' "$_XP"; }
+break_xauthor-publish-mask-home() { perl -0pi -e 's/        \(re\.compile\(re\.escape\(home\)\), "~"\)\n/        (re.compile("(?!)"), "~")\n/' "$_XP"; }
 guard_xauthor-publish-mask-home() { uv run pytest "$_XPT" -q -k machine_paths; }
 
 claim_xauthor-publish-secret() { echo "비밀로 보이는 것이 하나라도 있으면 아무것도 쓰지 않는다 — push 는 되돌릴 수 없다 (§7.10d 「공개」)"; }
 break_xauthor-publish-secret() { perl -0pi -e 's/    if found or out is None:\n/    if out is None:\n/' "$_XP"; }
 guard_xauthor-publish-secret() { uv run pytest "$_XPT" -q -k stops_everything; }
+
+claim_xauthor-publish-escaped() { echo "이스케이프 바로 뒤의 토큰도 잡는다 — 기록의 주 형식인 JSON 이벤트에서 줄 맨 앞 토큰은 \\n 뒤에 온다 (§7.10d 공개)"; }
+break_xauthor-publish-escaped() { perl -0pi -e 's/^_B = r".*"$/_B = r"\\b"/m' "$_XP"; }
+guard_xauthor-publish-escaped() { uv run pytest "$_XPT" -q -k stops_everything; }
+
+claim_xauthor-publish-quoted() { echo "글 안의 JSON 의 키도 맞춘다 — 명령 출력에 찍힌 자격 증명 JSON 은 따옴표가 이스케이프돼 온다 (§7.10d 공개)"; }
+break_xauthor-publish-quoted() { perl -0pi -e 's/^_Q = .*$/_Q = "\\""/m' "$_XP"; }
+guard_xauthor-publish-quoted() { uv run pytest "$_XPT" -q -k stops_everything; }
+
+claim_xauthor-publish-user() { echo "계정 이름을 가린다 — codex 가 돌린 ls -l 의 소유자 열에 남는다 (§7.10d 공개)"; }
+break_xauthor-publish-user() { perl -0pi -e 's/, "<user>"\)/, ACCOUNT.pw_name)/' "$_XP"; }
+guard_xauthor-publish-user() { uv run pytest "$_XPT" -q -k account_name; }
+
+claim_xauthor-publish-residual() { echo "가린 뒤 남은 홈 경로를 비밀처럼 센다 — 가리기가 빠진 경로가 「0건」으로 공개된다 (§7.10d 공개)"; }
+break_xauthor-publish-residual() { perl -0pi -e 's/    "가리지 못한 홈 경로": re\.compile\([^\n]*\),\n//' "$_XP"; }
+guard_xauthor-publish-residual() { uv run pytest "$_XPT" -q -k stops_everything; }
+
+claim_xauthor-publish-account-id() { echo "OpenAI 사용자 · 계정 식별자를 잡는다 — codex session_meta 의 creator_user_id 를 못 보고 「0건」이었다 (§7.10d 공개)"; }
+break_xauthor-publish-account-id() { perl -0pi -e 's/    "OpenAI 사용자 ID": re\.compile\([^\n]*\),\n//' "$_XP"; }
+guard_xauthor-publish-account-id() { uv run pytest "$_XPT" -q -k bare_openai; }
+
+claim_xauthor-publish-email-escape() { echo "이스케이프 뒤의 데코레이터를 이메일로 보지 않는다 — 거짓 양성 하나가 공개를 통째로 막는다 (§7.10d 공개)"; }
+break_xauthor-publish-email-escape() { perl -0pi -e 's/\(\?<!\\\\\)\[A-Za-z0-9/[A-Za-z0-9/' "$_XP"; }
+guard_xauthor-publish-email-escape() { uv run pytest "$_XPT" -q -k decorator; }
+
+claim_xauthor-publish-example-case() { echo "예시 도메인은 대소문자와 무관하게 뺀다 — Kim@Example.com 이 공개를 막았다 (§7.10d 공개)"; }
+break_xauthor-publish-example-case() { perl -0pi -e 's/\(\?!\(\?i:example/(?!(?:example/' "$_XP"; }
+guard_xauthor-publish-example-case() { uv run pytest "$_XPT" -q -k example_addresses; }
+
+claim_xauthor-publish-worktree() { echo "worktree 의 사본에서 돌려도 주 체크아웃을 가린다 — 아니면 같은 기록이 다른 바이트가 되고 로컬 배치가 드러난다 (§7.10d 공개)"; }
+break_xauthor-publish-worktree() { perl -0pi -e 's/    return Path\(done\.stdout\.strip\(\)\)\.parent if done\.returncode == 0 else here\n/    return here\n/' "$_XP"; }
+guard_xauthor-publish-worktree() { uv run pytest "$_XPT" -q -k worktree_copy; }
+
+claim_xauthor-publish-home-account() { echo "HOME 을 바꾼 셸에서도 계정의 홈을 가린다 — 가려지지 않은 홈 경로가 「0건 · 썼다」가 됐다 (§7.10d 공개)"; }
+break_xauthor-publish-home-account() { perl -0pi -e 's/\{ACCOUNT\.pw_dir, str\(Path\.home\(\)\)\}/{str(Path.home())}/' "$_XP"; }
+guard_xauthor-publish-home-account() { uv run pytest "$_XPT" -q -k whatever_home_says; }
+
+claim_xauthor-publish-roots() { echo "훑을 파일이 없는 기록은 거절한다 — 오타 · 아직 돌지 않은 감사가 빈 묶음으로 공개된다 (§7.10d 공개)"; }
+break_xauthor-publish-roots() { perl -0pi -e 's/    if not out:\n        raise ValueError/    if False:\n        raise ValueError/' "$_XP"; }
+guard_xauthor-publish-roots() { uv run pytest "$_XPT" -q -k not_scanned; }
+
+claim_xauthor-publish-duplicate() { echo "이름이 같은 기록 폴더 둘은 거절한다 — 뒤의 묶음이 앞의 것을 말없이 덮는다 (§7.10d 공개)"; }
+break_xauthor-publish-duplicate() { perl -0pi -e 's/    if len\(set\(names\)\) != len\(names\):\n/    if False:\n/' "$_XP"; }
+guard_xauthor-publish-duplicate() { uv run pytest "$_XPT" -q -k one_name; }
+
+claim_xauthor-publish-staging() { echo "묶음을 쓰다 깨지면 임시 파일을 지운다 — 가린 글이 공개 폴더에 남아 같이 커밋된다 (§7.10d 공개)"; }
+break_xauthor-publish-staging() { perl -0pi -e 's/            tmp_path\.unlink\(missing_ok=True\)\n/            pass\n/' "$_XP"; }
+guard_xauthor-publish-staging() { uv run pytest "$_XPT" -q -k staging; }
+
+claim_xauthor-publish-blocked() { echo "파일이 아닌 같은 이름이 있으면 아무것도 쓰지 않는다 — 첫 묶음만 바뀐 채 멈췄다 (§7.10d 공개)"; }
+break_xauthor-publish-blocked() { perl -0pi -e 's/t\.exists\(\) and not t\.is_file\(\)/False/' "$_XP"; }
+guard_xauthor-publish-blocked() { uv run pytest "$_XPT" -q -k blocked_target; }
+
+claim_runner-cli-absolute() { echo "실행기는 CLI 를 시작 때 절대 경로로 고정해 부른다 — PATH 의 상대 항목이 상자에서 다른 CLI 로 풀려 RUN.json 의 판과 실제가 갈렸다 (A2b · C1a)"; }
+break_runner-cli-absolute() { perl -0pi -e 's/timeout "\$TIMEOUT" "\$CLI" -p "\$PROMPT" -m/timeout "\$TIMEOUT" gemini -p "\$PROMPT" -m/' "$_RWA"; }
+guard_runner-cli-absolute() { uv run pytest "$_GT" -q -k relative_cli; }
+
+claim_xauthor-min-kinds-pin() { echo "분석 · 옮기기의 하한(8분류)은 시험이 고정한다 — 실행기와 갈리면 2단계는 끝났는데 옮기기 · 보고서가 「미완」이다 (§7.10d · 수집 중 보정 2026-10-09)"; }
+break_xauthor-min-kinds-pin() { perl -0pi -e 's/^MIN_KINDS = 8$/MIN_KINDS = 10/m' "$_XAN"; }
+guard_xauthor-min-kinds-pin() { uv run pytest "$_XANT" -q -k Pinned; }
 
 claim_xauthor-run-amend() { echo "측정 전에 낮춘 하한은 이어 받은 RUN.json 에도 고쳐 적고 보정을 남긴다 — 기록이 쓰지 않는 상한을 적지 않게 (C1a · 수집 중 보정 2026-10-09)"; }
 break_xauthor-run-amend() { perl -0pi -e 's/            caps\[key\] = value\n//' "$_XR"; }
