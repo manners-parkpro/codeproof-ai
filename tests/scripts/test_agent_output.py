@@ -402,6 +402,74 @@ class TestCodexFailureCause:
         assert payload == {"findings": []}
 
 
+FLAGGED = (
+    "This content was flagged for possible cybersecurity risk. "
+    "If this seems wrong, try rephrasing your request."
+)
+"""[실측 · 저자 단계 XC010 · XC073] codex 거절 이벤트의 문구 (error · turn.failed 둘 다)."""
+
+
+class TestARefusalIsNotAskedAgain:
+    """🔴 거절은 다시 묻지 않는다 - 그 회차가 비어 측정은 「미완」이다 (DESIGN §7.10d 「측정」).
+
+    실행기는 실패한 샘플을 다음 세션에 다시 부른다 - 구동기가 세션마다 이 판별로 훑고 멈춘다.
+    """
+
+    MODEL = "claude-fable-5-1"
+
+    def _raw(self, tmp_path: Path, name: str, body: str) -> Path:
+        raw = tmp_path / "out" / "raw"
+        raw.mkdir(parents=True, exist_ok=True)
+        (raw / name).write_text(body, encoding="utf-8")
+        return tmp_path / "out"
+
+    def test_a_claude_refusal_is_found(self, tmp_path: Path) -> None:
+        out = self._raw(tmp_path, "S1.0.a0.claude.json", json.dumps(
+            _envelope(stop_reason="refusal", structured_output=None)
+        ))
+        got = ao.refusals(out, "claude", self.MODEL)
+        assert got == ["S1.0.a0.claude.json · stop_reason refusal"]
+
+    def test_a_claude_answer_served_by_another_model_is_found(self, tmp_path: Path) -> None:
+        """거절 대체 - 고정 모델이 거절한 턴을 다른 모델이 이어 답했다."""
+        env = _envelope()
+        env["modelUsage"] = {
+            self.MODEL: {"outputTokens": 0}, "claude-opus-4-8": {"outputTokens": 9},
+        }
+        out = self._raw(tmp_path, "S1.0.a0.claude.json", json.dumps(env))
+        [line] = ao.refusals(out, "claude", self.MODEL)
+        assert "거절 대체" in line
+
+    def test_a_codex_flagged_turn_is_found(self, tmp_path: Path) -> None:
+        events = "\n".join(json.dumps(e) for e in (
+            {"type": "thread.started"},
+            {"type": "error", "message": FLAGGED},
+            {"type": "turn.failed", "error": {"message": FLAGGED}},
+        ))
+        out = self._raw(tmp_path, "S1.0.a0.jsonl", events)
+        assert ao.refusals(out, "codex", "gpt-6-astra") == [f"S1.0.a0.jsonl · {FLAGGED}"]
+
+    def test_an_answer_or_another_failure_is_not_a_refusal(self, tmp_path: Path) -> None:
+        """대조군 - 정상 답 · 크레딧 소진 · 시간 초과는 거절이 아니다 (다음 세션에 다시 잰다)."""
+        out = self._raw(tmp_path, "S1.0.a0.claude.json", json.dumps(_envelope()))
+        self._raw(tmp_path, "S2.0.a0.jsonl", json.dumps(
+            {"type": "turn.failed", "error": {"message": "You've hit your usage limit."}}
+        ))
+        self._raw(tmp_path, "_resolve.claude.json", json.dumps(_envelope(stop_reason="refusal")))
+        assert ao.refusals(out, "claude", self.MODEL) == []
+        assert ao.refusals(out, "codex", "gpt-6-astra") == []
+
+    def test_the_command_exits_6_with_one_line_per_refused_attempt(self, tmp_path: Path) -> None:
+        body = json.dumps({"type": "error", "message": FLAGGED})
+        out = self._raw(tmp_path, "S1.1.a2.jsonl", body)
+        args = ["python3", str(SCRIPT), "refusals", str(out), "codex", "gpt-6-astra"]
+        r = subprocess.run(args, capture_output=True, text=True, check=False)
+        assert (r.returncode, r.stdout.splitlines()) == (6, [f"S1.1.a2.jsonl · {FLAGGED}"])
+        (out / "raw" / "S1.1.a2.jsonl").unlink()
+        r = subprocess.run(args, capture_output=True, text=True, check=False)
+        assert (r.returncode, r.stdout) == (0, "")
+
+
 class TestLastFindingsObject:
     def test_prompt_echo_does_not_win(self) -> None:
         # 규격 예시도 {"findings": [...]} 모양이다 - 마지막 것이 답이다.
