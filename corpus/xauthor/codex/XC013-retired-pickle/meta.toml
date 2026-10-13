@@ -1,0 +1,15 @@
+decoy_id = "XC013-retired-pickle"
+trap_kind = "unreachable_branch"
+
+[bait]
+apparent_defect = "외부에서 받은 캐시 바이트를 pickle.loads에 직접 전달하므로 조작된 레코드가 임의의 파이썬 코드를 실행할 수 있어 보인다."
+lure_lines = [10, 11]
+
+[safety]
+claim = "decode_record는 모든 bytes 페이로드와 str 형식 이름에 대해 pickle 역직렬화 분기에 진입하지 않으며, 따라서 그 분기를 통한 페이로드 코드 실행은 불가능하다."
+justification = "첫 조건문은 형식 이름이 json 또는 utf8과 같은 경우에만 다음 문장으로 진행시키고 나머지는 예외로 종료한다. 따라서 뒤의 pickle 비교에 도착한 이름은 두 허용 문자열 중 하나와 같으며 pickle과 같을 수 없다. 두 검사 사이에는 이름을 변경하는 문장이나 호출이 없다. 이 관계는 페이로드의 내용과 길이에 의존하지 않으며 메서드를 재정의하지 않은 bytes와 str 하위 클래스 및 표준 str Enum에도 동일하게 적용된다."
+guard_symbol = "decode_record"
+guard_lines = [7, 9]
+
+[twin]
+defect = "허용 목록에 pickle을 추가해 폐기된 분기가 도달 가능해지고, 공격자가 제공한 pickle 페이로드의 callable이 실행된다."

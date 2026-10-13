@@ -1,0 +1,15 @@
+decoy_id = "XC080-enum-alias"
+trap_kind = "unreachable_branch"
+
+[bait]
+apparent_defect = "호출자가 LEGACY 모드를 선택하면 외부 댓글 문자열을 HTML 이스케이프 없이 p 태그 안에 삽입하므로 스크립트나 이벤트 처리기를 주입할 수 있어 보인다."
+lure_lines = [13, 21]
+
+[safety]
+claim = "render_comment는 모든 str text와 모든 CommentStyle style 값(빈 값, 임의 길이와 내용, 평범한 하위 타입, 별칭 이름과 값으로 얻은 멤버, 기본 인자 포함)에 대해 레거시 HTML 직접 삽입 분기에 진입하지 않는다."
+justification = "표준 Enum은 같은 값으로 정의된 TEXT와 LEGACY를 동일한 멤버 객체로 만들기 때문에 LEGACY 조건이 참인 입력은 앞선 TEXT 조건도 반드시 만족한다. 첫 분기는 이스케이프 결과를 무조건 반환하며 동기 예외가 나더라도 함수 밖으로 전파되므로 다음 분기로 진행하지 않는다. 따라서 문자열 내용이나 크기와 무관하게 레거시 직접 삽입 분기는 도달 불가능하다."
+guard_symbol = "CommentStyle"
+guard_lines = [7, 10]
+
+[twin]
+defect = "LEGACY의 값을 별도로 바꾸어 TEXT와의 별칭 관계를 제거하면 LEGACY 입력이 앞선 반환을 우회하고 댓글을 HTML에 그대로 삽입하여 스크립트 주입이 가능해진다."

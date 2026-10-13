@@ -1,0 +1,15 @@
+decoy_id = "XC012-text-preview"
+trap_kind = "type_narrowed"
+
+[bait]
+apparent_defect = "render_preview의 body는 str | bytes인데 decode 호출에서 문자열 여부를 검사하지 않아 문자열 입력에 AttributeError가 발생하는 것처럼 보인다."
+lure_lines = [7, 8]
+
+[safety]
+claim = "선언 타입 str | bytes의 모든 입력과 허용된 하위 타입에 대해 render_preview는 예외 없이 문자열을 반환한다. 문자열은 그대로, 바이트는 잘못된 UTF-8을 대체 문자로 디코딩한 뒤, 80자 이하이면 전부 반환하고 초과하면 처음 80자 뒤에 점 세 개를 붙인다."
+justification = "isinstance(body, str) 분기는 빈 문자열과 문자열 하위 타입까지 포함하여 _clip의 결과를 즉시 반환한다. 따라서 뒤의 decode 호출에 도달하는 선언 타입의 값은 bytes뿐이며, errors=replace가 잘못된 UTF-8도 처리한다. _clip은 문자열 슬라이스와 길이 비교만 사용하므로 빈 값, 서로게이트 문자, 80자 경계에서도 정의된 결과를 반환한다."
+guard_symbol = "render_preview"
+guard_lines = [4, 6]
+
+[twin]
+defect = "문자열 조기 반환 가드를 우회하여 str에도 decode를 호출하므로 빈 문자열을 포함한 문자열 입력에서 AttributeError가 발생한다."

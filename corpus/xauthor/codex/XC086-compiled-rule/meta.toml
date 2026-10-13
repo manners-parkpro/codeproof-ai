@@ -1,0 +1,15 @@
+decoy_id = "XC086-compiled-rule"
+trap_kind = "frozen_after_init"
+
+[bait]
+apparent_defect = "rule()이 전역 검증 규칙을 그대로 반환하고 accepts()가 같은 객체의 fullmatch를 호출하므로, 호출자가 원본 설정이나 노출된 규칙의 pattern과 flags를 변경하여 이후 작업 식별자 검증을 우회하거나 중단시킬 수 있어 보인다."
+lure_lines = [20, 25]
+
+[safety]
+claim = "모듈 초기화 뒤 BOOTSTRAP, RULE, rule() 반환값 및 공개 규칙의 copy.copy와 copy.deepcopy 결과에 대해 pattern에는 str 값, flags에는 int 값(모두 일반 하위 타입 포함)을 사용하는 일반적인 속성 대입·증감·삭제와 BOOTSTRAP.__dict__ 및 vars(BOOTSTRAP)의 일반적인 사전 변경을 어떤 순서로 시도해도, 이후 모든 str name(일반 하위 타입 포함)에 대해 accepts(name)과 공개 규칙 및 새 rule()의 fullmatch(name) 존재 여부는 예외 없이 정확히 JOB- 뒤에 ASCII 숫자 네 자리가 붙은 전체 문자열에만 True이다; 별도 NameRule 생성과 그 객체의 변경 및 사용도 이 결과를 바꾸지 않는다."
+justification = "모듈의 RULE 초기화가 작성용 NameRule의 문자열과 정수 플래그를 re.compile에 전달하여 독립된 불변 정규식 프로그램을 만들기 때문에, 원본 객체와 그 사전에 대한 변경은 이미 컴파일된 프로그램에 전달되지 않는다. re.Pattern은 공개 속성의 대입과 삭제를 거절하고 복사로도 가변 내부 상태를 노출하지 않으므로 공개 참조를 통한 변경 시도 역시 검증 언어를 바꾸지 않는다. fullmatch와 명시적인 [0-9] 네 자리 패턴은 전체 문자열의 정확한 ASCII 숫자 형식을 검사하며 일반 str 하위 타입도 문자열 내용 그대로 검사한다."
+guard_symbol = "RULE"
+guard_lines = [17, 17]
+
+[twin]
+defect = "컴파일 단계를 우회하여 RULE이 변경 가능한 BOOTSTRAP을 그대로 참조한다. pattern을 다른 정규식으로 바꾸거나 flags에 IGNORECASE를 설정하면 이후 식별자 검증 결과가 바뀌며, 잘못된 패턴이나 필드 삭제는 검증 예외를 일으킬 수 있다."

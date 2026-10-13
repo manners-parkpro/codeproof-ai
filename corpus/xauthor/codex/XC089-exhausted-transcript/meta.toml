@@ -1,0 +1,15 @@
+decoy_id = "XC089-exhausted-transcript"
+trap_kind = "unreachable_branch"
+
+[bait]
+apparent_defect = "대화 렌더러의 잔여 메시지 처리 루프가 외부 문자열을 _legacy_paragraph로 전달하고 HTML 이스케이프 없이 문단에 삽입하므로, 메시지에 스크립트나 이벤트 처리기를 넣어 XSS를 일으킬 수 있어 보인다."
+lure_lines = [13, 14]
+
+[safety]
+claim = "render_transcript는 모든 list[str] messages 값(빈 목록, 임의 길이와 문자열 내용, 메서드를 재정의하지 않은 목록 및 문자열 하위 타입과 str·Enum 혼합 멤버 포함)과 반복 호출에 대해 잔여 처리 루프의 _legacy_paragraph 호출에 도달하지 않는다."
+justification = "pending은 입력 목록에서 만든 하나의 반복자이며 문단 리스트 컴프리헨션이 그 반복자를 끝까지 소비한다. 따라서 컴프리헨션이 정상 종료하면 같은 pending에 대한 다음 반복은 즉시 끝나 잔여 처리 본문에 진입하지 않는다. 컴프리헨션이 동기 예외로 중단되면 함수 밖으로 전파되므로 역시 뒤의 루프에 도달하지 않는다. 빈 목록도 처음부터 소진되며 매 호출마다 새 지역 반복자를 만들기 때문에 이전 호출의 상태가 영향을 주지 않는다."
+guard_symbol = "pending"
+guard_lines = [11, 13]
+
+[twin]
+defect = "컴프리헨션 뒤에서 pending을 입력 목록의 새 반복자로 교체하므로 비어 있지 않은 목록의 모든 메시지가 잔여 루프로 다시 들어가며, 공격자의 HTML이 이스케이프 없이 출력된다."

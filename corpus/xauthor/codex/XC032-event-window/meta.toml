@@ -1,0 +1,15 @@
+decoy_id = "XC032-event-window"
+trap_kind = "contract_half_open"
+
+[bait]
+apparent_defect = "종료 시각의 삽입점을 bisect_left로 잡고 슬라이스에서도 끝을 제외하므로, stop과 같은 마지막 이벤트들을 전부 빠뜨리는 경계 오류처럼 보인다."
+lure_lines = [13, 14]
+
+[safety]
+claim = "events_between은 모든 list[int]와 int 경계 입력(음수, 임의 크기 정수, 빈 값, 중복 및 평범한 하위 타입 포함)에 대해 start > stop이거나 감소하는 인접 시각이 있으면 거절하고, 그 외에는 start <= t < stop인 기록만 원래 순서와 중복 횟수대로 리스트로 반환하며, 성공과 거절 모두 입력 리스트의 내용을 바꾸지 않는다."
+justification = "함수 안의 계약은 시간창을 [start, stop)으로 정하고 역전 경계와 비정렬 입력을 먼저 거절한다. 따라서 비감소 시각에서 첫 왼쪽 삽입점 전에는 start 미만만 있고 두 번째 왼쪽 삽입점부터는 stop 이상만 있으므로 그 사이 슬라이스가 필요한 기록 전체와 정확히 일치한다. 두 경계가 같으면 삽입점도 같아서 빈 리스트가 되며 비교와 슬라이스만 사용하므로 정수 크기나 음수에 따른 반올림도 없고 입력도 수정하지 않는다."
+guard_symbol = "events_between"
+guard_lines = [6, 14]
+
+[twin]
+defect = "종료 경계 탐색을 bisect_right로 우회하여 stop과 같은 시각의 기록까지 반환한다. start == stop인 빈 시간창에서도 해당 시각의 기록이 유출된다."

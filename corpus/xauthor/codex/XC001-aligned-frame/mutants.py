@@ -1,0 +1,51 @@
+"""주장 축별 약화와 주장 밖 표현 변경 - 경계, 패딩, 곱, 부호, 빈 값, 하위 타입."""
+
+WEAKENED = {
+    "상한 제거": [("if stride * height > _MAX_FRAME_BYTES:", "if False:")],
+    "패딩을 빼고 검사": [("if stride * height > _MAX_FRAME_BYTES:",
+                            "if width * 4 * height > _MAX_FRAME_BYTES:")],
+    "각 축만 제한": [("if stride * height > _MAX_FRAME_BYTES:",
+                       "if stride > _MAX_FRAME_BYTES or height > _MAX_FRAME_BYTES:")],
+    "경계 바로 위 허용": [("if stride * height > _MAX_FRAME_BYTES:",
+                            "if stride * height > _MAX_FRAME_BYTES + 64:")],
+    "정확한 상한 거절": [("if stride * height > _MAX_FRAME_BYTES:",
+                           "if stride * height >= _MAX_FRAME_BYTES:")],
+    "32비트 곱으로 축소": [("if stride * height > _MAX_FRAME_BYTES:",
+                            "if (stride * height) % (2**32) > _MAX_FRAME_BYTES:")],
+    "폭 음수 허용": [("if width < 0 or height < 0:", "if height < 0:")],
+    "높이 음수 허용": [("if width < 0 or height < 0:", "if width < 0:")],
+    "두 치수 모두 음수일 때만 거절": [("if width < 0 or height < 0:",
+                                        "if width < 0 and height < 0:")],
+    "빈 프레임 거절": [("if width < 0 or height < 0:",
+                         "if width <= 0 or height <= 0:")],
+    "큰 빈 프레임의 폭을 제한": [("if stride * height > _MAX_FRAME_BYTES:",
+                                   "if stride * height > _MAX_FRAME_BYTES or width > 16384:")],
+    "정수 하위 타입 거절": [("if width < 0 or height < 0:",
+                              "if type(width) is not int or type(height) is not int or width < 0 or height < 0:")],
+    "행 크기를 내림": [("((width * 4 + 63) // 64) * 64", "((width * 4) // 64) * 64")],
+    "검사 후 다른 크기 할당": [("return _allocate_frame(stride, height)",
+                                "return _allocate_frame(stride + 64, height)")],
+    "할당 뒤에 검사": [("    if stride * height > _MAX_FRAME_BYTES:",
+                           "    frame = _allocate_frame(stride, height)\n    if stride * height > _MAX_FRAME_BYTES:"),
+                          ("    return _allocate_frame(stride, height)", "    return frame")],
+    "최적화에서 사라지는 상한": [("    if stride * height > _MAX_FRAME_BYTES:\n        raise ValueError(\"frame budget exceeded\")",
+                                   "    assert stride * height <= _MAX_FRAME_BYTES")],
+}
+
+SAFE = {
+    "거절 예외 변경": [("raise ValueError(\"frame budget exceeded\")", "raise OverflowError(\"frame budget exceeded\")")],
+    "상한 검사 방향 변경": [("if stride * height > _MAX_FRAME_BYTES:",
+                              "if not stride * height <= _MAX_FRAME_BYTES:")],
+    "나눗셈으로 상한 검사": [("if stride * height > _MAX_FRAME_BYTES:",
+                              "if height and stride > _MAX_FRAME_BYTES // height:")],
+    "독립적인 정렬 산식": [("((width * 4 + 63) // 64) * 64",
+                            "width * 4 + (-width * 4) % 64")],
+    "읽기 전용 버퍼": [("return bytearray(stride * height)", "return bytes(stride * height)")],
+    "버퍼 뷰 반환": [("return bytearray(stride * height)",
+                       "return memoryview(bytearray(stride * height))")],
+    "표준 할당자 import 별칭": [("_MAX_FRAME_BYTES = 64 * 1024",
+                                  "from builtins import bytearray as _storage\n\n_MAX_FRAME_BYTES = 64 * 1024"),
+                                 ("return bytearray(stride * height)", "return _storage(stride * height)")],
+}
+
+RACY = {}

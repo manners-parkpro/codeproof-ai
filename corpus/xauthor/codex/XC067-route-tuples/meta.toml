@@ -1,0 +1,15 @@
+decoy_id = "XC067-route-tuples"
+trap_kind = "frozen_after_init"
+
+[bait]
+apparent_defect = "routing_table()이 전역 라우팅 표를 그대로 반환하고 route()가 그 행을 직접 읽으므로, 호출자가 초기 설정이나 반환된 표의 행을 변경하여 이후 작업의 큐를 바꾸거나 행 언패킹을 실패시킬 수 있어 보인다."
+lure_lines = [7, 15]
+
+[safety]
+claim = "모듈 초기화 뒤 BOOTSTRAP, ROUTES, routing_table()의 반환값 및 각 객체의 행·슬라이스·연결·반복 결과에 대해 int 원소(일반 하위 타입 포함)와 그 행을 사용하는 일반적인 항목·슬라이스 대입과 삭제, 목록 변경 및 제자리 연결·반복을 어떤 순서로 시도해도, 이후 모든 int load(일반 하위 타입 포함)에 대해 route(load)는 예외 없이 load < 50이면 3, 50 <= load < 80이면 2, 나머지는 1을 반환하며 새 routing_table()의 행은 순서대로 (0, 3), (50, 2), (80, 1)이다."
+justification = "모듈 수준에서 각 원본 행을 tuple로 복사한 다음 바깥 표도 tuple로 구성하므로 원본 목록과 내부 행의 별칭이 모두 끊어진다. 저장된 원소는 초기 리터럴 int이며 불변이고, 반환된 중첩 tuple에는 항목 대입이나 길이 변경 연산이 없다. 따라서 슬라이스와 연결 및 반복이 원래 행을 공유하더라도 변경 가능한 자손이 없고, 원본 목록의 변경이나 반환 객체에 대한 변경 시도는 route가 읽는 세 행과 그 순서를 바꿀 수 없다. 역순 순회는 80과 50을 포함하는 각 경계에서 해당 큐를 선택하고 음수도 마지막 반환문으로 처리한다."
+guard_symbol = "ROUTES"
+guard_lines = [4, 4]
+
+[twin]
+defect = "바깥 표만 tuple로 바꾸어 BOOTSTRAP의 변경 가능한 행을 공유한다. BOOTSTRAP[2][1] 또는 routing_table()[2][1]을 바꾸면 부하 80 이상의 작업이 다른 큐로 이동하고, 행을 비우면 route에서 ValueError가 발생한다."

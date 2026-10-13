@@ -1,0 +1,15 @@
+decoy_id = "XC039-retired-render-flag"
+trap_kind = "unreachable_branch"
+
+[bait]
+apparent_defect = "외부 문자열을 eval에 전달하는 레거시 렌더링 분기가 있으므로 호출자가 옵션 비트를 켜면 임의의 파이썬 표현식을 실행할 수 있어 보인다."
+lure_lines = [9, 10]
+
+[safety]
+claim = "render_label은 모든 str 텍스트와 모든 int 옵션 값(음수, 임의 크기 정수, 평범한 하위 타입 포함)에 대해 레거시 eval 분기에 진입하지 않는다."
+justification = "함수는 분기 검사 전에 옵션 정수와 LEGACY_EXPRESSION의 비트 반전을 AND하여 해당 비트를 반드시 지운다. 따라서 바로 다음 검사의 같은 비트는 항상 0이 되며, 파이썬 정수의 비트 연산은 음수와 임의 크기에도 성립하므로 외부 텍스트가 eval 분기로 전달될 수 없다."
+guard_symbol = "flags"
+guard_lines = [8, 8]
+
+[twin]
+defect = "옵션에서 실행 비트를 지우는 정규화를 우회하여 flags=128이면 외부 텍스트가 eval로 실행된다."

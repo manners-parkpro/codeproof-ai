@@ -1,0 +1,15 @@
+decoy_id = "XC019-packet-snapshot"
+trap_kind = "defensive_copy"
+
+[bait]
+apparent_defect = "memoryview의 구간 대입이 입력 패킷의 공유 저장소를 덮어쓰고, 반환한 뷰를 통해서도 원본 패킷을 변경할 수 있는 것처럼 보인다."
+lure_lines = [8, 9]
+
+[safety]
+claim = "redact_packet은 모든 memoryview payload와 int start, stop에 대해 동기 예외로 종료할 때도 원본 저장소와 입력 뷰를 보존한다. 해제되지 않은 입력에서 0 <= start <= stop <= payload.nbytes이면 정상 반환하며, 반환 뷰의 바이트는 호출 시 입력의 C 순서 논리 바이트에서 [start, stop)만 0으로 바꾼 것이다. 그 밖의 범위 및 해제된 입력은 거절한다. 정상 반환한 뷰는 쓰기 가능한 독립 1차원 B 형식 바이트 뷰이며, 원본 저장소 또는 반환 저장소의 바이트 변경과 입력 또는 반환 뷰의 release는 반대쪽의 바이트와 사용 가능성에 영향을 주지 않는다."
+justification = "payload.tobytes()가 읽기 전용 여부, 차원, 요소 형식과 stride에 관계없이 C 순서의 논리 바이트를 추출하고 bytearray가 별도 저장소를 생성하므로 work는 원본과 메모리를 공유하지 않는다. 따라서 구간 대입과 이후 반환 뷰의 수정은 복사본에만 적용된다. 길이 검사가 복사 후 대입 전에 수행되어 잘못된 범위에서는 원본과 입력 뷰에 손대지 않고 예외를 내며, 별도로 생성한 memoryview는 입력 뷰의 release 상태도 공유하지 않는다."
+guard_symbol = "redact_packet"
+guard_lines = [5, 5]
+
+[twin]
+defect = "소유 버퍼 복사를 제거하여 work가 입력 뷰 자체를 참조한다. 쓰기 가능한 패킷의 구간을 가리면 원본 저장소가 바뀌고, 빈 구간이라도 반환 뷰의 변경 및 release가 입력에 영향을 준다."

@@ -1,0 +1,15 @@
+decoy_id = "XC077-sealed-class-policy"
+trap_kind = "frozen_after_init"
+
+[bait]
+apparent_defect = "policy()가 전역 정책 클래스를 그대로 반환하고 worker_count()가 클래스 속성을 직접 읽으므로, 호출자가 속성을 대입하거나 삭제하여 이후 요청의 작업자 수를 바꾸거나 계산을 실패시킬 수 있어 보인다."
+lure_lines = [20, 25]
+
+[safety]
+claim = "모듈 초기화 뒤 BOOTSTRAP의 일반적인 사전 변경, LIMITS 및 policy()가 반환한 클래스의 min_workers·max_workers에 int 값(일반 하위 타입 포함)을 사용하는 속성 대입·증감·삭제, 그 클래스의 __dict__ 및 vars() 결과에 대한 일반적인 사전 변경을 어떤 순서로 시도해도, 이후 모든 int backlog(일반 하위 타입 포함)에 대해 worker_count(backlog)는 예외 없이 min(64, max(2, backlog))와 같은 값을 반환하며 새 policy()의 두 공개 속성은 각각 2와 64이다; 별도 인스턴스 및 하위 클래스 생성과 그 인스턴스의 속성 변경도 이 결과를 바꾸지 않는다."
+justification = "클래스 본문은 초기 사전에서 불변 정수 두 개를 읽어 독립적인 클래스 네임스페이스에 저장한다. 따라서 초기 사전을 나중에 변경해도 이미 저장한 값은 바뀌지 않는다. 모듈 범위의 LIMITS 정의가 선택한 _Sealed 메타클래스는 클래스 속성 대입과 삭제를 모두 예외로 거절하고, type이 노출하는 클래스 사전은 읽기 전용 뷰이므로 사전 연산도 실제 네임스페이스를 수정할 수 없다. 별도 인스턴스와 하위 클래스의 저장 공간은 전역 정책 클래스와 다르므로 그 생성이나 인스턴스 변경 역시 전역 계산에 영향을 주지 않는다. 계산은 불변 정수 상수와 입력을 비교할 뿐이므로 임의 크기의 int 및 계약을 지키는 하위 타입에도 같은 경계를 적용한다."
+guard_symbol = "LIMITS"
+guard_lines = [14, 17]
+
+[twin]
+defect = "LIMITS의 메타클래스를 type으로 바꾸면 공개 정책 클래스의 속성 대입과 삭제가 허용되어 이후 worker_count()의 결과를 변경하거나 AttributeError를 일으킨다."

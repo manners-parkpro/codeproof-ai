@@ -1,0 +1,15 @@
+decoy_id = "XC070-json-legacy-dispatch"
+trap_kind = "unreachable_branch"
+
+[bait]
+apparent_defect = "외부 JSON 문서의 command가 레거시 미리보기 객체를 거쳐 shell=True인 subprocess.check_output에 전달되어 미리보기 요청으로 셸 명령을 실행할 수 있어 보인다."
+lure_lines = [19, 20]
+
+[safety]
+claim = "preview_step은 모든 str document 값(빈 문자열, 잘못된 JSON, 임의 크기와 중첩의 JSON, 평범한 하위 타입 포함)에 대해 레거시 subprocess.check_output 셸 실행 분기에 진입하지 않는다."
+justification = "_decode_step은 변환 훅이나 사용자 디코더 없이 json.loads의 결과를 그대로 반환한다. 따라서 성공한 파싱 결과는 dict, list, str, int, float, bool 또는 None이며, 어느 것도 이 파일의 독립적인 데이터 클래스 _ShellPreview의 인스턴스가 아니다. NaN과 Infinity도 float일 뿐이다. 잘못된 문서나 숫자 및 중첩 제한으로 생긴 동기 예외는 분기에 도달하기 전에 전파된다. preview_step은 결과를 다른 객체로 바꾸지 않고 isinstance로 분기하므로, 입력의 길이, 중첩, 표기와 str 하위 타입에 관계없이 레거시 실행 분기가 닫혀 있다."
+guard_symbol = "_decode_step"
+guard_lines = [13, 14]
+
+[twin]
+defect = "기본 JSON 디코딩 장벽을 object_hook으로 우회하여 command 키가 있는 객체를 _ShellPreview로 만든다. 그 결과 외부 command가 shell=True인 subprocess.check_output에 전달된다."

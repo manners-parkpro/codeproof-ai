@@ -1,0 +1,17 @@
+decoy_id = "XC004-half-open-blocks"
+trap_kind = "contract_half_open"
+
+[bait]
+apparent_defect = "마지막 블록을 계산할 때 stop에서 1을 빼므로 끝 경계의 바이트 또는 마지막 블록을 누락하는 off-by-one처럼 보인다."
+lure_lines = [10, 12]
+
+[safety]
+claim = "모든 int 인수(평범한 하위 타입 포함)에 대해 음수 start, stop < start 또는 block_size <= 0이면 거절하고, 나머지는 [start, stop)의 바이트를 하나 이상 포함하는 블록 번호만 빠짐없이 중복 없이 오름차순 range로 반환하며 빈 구간은 빈 range를 반환한다."
+justification = """
+함수의 계약은 끝 바이트 stop을 포함하지 않는 반열린 구간이다. 먼저 음수 시작과 역순 및 비양수 크기를 거절하고, 빈 구간이면 나눗셈 전에 빈 range를 반환한다. 따라서 남은 구간의 첫 바이트는 start이고 마지막 바이트는 stop - 1이며, 각각을 양의 block_size로 정수 나눗셈한 몫이 첫 블록과 마지막 블록이다. 연속 바이트 구간이므로 그 사이의 모든 블록이 교차하며 range의 제외 끝점에 마지막 몫보다 1 큰 값을 사용하면 정확히 한 번씩 오름차순으로 열거한다. 파이썬 정수 나눗셈과 지연 range는 부동소수점 반올림이나 고정 폭 정수 절단을 사용하지 않는다.
+"""
+guard_symbol = "blocks_for_span"
+guard_lines = [4, 9]
+
+[twin]
+defect = "빈 구간 조기 반환을 제거하여 start == stop이 블록 경계 사이에 있으면 바이트가 전혀 없는데도 블록 하나를 반환한다. 예를 들어 (1, 1, 8)은 range(0, 1)을 반환한다."

@@ -1,0 +1,15 @@
+decoy_id = "XC046-cleanup-exception-partition"
+trap_kind = "exception_absorbed"
+
+[bait]
+apparent_defect = "정리 콜백을 감싼 except BaseException이 실패 뒤 정상 반환할 수 있어 권한 오류와 중첩된 종료 예외까지 삼키고 정리 성공으로 위장하는 것처럼 보인다."
+lure_lines = [23, 26]
+
+[safety]
+claim = "cleanup_optional은 전달받은 Callable[[], object] 정리 콜백을 정확히 한 번 호출한다. 콜백이 정상 반환하면 반환 객체와 무관하게 None을 반환한다. 콜백이 어떤 동기 BaseException을 던지면, 그 예외가 묶음일 때는 중첩 깊이와 너비에 관계없이 왼쪽부터 깊이 우선으로 얻은 모든 잎에서 FileNotFoundError와 그 평범한 하위 타입만 제거한다. 남은 잎이 없으면 None을 반환하고, 있으면 그 잎들을 순서, 중복 횟수, 객체 동일성을 그대로 보존하는 예외를 전파한다. 단일 예외도 잎 하나로 취급하며 평범한 예외 묶음 하위 타입에도 적용한다. 묶음의 형태, 메시지, traceback, cause와 context 보존 및 실제 외부 자원 정리 성공은 보장하지 않는다."
+justification = "_required_failures가 명시적인 스택에서 묶음의 자식을 역순으로 추가하므로 깊이 제한이 있는 재귀 없이 원래 잎 순서를 얻는다. 각 잎은 isinstance로 파일 부재인지 검사하여 그 경우에만 건너뛰고 다른 모든 객체는 그대로 수집한다. 따라서 광범위 except가 잡은 실패 중 정상 반환으로 흡수되는 것은 파일 부재뿐이며, 다른 잎은 비어 있지 않은 결과 검사 뒤 BaseExceptionGroup으로 반드시 전파된다."
+guard_symbol = "_required_failures"
+guard_lines = [6, 17]
+
+[twin]
+defect = "파일 부재를 확인하는 가드가 BaseException 검사로 넓어져 모든 예외 잎을 건너뛴다. 따라서 PermissionError나 KeyboardInterrupt를 포함한 정리 실패도 정상 반환으로 숨긴다."

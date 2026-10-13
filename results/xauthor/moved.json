@@ -1,0 +1,941 @@
+{
+  "what": "DESIGN §7.10d - codex 가 쓴 쌍을 코퍼스로 (scripts/xauthor_move.py · 복사만)",
+  "pairs": [
+    {
+      "pair": "XC001-aligned-frame",
+      "kind": "bounded_input",
+      "round": 1,
+      "record": "stage1/XC001",
+      "files": {
+        "meta.toml": "e17b72a5f07243dc311c3a2e62fdfee2677f28ca4a3d274a06f8e2262dc733e0",
+        "decoy.py": "eae8fe8db3553cd4f2d54ea733abc97e1bd382113c31e81ee71536826004dd2b",
+        "twin.py": "42e81a5ba321696a2e1564a3887d5a8ee74031e846ae7276f49c89ac39b1a1f9",
+        "proof.py": "ef4d00445a0374db9f34dd67e8a1713bd78086bd8080c88a01e0eb6eb829e74d",
+        "mutants.py": "b58efc30793e6cc815f3bafe0bed22fd75373c82b0e5bf6049c19fbc770bc1da"
+      }
+    },
+    {
+      "pair": "XC015-stream-preview",
+      "kind": "bounded_input",
+      "round": 2,
+      "record": "stage2/XC015",
+      "files": {
+        "meta.toml": "be53bc4df725e2da5bed76536519ff71735f136e32d4f7d35b21ee31457f8bef",
+        "decoy.py": "219849b3fcf4a64e679d97f8993c8dad9e95829a4a60260a8ade72acef998615",
+        "twin.py": "5d5d04430e2a0ed1259f2ebcf63d7a38833283302c2471a1ef4c88dc0db145f1",
+        "proof.py": "5806bd22e35b2ab1e7777704061d0a41ae25fed950bf68df2bd5ff1b8130e8e5",
+        "mutants.py": "2ac576ae8954ca164b3e978ae51f16ca5d5a43aaf1b2b88299a6dd0a03d2f67b"
+      }
+    },
+    {
+      "pair": "XC029-inflate-budget",
+      "kind": "bounded_input",
+      "round": 3,
+      "record": "stage2/XC029",
+      "files": {
+        "meta.toml": "9ff80bf426d9aad7851a062394b2c291de109f9f3fec44be9e50b947767e484e",
+        "decoy.py": "44f49830ed3726215277c0a21f83422bcb4d22f06a9046f3101f10dffdb588e9",
+        "twin.py": "4898689aeed3f233884c0236d55ab0c267b69e07dbf0ecd9b301cf9e5ef1f137",
+        "proof.py": "53c44ea8acc105347716bdf922b301638990656576217bd594c23261eeffcfc3",
+        "mutants.py": "dd66451f2ad75567aad6873df25dbc3c9001c1e301114c4f72827cdfc7d93878"
+      }
+    },
+    {
+      "pair": "XC041-decimal-grammar",
+      "kind": "bounded_input",
+      "round": 4,
+      "record": "stage2/XC041",
+      "files": {
+        "meta.toml": "53736c53084ee0d2ef1fadcaab31fdcfb74130b1da89be8169de779c1cb2d6e7",
+        "decoy.py": "827be673b5e2a8a066e6ecf4d05053d644e6a9b48775f7960920e898e60da7ee",
+        "twin.py": "3b92c14f19cfd8b2a558fd7c245feda1a41eb4c3384598091494352327268dba",
+        "proof.py": "e047157faaa798dc2c96c633bacc1c69731a69eecfc0fd21749e2a1f37988915",
+        "mutants.py": "d0b9c3b0767ced741f4ac73a7d8dd9cfc3fe84d9ddd98a6828259c348450f619"
+      }
+    },
+    {
+      "pair": "XC052-feature-subsets",
+      "kind": "bounded_input",
+      "round": 5,
+      "record": "stage2/XC052",
+      "files": {
+        "meta.toml": "535c8d0b38ad9f7c92f95c70259405e686d52a12cea450225b8db1d74a38d102",
+        "decoy.py": "1e4d39a54fa665dcf05e1b8c6cdf3b46af3a7ead83824628656dc5f6a323cc9c",
+        "twin.py": "2a32ed8ad25ca45176d05700a0b2ca9f4cee94c54cec51499a811b447a323469",
+        "proof.py": "8446a7dd56e896efb1a519a1667b99baa6f64c7eca781dbaa27eac4195f17d39",
+        "mutants.py": "92987ff3ba43e5b6d3a42b28ab37485bb4cfcec7f43c8fb3df6de9e02676c981"
+      }
+    },
+    {
+      "pair": "XC062-slice-slots",
+      "kind": "bounded_input",
+      "round": 6,
+      "record": "stage2/XC062",
+      "files": {
+        "meta.toml": "22f3f9dfd4d2311d6c02703c5f7c620e89a786f638b5b0159345ff2fadc7f4cb",
+        "decoy.py": "61d32ebde7c4998cccaf3baabafbbb467c545dcbaea9cb473c39d2a2415e2f0d",
+        "twin.py": "39aff5c3da07bed3f28969ea0a6f1de04523b84c33a12579a5189ed677a78a17",
+        "proof.py": "04b71768f074c07af30b783c3a620a876d125eab94fffb0b22c9214f6d58b767",
+        "mutants.py": "d888de7e87ee695ff5b8c701ba612f4db4183d95d21f394ce8e23a3eee3cd2d5"
+      }
+    },
+    {
+      "pair": "XC072-pcm-duration",
+      "kind": "bounded_input",
+      "round": 7,
+      "record": "stage2/XC072",
+      "files": {
+        "meta.toml": "f4f778232001c85d63d7290940c2ba0e31e225880bab976595a23eadac567690",
+        "decoy.py": "5c21e597ffd5113c49bfcfbb8af09eafc74cb84e8ecd444437a830ba5c055a53",
+        "twin.py": "0d5c6b08cadaac52265b23ab04ce61ecce149c20fd33dcf4919e9642cc055e56",
+        "proof.py": "d1b42dde2fcde2b8fe04a855fa88f5a241d8bd2f2aa610f614673d056fb01592",
+        "mutants.py": "3e1531c7e73df4366d55a0bd1eec53ff8b6cdfc6b6048b23792860a8a1962e9e"
+      }
+    },
+    {
+      "pair": "XC082-run-budget",
+      "kind": "bounded_input",
+      "round": 8,
+      "record": "stage2/XC082",
+      "files": {
+        "meta.toml": "488fa50b1a3a1b06a370c834e042136458275964340f15872e44e0be59a5c104",
+        "decoy.py": "4fa337c44943e8c5d98ad48b2b7f1a13666603dbd9645ff4cf5a8b673990d9ef",
+        "twin.py": "df504944e43f6cc6c223a283fb1547c3b8a5ca0289c8dc4efd0870b0feca96bf",
+        "proof.py": "3ea8cb9da0c947da1e1d4615de71aca0adc39fbf3ff736164547d8d9d0cb8aa8",
+        "mutants.py": "5403d4add4f6750bf3f29c905f420b37618fed0f0dd2f9d10a7b51d076dd1ae2"
+      }
+    },
+    {
+      "pair": "XC004-half-open-blocks",
+      "kind": "contract_half_open",
+      "round": 1,
+      "record": "stage1/XC004",
+      "files": {
+        "meta.toml": "ccc987e2d717c420391cab1fc1d41b6b5aa6f078b07408fd88ecec36fe11f39e",
+        "decoy.py": "995161388baa5e35e90507cc711777d5d72c76316e9fa3ee958fe54850a70187",
+        "twin.py": "51a3b357641aa95854c42ba97d48718f6121a5f208eb031d0d612ae6c9eef1b0",
+        "proof.py": "1a6efdabfa692548b254f3b18ed775a24857b7e8a3af9a0f8f6f778d6b0f93b4",
+        "mutants.py": "a33a3427dd46b2b0e97f0aec66601845e4bf3a7e9c811f3186bdbb56cf93fd3b"
+      }
+    },
+    {
+      "pair": "XC018-endpoint-sweep",
+      "kind": "contract_half_open",
+      "round": 2,
+      "record": "stage2/XC018",
+      "files": {
+        "meta.toml": "6cd32bd088f0452bd65ed337afb75aefb6585346131ad1bb8e89cf579557b44e",
+        "decoy.py": "85554a8f59ee4b4c5745cf4622f091d28d4ab50475704d47d95d0ec0abe10689",
+        "twin.py": "ad176c8f78bcedeb3a4192436fd22ba447097aedc4463cb9f3393cbdd3b7be3a",
+        "proof.py": "867b54098493a84f3a090a4f5e5d9444cba7c14161eb497ea29c1a42148cc5fd",
+        "mutants.py": "0f98e494a8c2e08b51e1794f42613cd4e3065fea31658a8f973a39de09ad093a"
+      }
+    },
+    {
+      "pair": "XC032-event-window",
+      "kind": "contract_half_open",
+      "round": 3,
+      "record": "stage2/XC032",
+      "files": {
+        "meta.toml": "24c4ca0391da790872ddaadcebd0e9eb2400ef57f9b0a8c77f3f24bcc0b0185c",
+        "decoy.py": "31c1700518919bbc0a4d28c50e25a9a263d923d8fa00a812ce925cfba6f5d3c9",
+        "twin.py": "5d3a1f33df5d3dfda59af8cec221d118f37dffd2e6abfc1e558886c17286b6fb",
+        "proof.py": "5ba65f0415897e2adb7a103c71c18ad28ebed1aace3e37c26ae6cda342a36933",
+        "mutants.py": "1b28ecd65a78e941c8fd2d57f1ee0c966b06bff85433e61bb3b2e7c379b5bb30"
+      }
+    },
+    {
+      "pair": "XC043-span-subtraction",
+      "kind": "contract_half_open",
+      "round": 4,
+      "record": "stage2/XC043",
+      "files": {
+        "meta.toml": "78e5f62c12622d9b8e60930a7b9d478ee0d8d1188b791dc2853d65d63f88f171",
+        "decoy.py": "f19f2c0ab9d5e5a5853904c6c245cb111ba0ae36dab4994305ee975036695681",
+        "twin.py": "467f17c65ae1e18afaecde742ff46476be135d6080d50d758c37a83fc7310691",
+        "proof.py": "fa42264fa87fbfe822290ba632872400a77296a2e8e950c56bdc043586eb616a",
+        "mutants.py": "1ae32449267852fef7367a38994c2e74d85cad5a2f057461fbd34cf393a40085"
+      }
+    },
+    {
+      "pair": "XC054-interval-tree-pruning",
+      "kind": "contract_half_open",
+      "round": 5,
+      "record": "stage2/XC054",
+      "files": {
+        "meta.toml": "fd4f1a7210e13042fafca36c33d70dd8f25d3f6cd5d41803ce041ab382bc4e96",
+        "decoy.py": "32b42740b5df182202b8e3f876c76715640bfc5282e2226810978b6bfec89759",
+        "twin.py": "206a74a637d67a54c8e0d6885c889855ac486bc558729f9a7d010459f11c0497",
+        "proof.py": "6ead218da992e8976a7e2c8a865f2a9b499fdeacf01f7510f093b5085337df52",
+        "mutants.py": "a15d3044fc0ec62a99a79331cb89f386de53b814fd036a72abf64fe7c26f88f4"
+      }
+    },
+    {
+      "pair": "XC064-range-deltas",
+      "kind": "contract_half_open",
+      "round": 6,
+      "record": "stage2/XC064",
+      "files": {
+        "meta.toml": "73f650ba12998a7c500f96e83f70224eb5f8c4051c6dc2ef42c6e178c511fcba",
+        "decoy.py": "c758c2bd00eed59e6bf56ce6b2eebc9f9ddd8ef0ab3d98e421eb5c8ea584f9eb",
+        "twin.py": "905733254e648c16572850cd006f8e270bea71302da16873a76266741d0c4d3c",
+        "proof.py": "3d1cc4fcba4eac087f287527ea1bfbaeb6cf7b1dbae7a4012d06970eb72594ea",
+        "mutants.py": "4fbc47c670c92b52f9c7f579741837056dae10d1626e8077b93cee6d8a1f52d9"
+      }
+    },
+    {
+      "pair": "XC074-weighted-ticket",
+      "kind": "contract_half_open",
+      "round": 7,
+      "record": "stage2/XC074",
+      "files": {
+        "meta.toml": "6249beff93be3d6a97ad5a8677fc99df47491aca5e9691043e1132112bbce857",
+        "decoy.py": "8ca43b8704cb41b19848a62ec60fc2acaeb7facb4048e57d5d89c8994d220548",
+        "twin.py": "bf52f56b585c55c5950a909cf33c269021e1b97a050914f5dc5eb41c09b3e391",
+        "proof.py": "be0b3646c3bfb67497cdef9c5a23bc1c7964e59656a341201a93e96613ac50a5",
+        "mutants.py": "c8f98b09d0bdeb8507be93328833287e43b820b24f0e873bd4e9ae654797b79d"
+      }
+    },
+    {
+      "pair": "XC083-reflected-selection",
+      "kind": "contract_half_open",
+      "round": 8,
+      "record": "stage2/XC083",
+      "files": {
+        "meta.toml": "a6601ecacf09be505980f96367a375b183a2c3ddad5114790b4f327d97c4fe0d",
+        "decoy.py": "5406da6d779e284c898369670748f9fd0aeaa9838ea97b75b72b0a710123d944",
+        "twin.py": "b703f6fed6605948b06c2ddbcbc8e42de7a13fec772fa5c7acfbb95e57aaa332",
+        "proof.py": "14238e35bf618b1175a212e7754f66975d6a669360be70f0db7c1521b33d455e",
+        "mutants.py": "ba456b3a58749d0f2e82362b844106ec590b401d57ee320aaa323d2e07289da1"
+      }
+    },
+    {
+      "pair": "XC005-ranked-groups",
+      "kind": "defensive_copy",
+      "round": 1,
+      "record": "stage1/XC005",
+      "files": {
+        "meta.toml": "0cb0ecd3ee067f489b5dcf2a12889b401848f7cec84645e46d123972ef9acbf7",
+        "decoy.py": "72fe5f6b68c061f6b2602bd130705103acad4fda9f934a72e4738dcb25d2e9d4",
+        "twin.py": "46b3fb0c1337d3e9442212c2f31f23cfe932620212f1a8aedfcf0fbc81832902",
+        "proof.py": "651329b8dfcfae90e340484c94d36180254052dea0afe79d85d8eb714c838384",
+        "mutants.py": "8ad78a8b7d4f2a8c8acf8a9d32bea36120f68b2adbfe9be6ea898937b045e2a1"
+      }
+    },
+    {
+      "pair": "XC019-packet-snapshot",
+      "kind": "defensive_copy",
+      "round": 2,
+      "record": "stage2/XC019",
+      "files": {
+        "meta.toml": "0a5a5f41d01d55c9182705791f93f5c1c39452c61c99f61518b8014d465a85da",
+        "decoy.py": "837d02909f124c37e60ff0cd14b1ac954bd07c087c04790812faa9057eb81c32",
+        "twin.py": "02aa574d5bff9ef05102023fffa04beec009705f800f2c7b849bb0c9247b19a7",
+        "proof.py": "7846d54b4307c66ee5b166eb65c3979095be297fa292653907b0b2f7f2d8bf05",
+        "mutants.py": "38c5c4fee61c5a1c50d59896a57ed8141cd6f916488099a7f2aa37a4a1551f8a"
+      }
+    },
+    {
+      "pair": "XC033-decimal-preview",
+      "kind": "defensive_copy",
+      "round": 3,
+      "record": "stage2/XC033",
+      "files": {
+        "meta.toml": "76d6f5af8b2ac600a5cca4cbf451df007acbb4288339123073da7be9c573240f",
+        "decoy.py": "05120e0df72f01c407b0689d93d3218abd10618b8d4a29c8cfd8795ecdeb752d",
+        "twin.py": "5d5d033aa4c57439b9b23f377241c53fd0cc6bc4cdf81a27fb2f23745b9e05cc",
+        "proof.py": "4f16ee6ffb959d654b6652ffaa2e9a8c18bc84f5ea11bd9d9ecd8a91678815c0",
+        "mutants.py": "4743a5f2f0af7e537e70adb7dcf6b6f86c3768e2aed8689019b932ffdf60eb81"
+      }
+    },
+    {
+      "pair": "XC044-graph-preview",
+      "kind": "defensive_copy",
+      "round": 4,
+      "record": "stage2/XC044",
+      "files": {
+        "meta.toml": "7fedaa28070003a11386362c17b2de5c2fb451a6225accb1bb6db03ab3de394c",
+        "decoy.py": "d39c9051fc65615970f37f506413e4f85d78c7ab643946ace6484a735b1ed9e2",
+        "twin.py": "0d649b08b1c3ed2a8fc18b396227c4ede95ec87255ba878633d60043501b065a",
+        "proof.py": "46063d82cb959e1595453d406a81746c8fdd180a2896871e5bd76bac9d8d18d8",
+        "mutants.py": "bc0487cf54592c97f312ece0310483e67d6c40a4e9b4489eb8047ff79b67e635"
+      }
+    },
+    {
+      "pair": "XC055-rng-state-fork",
+      "kind": "defensive_copy",
+      "round": 5,
+      "record": "stage2/XC055",
+      "files": {
+        "meta.toml": "266ad42ca9a7a1a8337a213c22dff7a6c1786466f8911beb98a04b784a9b12bb",
+        "decoy.py": "84d223e0406ae6965eb8961c5327d7acc158ef246dcd6e24b7552b51c432d5df",
+        "twin.py": "973c1c6efecd23ce1e380fb3ba32c7572c9e95564381ed02f615b6ad9fa80307",
+        "proof.py": "368a0c78799f940c99e799e0fb8367d4ff33c08c36e35d3f4a1e8374bb9c7555",
+        "mutants.py": "c1f88fa1d65170579eecb9ade1324d4211c53edf8e9e37de7f13051170eb6a1b"
+      }
+    },
+    {
+      "pair": "XC065-zlib-fork",
+      "kind": "defensive_copy",
+      "round": 6,
+      "record": "stage2/XC065",
+      "files": {
+        "meta.toml": "85da3dd7785e1c4a316cf93faf12c3accb763bfc096669994ec609c253cbcafb",
+        "decoy.py": "291921f9285913536ddbc65fb979c87125b01a66ded5eab9ec457cfd756a94c8",
+        "twin.py": "2cba13cf4957727e5d3d90d373e67dae193ce2b5e023c6716ab4b364754ec4cc",
+        "proof.py": "d3848c91c6bba898b6487de0e96314c22900d28ec31b4caabe48fdee56d47932",
+        "mutants.py": "2193f4d2bb6850fea7b4c1780902d3942d50073e31e4d42c2578a2e1ab4d6f75"
+      }
+    },
+    {
+      "pair": "XC075-overlay-reservations",
+      "kind": "defensive_copy",
+      "round": 7,
+      "record": "stage2/XC075",
+      "files": {
+        "meta.toml": "3df028c5b1e032f7856f769a76627ffdd4bdda5cb7d7f8dec6b4296fe98d804d",
+        "decoy.py": "8797b19a6ac44ae5e0a69745793074127e6c728788c75c3e8b3a15f7bf20c697",
+        "twin.py": "bf1fe08bb8af859a3c44e4e280cb226a0e435709055a40ef0fe2e573f3bc0963",
+        "proof.py": "5c4b34227d792d8dd677797a9f0fa3d5002811acfc64c6bd379cf4317a985cab",
+        "mutants.py": "a274df246ce2250aade586ebaa230c2c62080cc61a5a1289b8e933e6f7c7131a"
+      }
+    },
+    {
+      "pair": "XC084-context-preview",
+      "kind": "defensive_copy",
+      "round": 8,
+      "record": "stage2/XC084",
+      "files": {
+        "meta.toml": "47e38394315cc93145dc32ac388a46e395681a6b8bc7c6b5255d2c32c8684144",
+        "decoy.py": "bccab0a6fc400602cfe2239e78b263934254741071cfe68cc1c4206f250d3ab2",
+        "twin.py": "fa499b82a4278e16c500656d94c40b4b356e01853c3e3a663a9e0ae5d720d84f",
+        "proof.py": "566c926e2faeec6570e6ff0be6fc92e01e40ddde39dc11691b452bc023c4bf93",
+        "mutants.py": "19256ba3b406b15a4b175fc9163ff5d8f69c0ab4894fae332c0f1f143a4541f0"
+      }
+    },
+    {
+      "pair": "XC007-rollback-error",
+      "kind": "exception_absorbed",
+      "round": 1,
+      "record": "stage1/XC007",
+      "files": {
+        "meta.toml": "42b4e008ef38f07a6b7cd4ae7fcf3cf3eecd8472ee4c211ed70a865717dce14e",
+        "decoy.py": "cf42315eb8ae2920f2872d75cb74fb6f4613a7d4e7326df910510c686fadeade",
+        "twin.py": "903283ad06d3f4148715772daa54175c3e4843d16924b4f97697abdb89273884",
+        "proof.py": "699d94df4b3ce18d89b08c7b89b43119c68b826035041ca6da62d2178c2a5372",
+        "mutants.py": "3349d1b4b5b7aad79d51772f7c633d3db798c32a5df173c8679b59390eeb5da9"
+      }
+    },
+    {
+      "pair": "XC021-cleanup-drain",
+      "kind": "exception_absorbed",
+      "round": 2,
+      "record": "stage2/XC021",
+      "files": {
+        "meta.toml": "3a35c992e986d1493917dbf67e9e700b188b68f7ba71aea67906f2beeb485308",
+        "decoy.py": "745e7c0e58620f13370c44af94d7b571ad941459c36b25bd778aa44d13a42b72",
+        "twin.py": "30c1de826cf8f2b95050e1963bcf208c3ccafaa21582debc6c36013e95cf8655",
+        "proof.py": "af0bc429850109bd3d4b890e5304c3e434c8c3b1c6b224405270547859b4c073",
+        "mutants.py": "35b6f64607f6e882f2a2f1b15881b0e465f7e8f7e6bf7f9dc63b3e5a544981c9"
+      }
+    },
+    {
+      "pair": "XC035-context-reset",
+      "kind": "exception_absorbed",
+      "round": 3,
+      "record": "stage2/XC035",
+      "files": {
+        "meta.toml": "635f7c9847c9cef1957edfd6649ca27c3202d51ca641f0f7ee7dc9214257b6f0",
+        "decoy.py": "9f65bd871207adae36b386456bbe28942955421513068f385b612623243a9932",
+        "twin.py": "c24f184d5e3c9e6bac3c07a719143b10fbb587329b44885f91b5408666e9d65f",
+        "proof.py": "5bfe8a1a5cd9d3387275f342b395c79d6c98443be423cacdf761af277f1e1c88",
+        "mutants.py": "b4232f58c74a30fa3d4d525ce80e185122d501931a83c9c9f167f0f784e8f170"
+      }
+    },
+    {
+      "pair": "XC046-cleanup-exception-partition",
+      "kind": "exception_absorbed",
+      "round": 4,
+      "record": "stage2/XC046",
+      "files": {
+        "meta.toml": "94a474d357b40e9a6830a5024c8e709713bd4906a7fb1ccae901631fb1e2f7e0",
+        "decoy.py": "085d05244530a68452373d20eadb2e7b045ae92df79853eed5f88f9cd5d3605a",
+        "twin.py": "a39573cc123f7b03d1cf5bf6bb55d1bb3a17e437755b7825ae111056d995d530",
+        "proof.py": "069a9e248ecd90f6eaa78151c52ca799f82cf6dfe6a0b43fb7ea29be1a4e2b93",
+        "mutants.py": "4a9b9a4218665701c7ddd06c68c79648178f2437776d8dd414149b0dc6fa7572"
+      }
+    },
+    {
+      "pair": "XC056-retirement-phase",
+      "kind": "exception_absorbed",
+      "round": 5,
+      "record": "stage2/XC056",
+      "files": {
+        "meta.toml": "e9f8a28beacf65709cccc39127ed1fba6582ad789536b1531b30e85070fa840a",
+        "decoy.py": "3b5d582fca98f0ba94e46b1e99d5d47e12835a87f8f522bb7d69fee7bdcddd6a",
+        "twin.py": "e299de9addd1e7273cae56cc0a5b25d36d25dcaf792a4ea1bb1190c714c620ce",
+        "proof.py": "d96c7e54eea34b34c5666b1bfcaaf3d1fb5f07dbb69751039401bbde334edbed",
+        "mutants.py": "51cad8230e9e6b4600ef3ae490d3663ed70d703e458c81d25b03a58301be05ec"
+      }
+    },
+    {
+      "pair": "XC066-deferred-cleanup",
+      "kind": "exception_absorbed",
+      "round": 6,
+      "record": "stage2/XC066",
+      "files": {
+        "meta.toml": "24ceb52c88936c079ae3ba3894394b0f69347f8c1eb992922c1308c4c870b97d",
+        "decoy.py": "0b1fd8c8e98a60035a4f92f1b8dedae7614fdeca733ac882d9f9150e713661c5",
+        "twin.py": "173d48c259e50620c61771a9fce1a09947d5d54569d0423fbd3fda048109ab50",
+        "proof.py": "f272c1160893fd981393f515c245ce9f23b1791887ef3f7388a24eb630e3e90a",
+        "mutants.py": "0b27cc54f4c93969f7cbf8dbf93febeb5988d631a50702da7e1f23c23f4aaab5"
+      }
+    },
+    {
+      "pair": "XC076-cleanup-receipt",
+      "kind": "exception_absorbed",
+      "round": 7,
+      "record": "stage2/XC076",
+      "files": {
+        "meta.toml": "a4d86b7ec7d1cb467c4f86b77617b646fd16b00dda672ef89939dd1defbb8797",
+        "decoy.py": "f9e48d20b8533ffd686c757cfc910a42e751145f55980ea0740262817eaf28c7",
+        "twin.py": "f6af9e4f247ce8b8eb0b7ba9f7512e9691a9e5781fbc1e45efe9b9ce2d31f413",
+        "proof.py": "38eb34aa65f565d0b627e987e8be11aab7d4269739f1268b7ff6035c8b3cdd08",
+        "mutants.py": "94e38e0c104f15c36ff580e0367b1cc169317cc69d5425e89796dd23f24fca0a"
+      }
+    },
+    {
+      "pair": "XC085-cleanup-fallbacks",
+      "kind": "exception_absorbed",
+      "round": 8,
+      "record": "stage2/XC085",
+      "files": {
+        "meta.toml": "13af2e6f6c461c8788675f9697eeb4b6afe816251fae58f4009c78b4ef9bfb45",
+        "decoy.py": "5651ded7bb5c582433bc0fefd21dcc80f01a31b1f473e087479a0a3836c5a7d3",
+        "twin.py": "a748f528f8c76c2ada345e3cb2c629ab8a5c00e9c13a72168d7478ed30604109",
+        "proof.py": "04d329a23b9d6460c8381dbe3b7e9e834bed4cb73d7d34c89d7505cb346d2765",
+        "mutants.py": "f6c660e2fdbb15cbc29e97aff6340f935c8e410574a6814288a116255c9fdd61"
+      }
+    },
+    {
+      "pair": "XC008-command-policy",
+      "kind": "frozen_after_init",
+      "round": 1,
+      "record": "stage1/XC008",
+      "files": {
+        "meta.toml": "03b8ca7d2a441a0b18bee9414dff3196097d2b2b073cf0a9c0b3a65987a2344d",
+        "decoy.py": "499b84ff6c3fda655fe07b91e9bd7565228f977b846622016e018c552532b173",
+        "twin.py": "0824cf2dfe476ca850feb3b8fff032d73d2858d36ee6736603a7342a74ccad87",
+        "proof.py": "6e2aef615ed6dabde1462c6c2595b0d7c10d80e004ac40f537683b7c32b59814",
+        "mutants.py": "767d28a25cab92ffe3b4109bc56ccf3ac3512cdf48999a892ba9d1f959557524"
+      }
+    },
+    {
+      "pair": "XC022-frozen-tariff",
+      "kind": "frozen_after_init",
+      "round": 2,
+      "record": "stage2/XC022",
+      "files": {
+        "meta.toml": "a61b372d85a3f2e03de854b907675f3ce2e44e6a14ce9ef91410ee1b848c965e",
+        "decoy.py": "fe8a983e06e6336330e4248c3b758949aa28b1b5a8cab118e80703d488eef559",
+        "twin.py": "163a246d979920555f845bf46bb01b05b4024df835a907eb8a3f632a547351e1",
+        "proof.py": "bdb25ce657dbaf8c5bd6db49721ead68c0e87f91e8fb2ec48f3f1aaa564017e2",
+        "mutants.py": "1ea4a9314f37739577e6476e60f834569228d4cea2251754c1363f4d9e4b791b"
+      }
+    },
+    {
+      "pair": "XC036-translation-snapshot",
+      "kind": "frozen_after_init",
+      "round": 3,
+      "record": "stage2/XC036",
+      "files": {
+        "meta.toml": "0c8afba982d8a5da92221a9a666305fc6fcde76d1639f8bd30c646c1c122356f",
+        "decoy.py": "3e70647be69fa7941997bb66399fe176464a64b68662f9c36f04513c8e9b683b",
+        "twin.py": "56746d2704ae7803d16490d1585cd5c471891b3db0c4f0bd3fbc6b2d8b9a6bab",
+        "proof.py": "63509944c8aa283935259588597264ac59b3c372c854a8ba727d10b374ef9663",
+        "mutants.py": "2d843c296ec9c931f389d7db4998c15d219d33815b947c9b2622ff9184da4d58"
+      }
+    },
+    {
+      "pair": "XC047-retry-range",
+      "kind": "frozen_after_init",
+      "round": 4,
+      "record": "stage2/XC047",
+      "files": {
+        "meta.toml": "412cd51e541938c653cbda74485c2ad0dbec1b9fbf9a88121b5da9d75257069f",
+        "decoy.py": "4f6128593fe0703530e7f3c0435ba7507d6f8da2225da351c020cd65e66fafe4",
+        "twin.py": "b7bebdf67136d8a1dd8ca9a3fbea42500fb9691e94130bf9eec1c401545fd5ab",
+        "proof.py": "437e1b5ee04ac9d367c99623690be9e7e084819137ef83e68f260f9e575adefe",
+        "mutants.py": "c9c2ad2b72a1eff0087cfbb7657df26fb853c3f536be2fb4e850fba5fde67855"
+      }
+    },
+    {
+      "pair": "XC057-frozen-methods",
+      "kind": "frozen_after_init",
+      "round": 5,
+      "record": "stage2/XC057",
+      "files": {
+        "meta.toml": "b8efa943f21cb3d56593b796ba6f0cc1f2d7a23ac5720580c030b212b3811897",
+        "decoy.py": "6f9ad814792e6cb4f57453d025accd80dc5b6d10b3608f335eb0ee55d784c09c",
+        "twin.py": "dff33d186510b46ba635f745e17a66f873e17f7c12a97779954920039dcd2bd8",
+        "proof.py": "64d18ae7329398aa85ebfbecfd4c5a52473b44b1c3f94fc1ff8fb8aa7ee40f1f",
+        "mutants.py": "8820681eb2eae5495cebff60b66f5bb293af0adbd15aa958df84453974187ba0"
+      }
+    },
+    {
+      "pair": "XC067-route-tuples",
+      "kind": "frozen_after_init",
+      "round": 6,
+      "record": "stage2/XC067",
+      "files": {
+        "meta.toml": "8e334f83724a69ccde5e588f1f4d88fa7817975a67164d5a89897073b302ce48",
+        "decoy.py": "8fcc8b7217bcbac16b2e5b23588e9a7c2949d909aa0b0e232cbaab3c0d082b36",
+        "twin.py": "833c9247723f2f0f437850d3ab0b0398ac469ea48fa6b23623ff77d60897df8a",
+        "proof.py": "cf0ee29afb6b36e597eeaef5fb98acbef4c67dd2c9ffd1d6af05ec2201db6bf1",
+        "mutants.py": "871c06474a2dbdf6cd4e983788c6c0d1a8edc960f90a9665a3de9d7f0089ebcc"
+      }
+    },
+    {
+      "pair": "XC077-sealed-class-policy",
+      "kind": "frozen_after_init",
+      "round": 7,
+      "record": "stage2/XC077",
+      "files": {
+        "meta.toml": "e384eea8d6ec391d0d60b3b51c5c7b705b22f756fe34e5017e53af9ca99bb37b",
+        "decoy.py": "83b7b38ca97628cbfbdebc40131c7ce64d2fec3ba16ce3b18d0b2c541a516bb4",
+        "twin.py": "dcd3a28e3e2e8273f76d478e74d798eed1da75b102dfad99f6f819019bb2a78a",
+        "proof.py": "a3c3a69a08f27563cfd14650812315bf781453569581a067b77b75075fa407c5",
+        "mutants.py": "b03f925490429cc0de2e89ffe8e06ce87f538e81c44b30ec0b8786bdd871d4be"
+      }
+    },
+    {
+      "pair": "XC086-compiled-rule",
+      "kind": "frozen_after_init",
+      "round": 8,
+      "record": "stage2/XC086",
+      "files": {
+        "meta.toml": "bbd3436cf5911c8aa799f11e148032994996782ab0ceba4d32f5597c38688a23",
+        "decoy.py": "8cf05b3e48938afa7c5094575801e1d6d6e304348713b03fa8ac9c1346f26851",
+        "twin.py": "595bd6624b509ffafadd697942dfe09ee097536571f104505f3c9bb37ec3f758",
+        "proof.py": "b04cfa55e9078cee0253ef13e41a7335c26fab17a5953f4cdd8e57bce2d04479",
+        "mutants.py": "13fc44d27d036af75a6d39a7b5c5028b6a9ab2c87a26c6a9eb64eef2716c3b27"
+      }
+    },
+    {
+      "pair": "XC009-event-retry",
+      "kind": "idempotent_retry",
+      "round": 1,
+      "record": "stage1/XC009",
+      "files": {
+        "meta.toml": "ed9286a6a0464968811571b1c196a8e83fca75b2424b09acd11d98c2126e9945",
+        "decoy.py": "453599493d81361a737269c720a87a7fb84025be03d95f42740c5214763eed27",
+        "twin.py": "c4207edcac1d04c7ef88da4809b4bf875737473e1cfe2ca20101bc22f903bed3",
+        "proof.py": "b51aa054416310a92d39b25f5488b5120be9c2ad0c5e6aa5e64c3b51fbe4bff6",
+        "mutants.py": "db6d1db69e3b51b0a0743b1aef6787854b223e132cc0eb434e6f98c4981ad3ad"
+      }
+    },
+    {
+      "pair": "XC023-checkpoint-write",
+      "kind": "idempotent_retry",
+      "round": 2,
+      "record": "stage2/XC023",
+      "files": {
+        "meta.toml": "af06e494bb105951ec2a9f385b33cb11f9f11f2f432346ba4b7469f0df66a07c",
+        "decoy.py": "0ba1f17afd1f86403b9403adbb2d7052fdd15408b147336fa199ec6f6a8ed5aa",
+        "twin.py": "c8de222677b73fa001e7917e622c066d65a8bb93635a075150142cb5cb66fdce",
+        "proof.py": "26f66fbcba28a4530aa67dabb635660a3897adeafe0212c1f4f1b81fbcf9a13d",
+        "mutants.py": "bf6a5e2b1eece1014038ced2d312d63615f0940c0c2b71b8969b5d34e2ba2fab"
+      }
+    },
+    {
+      "pair": "XC037-bit-clear-retry",
+      "kind": "idempotent_retry",
+      "round": 3,
+      "record": "stage2/XC037",
+      "files": {
+        "meta.toml": "9f21d2e6ead07d93daa1407c31786f3650dc8dbc5785d91904ee76dcfdec0161",
+        "decoy.py": "494878758c4ffba370282cd75e2b3397aaacf640dcf95d6d7ec902e5362ac08c",
+        "twin.py": "7051031acb26f2fb8f71c21e4163578499d455d8260aaf9f7d890db39f9f196c",
+        "proof.py": "66cb4406f378f61c6b8d35c5b98bf7800790cdbcaf1d729ae2990b4fcbe16d06",
+        "mutants.py": "301ec8cef4947e04b8430a01a44713637a92a85061007bec1b6948c7a0708f7b"
+      }
+    },
+    {
+      "pair": "XC048-checkpoint-residual",
+      "kind": "idempotent_retry",
+      "round": 4,
+      "record": "stage2/XC048",
+      "files": {
+        "meta.toml": "dfeca7df36a7dd16076ec9cb844f9ef3e4f6de7b60b554f2a455c9ecc2a35000",
+        "decoy.py": "7551d0977f0d4f56e05ed83e2d0c31ec35b4ba88665cfe9e5f3756b7667a4ed1",
+        "twin.py": "4b7cf28f5b056e148e6c911ba52966b0bba071b326862f9ea7d24be3433d15ff",
+        "proof.py": "e6470970e1b7e32613328d515b76c4d84147e4a1d0a5081bdb1b123e34741dea",
+        "mutants.py": "0857f6044a01e1cc21744d5dfe485c32763782eb17838f98c52d64742451e4f0"
+      }
+    },
+    {
+      "pair": "XC058-revision-retry",
+      "kind": "idempotent_retry",
+      "round": 5,
+      "record": "stage2/XC058",
+      "files": {
+        "meta.toml": "b39016f6404fde75a9f9c3bd5d5b34c63bba39c6364ccb4dd3eb5677edce75b2",
+        "decoy.py": "d943d4c17b06bf510ce6b9e45a35eedb537483bb11e47c9143a8855a70efa3b6",
+        "twin.py": "817419c0cf4cd342343443d104ae0d4dfaa9baac3e0e2f21874862153ed00d49",
+        "proof.py": "8dee50506ee476570bacdc65f36b93d3a80e468678d5d985a83fd86c1268a323",
+        "mutants.py": "3fd79ad231820db9e82df7ae445d68e993a1da0ab692cb3f45778c5f75cf17c8"
+      }
+    },
+    {
+      "pair": "XC068-ampersand-retry",
+      "kind": "idempotent_retry",
+      "round": 6,
+      "record": "stage2/XC068",
+      "files": {
+        "meta.toml": "2e7a57bbff5ac44c80da93d6416e7d8de2960322ad43ba11268aa601f45c69a2",
+        "decoy.py": "9e92767e6a865db3f11b7fdf11221f3a93e5132dd927bc0a5b50e46cde88c4c3",
+        "twin.py": "86506fe231f45d5a23cffeb3c568d0b10ca787eb8664b4fec817c42519fe865a",
+        "proof.py": "d69d44d7d21679026cbf712ceb648cab68a497132a5ed874a213f7ed53144425",
+        "mutants.py": "5ff5ccc68b395d9e5ee355ae7f395b38a4876dc66b679a4b2eb2323b23017797"
+      }
+    },
+    {
+      "pair": "XC078-alignment-padding",
+      "kind": "idempotent_retry",
+      "round": 7,
+      "record": "stage2/XC078",
+      "files": {
+        "meta.toml": "b5bda3b943c0ca1d9a515e66f68e48349ef0121051425962fd02beed266a57a6",
+        "decoy.py": "6b70858d21abc3bcd76ab6a4dcbc2ec4bed1284de56147c467e71390fba0e77d",
+        "twin.py": "0513c4303a64052b7beba0bd984b8d91f8c9fb6f4f4ecd1839b8ffcb24993d4c",
+        "proof.py": "9385eb40f426db285cf650fd7321476d0fb2ee68f81becd80c9e403307f060c1",
+        "mutants.py": "987f7f6ef25046a66109021f13a051b69f231d89c3f33d3669955b5800004d85"
+      }
+    },
+    {
+      "pair": "XC087-retry-ordering",
+      "kind": "idempotent_retry",
+      "round": 8,
+      "record": "stage2/XC087",
+      "files": {
+        "meta.toml": "c80f2fc57aa00731b74cf20d0325074c76bba5d0b49dacb00942d7476f55483f",
+        "decoy.py": "98952d3945bbbfb57ae54621c621f2749f587e1407fe6e81628af224ebc7974d",
+        "twin.py": "10b8df36fdfc6eb61559868e9178e35b4c981af8baf2decfe6371b9f0c674b66",
+        "proof.py": "2d07b69926eb18bef8cdd90d8f123f301dfee7ba03232c5311c4cc8962b86ce0",
+        "mutants.py": "aff18211cef6381a90db02e094ec811669e12c7d62d58edac88961d6d83f6cb0"
+      }
+    },
+    {
+      "pair": "XC012-text-preview",
+      "kind": "type_narrowed",
+      "round": 1,
+      "record": "stage1/XC012",
+      "files": {
+        "meta.toml": "53a7d6265eac359f88717ec02e8e5e6ee72c6c0d2873b0f6254ab23f14b07972",
+        "decoy.py": "bae9d380772fa4bac136f272c6c389bc707ff76d4078a1a123c39ef9fa68996e",
+        "twin.py": "e2d2446da775893becee8f974a8e62d40a5b0a7abb7c7e8542b8528d4d29a5f6",
+        "proof.py": "d714b4ad6f3e2a89bf16dfa5aa9cabef97c5ade3815c784efce88fd8656b0958",
+        "mutants.py": "43d1bbb24bbf47bdbcc4d98690e3b790443e042d921568ff7537bc746348bc41"
+      }
+    },
+    {
+      "pair": "XC026-match-receipts",
+      "kind": "type_narrowed",
+      "round": 2,
+      "record": "stage2/XC026",
+      "files": {
+        "meta.toml": "e37a1e7280a58dbb75a7f6896621ea217ef10496cbef02b9f765947f1b69cc1f",
+        "decoy.py": "f192cf3bd18d93630c85f4c4271032713cfd54efccc11ec28b4110170ee9b33e",
+        "twin.py": "cb6ca2755f394240cc929e32845f0ef0f91e0fd5744a0b3bcd0fcf0afa60a054",
+        "proof.py": "0c683e5e9bc3d7945ae264fa446a7cc7205d7876474e49c557d915fafae7985f",
+        "mutants.py": "16fb5280abf9165b170b5f24973a7835c3989eba3f4831f8773c6990b3389aa1"
+      }
+    },
+    {
+      "pair": "XC038-dispatched-hex",
+      "kind": "type_narrowed",
+      "round": 3,
+      "record": "stage2/XC038",
+      "files": {
+        "meta.toml": "753d4174a7154234cc53306d9af57be9b64cfb0fb804b16e99476a649ab2244b",
+        "decoy.py": "654e9419a49f09c029f718d1f016c0352c093eb03ed3c7e91ccf3cc75ea4fb21",
+        "twin.py": "23f54ea945603dc2020a16869b322d257a63b162aab35e67f033c82ccd4777fb",
+        "proof.py": "62482249dca9e1a0b80b7f552fc44ac0ad19da01cef35e1500ba9d5bf0185bb4",
+        "mutants.py": "1b910fd3874496181af8e5133bfc24acf61ac5d0719c46cc5c16129de015c533"
+      }
+    },
+    {
+      "pair": "XC049-rgb-match",
+      "kind": "type_narrowed",
+      "round": 4,
+      "record": "stage2/XC049",
+      "files": {
+        "meta.toml": "3e3095d60df9ff2fcf00506f8699f01c905a9642642ed8848f8f8ce8465707fd",
+        "decoy.py": "7882e8df773d6b9e9b65d269b59321dc069f3d3b9e9332f181228014b22a27af",
+        "twin.py": "5529a603cd8b3ad974e94d01f1176d8a729c402b49b7eadfa123fce22330c3ec",
+        "proof.py": "2f7e9c6afbb20d5e1f8a00cfabd9485bb655d84b5e7d9a4a878e2b1e45fb7081",
+        "mutants.py": "6fbaa8ca07bea80584f895b265a6b3feae1ace54a33b73355510df9037e6b714"
+      }
+    },
+    {
+      "pair": "XC059-header-dispatch",
+      "kind": "type_narrowed",
+      "round": 5,
+      "record": "stage2/XC059",
+      "files": {
+        "meta.toml": "06d8d314c5189b5d495ac3619e68e961e1b05cc3b369d9f59cfa3fff00126b3e",
+        "decoy.py": "3419d91f26a18388bc7e161f6630fcead06d01050ff8d15992ebf6772feac9f6",
+        "twin.py": "5e0c7f1d24a0cf0f1b19ab50cc6b87be7e33995027a3b3c471cedf571278417c",
+        "proof.py": "82245f532f3cc0937af2a7ac378924b2ef30c640acc5e73e1c80e20b4cd40c36",
+        "mutants.py": "1df6b3b8b4d80b8fd076f5c9eb065a78cb7e7c8d99bb8bdd3f4551eaa00d33aa"
+      }
+    },
+    {
+      "pair": "XC069-calendar-dispatch",
+      "kind": "type_narrowed",
+      "round": 6,
+      "record": "stage2/XC069",
+      "files": {
+        "meta.toml": "3c3c7575df384314c95ed5f12af978ceccf5f5b9bf93b28094945edce3a28ff2",
+        "decoy.py": "103a02b66d276a2db3fdff573e8d44172fca82a93aec70d14498dfd3e0d2dc62",
+        "twin.py": "e2d6e3c87221e93ec69bd8f14d5bc2f237933c69c11802136eb188485f27e394",
+        "proof.py": "f83228f0da811bcee9cc5bb5dcc3869945a65c84dc2d7e136efec3599274ed7e",
+        "mutants.py": "f46900aac0f16e5d872813f1e8fc8984f8ec519ca8ff7fd16ce611b4e4602f2b"
+      }
+    },
+    {
+      "pair": "XC079-dispatched-segments",
+      "kind": "type_narrowed",
+      "round": 7,
+      "record": "stage2/XC079",
+      "files": {
+        "meta.toml": "c44e9a481f7af3856fa83e436b7e06b8176626f0578e852fcafefb17bcdab438",
+        "decoy.py": "c618222300950a4f96a0f82bedcba390fc650003d74bc23640114f0cd63d8d32",
+        "twin.py": "9c560231278872728833bd8cda939cea6004cc1bd43c42d4bb8ccd6ade18fe27",
+        "proof.py": "79ae29247977012da6ab83b284f6669998d0d7fbe9c5de0ae06c6b4879815a07",
+        "mutants.py": "5fdd8415040d1a9da2ee0265dabc70cb3d17f62c05b3e9a23c518b05163b1e27"
+      }
+    },
+    {
+      "pair": "XC088-recorded-span",
+      "kind": "type_narrowed",
+      "round": 8,
+      "record": "stage2/XC088",
+      "files": {
+        "meta.toml": "879f295b362779c2be93d78ab189e12a7029d9edacf99de2297d457e34c5d934",
+        "decoy.py": "9183e7ad1b836971218035532a8498d1eb171f17e1d50d495c5b6d0f1000c9a0",
+        "twin.py": "41fa5ae963af2f2b25f3ede19803a666553327ae040529309c9911d5c33bf47e",
+        "proof.py": "15a9d36da1c91c80c56aa822c585988cc90fad70b64ace748ac29cd17e332a43",
+        "mutants.py": "a97a1784298c66e5b2ccd277ea95477a0cb736ef346384e824873a5a79573d76"
+      }
+    },
+    {
+      "pair": "XC013-retired-pickle",
+      "kind": "unreachable_branch",
+      "round": 1,
+      "record": "stage1/XC013",
+      "files": {
+        "meta.toml": "d6028f41f6ca35825bf9977db5ad89cc001a787d559bc2ad563b3d658717d0a0",
+        "decoy.py": "958545db6e1590f0acce7f5d3619d1797e5da835015d2be62048e78e96a5693f",
+        "twin.py": "336ae1f77012cc762a5f59c5adc5110a172a71ca83493d368e24f208e39c7212",
+        "proof.py": "6f3fc71749dfdcddf7a136a81f26c6553879b57fbd4fed0f51f720c9374dad7b",
+        "mutants.py": "ad270e4a72fcb3d102331b1e7e82d6f3d9dc493d093f127d92bfb96d6b441364"
+      }
+    },
+    {
+      "pair": "XC027-cache-miss-handler",
+      "kind": "unreachable_branch",
+      "round": 2,
+      "record": "stage2/XC027",
+      "files": {
+        "meta.toml": "c8fe375d1f259632fbb4aae9c5a2ff01fd90e89ac334ca1f29979e01ac76b9d4",
+        "decoy.py": "340395b34faa24863c73a9dc06a6e4727e6bddab5734faa191ecaf8165b509b0",
+        "twin.py": "67adde9b325af92692e5b8e3f620a1bb0886569b27cbef1576b5efc9f89a3640",
+        "proof.py": "97e41bf2807710509085dcefdc810b7945d3dba2cb26bb076e51be201de027e9",
+        "mutants.py": "72e6a8d3663067167d831aae75893d9194f19cec79c139f80622db4df6fbb7b5"
+      }
+    },
+    {
+      "pair": "XC039-retired-render-flag",
+      "kind": "unreachable_branch",
+      "round": 3,
+      "record": "stage2/XC039",
+      "files": {
+        "meta.toml": "dbf7d6ae472b9ff4b40c4e67bd5bbe99f8a68131dc87bc6810562e18c9614153",
+        "decoy.py": "a73fb538ed54cc393b1da887b4504a3bce90429af0716b70f32a36d3dde26d43",
+        "twin.py": "767a009fabac3c1c74251d368a2c04c56948db0b7aa6b11a12173cfb81dbe8cc",
+        "proof.py": "1ce333a9d5d3c1b6de60059088b4be75b7bdda22d8c0e5449f7b75db15674379",
+        "mutants.py": "d2d5a518bd65850d129e938dc68f04b5aef66f5c7fd6ab6a1bc4710d00e1de68"
+      }
+    },
+    {
+      "pair": "XC050-generator-completion",
+      "kind": "unreachable_branch",
+      "round": 4,
+      "record": "stage2/XC050",
+      "files": {
+        "meta.toml": "4b0ef54d7e267e5bd9b236abc543ac5d04ef5884e912d61b803e710c4b8496ab",
+        "decoy.py": "b1123c5121fe3c6042fdaf1c1bc3584a184db101de13204843e95dc120f78df5",
+        "twin.py": "1d5091bc85dac96c1c5a21da63ab80edde6cde531addb1be73d11b002e720176",
+        "proof.py": "b0edb73404a60fc1fc3466d1be670ecf47e190d499d3ad0a517046f48297cc3c",
+        "mutants.py": "42264aef89ba8c305dffcb089d5c15446c5ddc25921bd81a7bb7e9822fe2522d"
+      }
+    },
+    {
+      "pair": "XC060-ring-remainder",
+      "kind": "unreachable_branch",
+      "round": 5,
+      "record": "stage2/XC060",
+      "files": {
+        "meta.toml": "306076fb9a1e573b654d79bcd7aba04cf83bf4e59752d29eb44b2d3aed90a5c4",
+        "decoy.py": "d111e73ffc7c533ee7dc9651642bf9ee6ec644425dad5e9d67ecf618316c3f19",
+        "twin.py": "66b68267a195e1192004eaa2e8ec267f38362a703c510bec2458d7d257498411",
+        "proof.py": "af101d9e133dcb5f4207d798ea490ee8a0813bae6785b944bb3f34ffdba0f9bc",
+        "mutants.py": "0c73bd32189b9a2c0e59f706a5ecfe2d682916dd4324e673348413966a2c1775"
+      }
+    },
+    {
+      "pair": "XC070-json-legacy-dispatch",
+      "kind": "unreachable_branch",
+      "round": 6,
+      "record": "stage2/XC070",
+      "files": {
+        "meta.toml": "702cecc385f63a71fc6a55c923a8949e9da619bb804966866acd0e341f632ac7",
+        "decoy.py": "eea472251a3abb3f5bee06acfb938af94e1f14838f8954d5e67c6a331a5c9b1d",
+        "twin.py": "12299311a67c10d73eb44d15a4b329dbff143864345bb070f9b2f2b9538ad446",
+        "proof.py": "8387e9b73145bb6f8a2236c2fc351dc3d5748121c330c8e91086aebbbe85fa5d",
+        "mutants.py": "7609098e1305ec33cf753f8ae2c508cb31b13880e96784f8d87b536f5fe41ee5"
+      }
+    },
+    {
+      "pair": "XC080-enum-alias",
+      "kind": "unreachable_branch",
+      "round": 7,
+      "record": "stage2/XC080",
+      "files": {
+        "meta.toml": "2894684d072c0ccbf02fa784c0e3f9e07554dbcf154580534e5fc8ff0926883c",
+        "decoy.py": "98e7b0a0544c198e4599ee5cdcf90914d53bac493c50104aefd4579db37cce3f",
+        "twin.py": "ad810f909cd400db783ff9a6d1f07da554638ad8a3a3807055dcf14f9527abe4",
+        "proof.py": "51b51e74e28d5a6371deb9cfe8418d58de79eeb059299daeb03df16d81b905be",
+        "mutants.py": "87b568f20467bf9d27c85821f45472919e03f7971e9903f28da06a286dcb01ad"
+      }
+    },
+    {
+      "pair": "XC089-exhausted-transcript",
+      "kind": "unreachable_branch",
+      "round": 8,
+      "record": "stage2/XC089",
+      "files": {
+        "meta.toml": "de2588b592850e9931a1d2e4b979ec1d41744587dd7fdf8980fffd152a587d8e",
+        "decoy.py": "60f685cff57f15972406f8be0a272d265af10e20c0b39a814a32783b29a21ceb",
+        "twin.py": "368e3c02a1c1a73b967d22e2b74b7ba208d6397f116273b99207f664c2a1637a",
+        "proof.py": "80c0c150221009cc8b78ac2377184420f359e14ec64a2b52d0bfa964717911de",
+        "mutants.py": "0e3672f81da35a3317a20d1dd61db96fcccf8f63e2971f9618eb777d26b3d4ab"
+      }
+    },
+    {
+      "pair": "XC014-atomic-byte-patch",
+      "kind": "upstream_validation",
+      "round": 1,
+      "record": "stage1/XC014",
+      "files": {
+        "meta.toml": "d228787d93a617cd72f6d2d0009aa9703cd24c36ceb3b96f249c028fba3f97a8",
+        "decoy.py": "8e8800d19a927c26431790673d57c5f38ff4c64c6ad131bfdec7804d6433c698",
+        "twin.py": "a137cca7cc8e3b7731809dc55cec5aa232060237f17d9fdb0ea784d6bf5e3d71",
+        "proof.py": "226b4f57ba8ca398e313d20e2557f2f8ac603850a3e151bd544a8ba7c844f8b9",
+        "mutants.py": "f18ca24f01af5b4ac3154206affae5d53fe5109eca3d129f7c067ead144216f2"
+      }
+    },
+    {
+      "pair": "XC028-rectangular-report",
+      "kind": "upstream_validation",
+      "round": 2,
+      "record": "stage2/XC028",
+      "files": {
+        "meta.toml": "46d9ce76ac5c5c082a08e34f1fa27da9e99445474bcdd256ec47fc25f793cc7f",
+        "decoy.py": "bbd1d46f66ee602aa34473584be4a87ba31374c22381d92e19d81622b796f7ea",
+        "twin.py": "2cca7b68d83087ed713eda45f0d9fa5dc06d8effd0c4b2ee92526446140dca99",
+        "proof.py": "d8c0370c106c880358d24517f084ff84d1d77281f6db355903704a14589a4103",
+        "mutants.py": "8d3ae356d16978d763fe795f00f06c898e94c8067d0cefa2072a35370dc94c49"
+      }
+    },
+    {
+      "pair": "XC040-normalized-headers",
+      "kind": "upstream_validation",
+      "round": 3,
+      "record": "stage2/XC040",
+      "files": {
+        "meta.toml": "edfb4004621185917606e7eaf444bf68b42b77f25c7aa1a1ee93324f52da553d",
+        "decoy.py": "a221ef3ea4aeedda9b5e2893651b667ff7191bab385d34143b8dd53ac45069c5",
+        "twin.py": "ad791eb81b7ebfd1db5670b5e5feb267f34077f6cb64a890c26a39b425dfa84f",
+        "proof.py": "60b642747833c7cf4b15f7d9c8d5db076af3285b3ebc95d60a0293f0cebdb15b",
+        "mutants.py": "3107e0c8510851cbad01ccdcba5dd2cf11a7387855e36f389ba40980b74922d1"
+      }
+    },
+    {
+      "pair": "XC051-cumulative-counts",
+      "kind": "upstream_validation",
+      "round": 4,
+      "record": "stage2/XC051",
+      "files": {
+        "meta.toml": "ed90c78397560f1a0a40c8c446aedcb4c0e53e128da228b8c632c62f1b1284c5",
+        "decoy.py": "180039c1d0b3112515ae390e9b0133ce6519404918fdc614dacec4e427c75d06",
+        "twin.py": "545efc1e364955445aa9b8d6d34acb3adeb157ec6f464339e5e23e4efd8a2133",
+        "proof.py": "15f00236344be2db27e4981a8586cbe0ce37165e1507d916ae0102ecbf3295b3",
+        "mutants.py": "8f2bc9cb47cf7638fe102362dc8f79fddf37613fe143eb03893a609e2a969374"
+      }
+    },
+    {
+      "pair": "XC061-postfix-arity",
+      "kind": "upstream_validation",
+      "round": 5,
+      "record": "stage2/XC061",
+      "files": {
+        "meta.toml": "6fbb4642b39bbe480860ed73c68261022eea291f388a778051b877f0ffb04690",
+        "decoy.py": "d47eefae7398680aa0432d8bc7023baf45cb3361b80b80312c0c2f4addfb42a9",
+        "twin.py": "4f67a1d7035d4791df1e86cd1eef91d059d15b38ff5e4afaac15e87d429de79c",
+        "proof.py": "9e1b42062f920d0f6a4e7a249e8c9df746897550a43a08b175bc390821e40bda",
+        "mutants.py": "75ff7058506c03e163914a77d301ea84725dff89c8a00701eeb3e30e4b65320b"
+      }
+    },
+    {
+      "pair": "XC071-exact-tick-rescale",
+      "kind": "upstream_validation",
+      "round": 6,
+      "record": "stage2/XC071",
+      "files": {
+        "meta.toml": "445898a9d8928a0a773c2d1ad064497993d9a7972ee2a15c7d4a0e8dc8b91d6e",
+        "decoy.py": "b5167ad1657f5123857f034f9e1990f204b420630654044cecf50c9a58c567e9",
+        "twin.py": "2f9dc49770f1f16e002f4721c8571e7593924b3ebaae42a990111d7e72b7a126",
+        "proof.py": "a59cc5852e88671f3f4e29d235262cf646179d5eb0c60d9e8c9d7ba06d766e5a",
+        "mutants.py": "6c4b0a8ec2c8b863cd7d245c6b096af3758e23f7a64324a82b23336e905cb861"
+      }
+    },
+    {
+      "pair": "XC081-canonical-base64",
+      "kind": "upstream_validation",
+      "round": 7,
+      "record": "stage2/XC081",
+      "files": {
+        "meta.toml": "b551208a87ec5f740bd36871cb3a358080700209a2a020c2baee521c45e91d6c",
+        "decoy.py": "2ae81b269e0ae37ae5f113ae846bad1f6c2347c686103521657aff3990ecb916",
+        "twin.py": "13dbba706874f3af57f61295898ad46570b49389ca3370afc934eeb116df85a9",
+        "proof.py": "1306df785fa0bb476f632e41ba774d1924dc724c4207a2bad0af2007fbdb9292",
+        "mutants.py": "62d8dcc561536d854a4013ac3f85cfff6afb887c5a7ce988f37c4dbd84a45033"
+      }
+    },
+    {
+      "pair": "XC090-disjoint-runtime",
+      "kind": "upstream_validation",
+      "round": 8,
+      "record": "stage2/XC090",
+      "files": {
+        "meta.toml": "c69b5956c9781eb97d5e1d20d2a6fc92889bc6722678b0e585afb489367f141c",
+        "decoy.py": "5465cdbea99c790e58a71342f7391157e1774415c1686e4fbeb7ca4b2c34443e",
+        "twin.py": "7e09cd2644a788b465fb96cce0fddc15d796c2daa09c7368532eda8b0b4229af",
+        "proof.py": "c6bdbdc57312e102f7aaac5686767d738b9515fbfa36baaa8b3c45339d27d4fc",
+        "mutants.py": "8b578e4d8a06a8324ce0e56606da326f398ea386ed943e32feb9c6ef0dc16794"
+      }
+    }
+  ]
+}

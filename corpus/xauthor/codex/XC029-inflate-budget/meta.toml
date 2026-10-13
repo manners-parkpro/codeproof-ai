@@ -1,0 +1,15 @@
+decoy_id = "XC029-inflate-budget"
+trap_kind = "bounded_input"
+
+[bait]
+apparent_defect = "하위 함수가 압축 해제된 payload 전체를 bytearray(payload)로 복제하므로, 작은 압축 폭탄 입력으로 크기 제한 없는 편집 버퍼를 할당할 것처럼 보인다."
+lure_lines = [8, 9]
+
+[safety]
+claim = "open_record는 평범한 하위 타입을 포함한 모든 bytes 입력과 매 호출에서, 사전이 필요 없는 완전한 단일 zlib 스트림이고 후행 바이트가 없으며 원문 길이가 0 이상 4096 이하이면 그 원문과 내용 및 순서가 같은 bytearray를 반환하고, 그 밖의 입력은 하위 편집 버퍼를 만들기 전에 동기 예외로 거절하므로 이 공개 진입점이 만드는 편집 버퍼의 길이는 항상 4096 이하이다."
+justification = "open_record가 새 압축 해제 객체에 양수 max_length=4096을 지정하므로 반환되는 payload는 압축률이나 입력 길이에 관계없이 최대 4096바이트이다. 원문이 더 길면 출력 예산을 소진한 시점에도 스트림 완료 표시 eof가 거짓이므로 하위 함수에 도달하기 전에 거절된다. 잘림도 eof 검사로, 후행 바이트나 연결된 스트림은 unused_data 검사로, 손상이나 필요한 사전은 zlib의 동기 예외로 거절된다. 완전한 빈 스트림과 정확히 4096바이트인 스트림은 허용하고 새 객체를 매번 만들기 때문에 앞선 호출의 상태를 물려받지 않는다. 따라서 _editable_record의 전체 복제에는 상한이 있다. 압축 입력 자체의 크기, 압축 해제기의 내부 작업 공간, 실행 시간 및 비공개 함수 직접 호출은 이 버퍼 길이 주장에 포함하지 않는다."
+guard_symbol = "open_record"
+guard_lines = [12, 16]
+
+[twin]
+defect = "decompress 호출의 max_length만 제거하여 큰 원문도 한 번에 끝까지 풀리며, 정상 단일 스트림이면 완료 검사도 통과해 4096바이트를 넘는 편집 버퍼를 반환한다."

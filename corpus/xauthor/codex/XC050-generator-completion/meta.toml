@@ -1,0 +1,15 @@
+decoy_id = "XC050-generator-completion"
+trap_kind = "unreachable_branch"
+
+[bait]
+apparent_defect = "계획기에 외부 command 문자열을 담은 run 이벤트가 있고 미리보기 소비자가 이를 shell=True로 실행하므로, 미리보기 요청만으로 셸 명령 주입이 가능해 보인다."
+lure_lines = [15, 17]
+
+[safety]
+claim = "preview_job은 모든 str command와 모든 list[str] labels 값(빈 값, 임의 길이, 평범한 하위 타입 포함)에 대해 셸 실행 분기에 진입하지 않는다."
+justification = "_plan에서 반복 프로토콜로 전달하는 값은 첫 요소가 상수 display인 yield 쌍뿐이다. run 쌍은 return으로 생성기의 StopIteration.value에 저장되므로 for 반복문은 이를 이벤트로 받지 않는다. 따라서 command와 labels의 내용이나 크기에 관계없이 소비자의 kind는 run이 될 수 없고 subprocess.run 호출 분기는 도달 불가능하다."
+guard_symbol = "_plan"
+guard_lines = [7, 10]
+
+[twin]
+defect = "_plan의 마지막 return을 yield로 바꾸면 run 쌍이 실제 반복 이벤트가 되어, preview_job이 외부 command 문자열을 shell=True로 실행한다."

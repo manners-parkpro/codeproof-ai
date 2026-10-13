@@ -1,0 +1,15 @@
+decoy_id = "XC059-header-dispatch"
+trap_kind = "type_narrowed"
+
+[bait]
+apparent_defect = "header_pairs의 headers는 dict | list인데 items()를 바로 호출하므로 목록으로 전달한 헤더에서 AttributeError가 발생하는 것처럼 보인다."
+lure_lines = [7, 8]
+
+[safety]
+claim = "header_pairs는 선언 타입 dict[str, str] | list[tuple[str, str]]의 모든 값과 허용된 하위 타입에 대해 호출 순서나 반복에 관계없이 예외 없이 새로운 목록을 반환한다. 사전 입력은 items()의 순회 순서대로 키·값 쌍을, 목록 입력은 원래 순서와 중복을 그대로 담으며 문자열의 대소문자와 내용을 보존한다. 호출은 입력을 변경하지 않으며 반환 목록을 추가·삭제·교체해도 입력 컨테이너는 변경되지 않는다."
+justification = "singledispatch는 첫 인수의 런타임 타입과 상속 관계로 등록된 처리기를 선택한다. 이 파일에서 list 처리기를 등록했기 때문에 목록과 평범한 목록 하위 타입은 _pair_list로 분기하고 items 호출에 도달하지 않는다. 따라서 선언된 합집합 중 기본 처리기에 남는 것은 사전과 사전 하위 타입뿐이다. 두 처리기는 각각 items 순회 또는 목록 순회를 list로 복사하므로 순서, 중복, 문자열 값을 유지하며 입력 컨테이너와 반환 컨테이너를 분리한다."
+guard_symbol = "header_pairs"
+guard_lines = [11, 13]
+
+[twin]
+defect = "목록 처리기 등록이 제거되어 목록도 기본 처리기로 전달되고 items 호출에서 AttributeError가 발생한다."

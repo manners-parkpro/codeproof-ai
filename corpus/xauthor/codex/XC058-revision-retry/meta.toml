@@ -1,0 +1,15 @@
+decoy_id = "XC058-revision-retry"
+trap_kind = "idempotent_retry"
+
+[bait]
+apparent_defect = "adjust는 잔액에 delta를 더한 뒤 확인 콜백의 TimeoutError를 잡고 같은 갱신을 반복하므로, 응답이 유실되면 증감액을 중복 반영하는 것으로 보인다."
+lure_lines = [22, 28]
+
+[safety]
+claim = "한 스레드에서 모든 int initial로 생성한 Balance의 snapshot이 나타내는 잔액과 revision은 (initial, 0)이다. 생성과 순차적인 공개 API 호출로 도달한 모든 상태에서, 호출 직전 잔액과 revision을 각각 b와 r이라 할 때 모든 int delta와 attempts에 대해 adjust의 정상 종료 또는 동기 예외 전파 뒤 snapshot의 두 값은 attempts가 양수이면 (b + delta, r + 1)이고 비양수이면 (b, r)이다. 호출된 각 확인 콜백 안에서 조회한 snapshot도 같은 두 값을 나타낸다. int에는 음수, 임의 크기 정수, bool, IntEnum, IntFlag와 메서드를 재정의하지 않은 하위 타입이 포함된다. 확인 응답의 성공, 동기 예외 및 재시도 횟수와 무관하게 성립하며, 콜백은 snapshot 조회만으로 재진입할 수 있다. 반환값, 예외 타입, snapshot의 컨테이너 종류, 콜백 자체의 외부 효과와 동시 호출은 주장하지 않는다."
+justification = "adjust가 루프 전에 현재 revision을 지역 변수에 고정하고 _commit은 현재 revision과 그 값이 같은 경우에만 잔액 및 revision을 함께 교체한다. 따라서 최초 갱신 뒤에는 현재 revision이 고정한 값보다 하나 커져 같은 호출의 모든 재시도가 갱신을 건너뛴다. 다음 공개 호출은 새 revision을 잡으므로 같은 delta도 새 요청이면 다시 반영된다. 비양수 attempts에서는 루프가 실행되지 않아 상태가 보존된다. 콜백은 갱신 뒤에만 실행되고 상태는 정수로 구성한 불변 튜플이므로 조회로 내부 상태를 바꿀 수 없다."
+guard_symbol = "_commit"
+guard_lines = [13, 15]
+
+[twin]
+defect = "_commit의 revision 비교를 우회하여 확인 콜백이 TimeoutError를 내고 재시도할 때마다 delta를 잔액에 더한다. 예를 들어 잔액 10에 delta 7을 attempts 3으로 요청하고 응답이 계속 유실되면 잔액이 17이 아니라 31이 된다."

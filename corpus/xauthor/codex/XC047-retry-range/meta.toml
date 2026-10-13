@@ -1,0 +1,15 @@
+decoy_id = "XC047-retry-range"
+trap_kind = "frozen_after_init"
+
+[bait]
+apparent_defect = "schedule()이 전역 재시도 지연표를 그대로 반환하고 delay()도 그 표를 직접 인덱싱하므로, 호출자가 노출된 표나 초기 설정을 변경하여 이후 요청의 대기 시간을 바꾸거나 빈 표 접근을 일으킬 수 있어 보인다."
+lure_lines = [10, 16]
+
+[safety]
+claim = "모듈 초기화 뒤 BOOTSTRAP, RETRY_DELAYS, schedule()의 반환값 및 그 슬라이스에 대한 일반적인 항목·슬라이스 대입과 삭제, 컨테이너 변경·크기 변경, start·stop·step 속성 대입과 삭제를 어떤 순서로 시도하더라도, 이후 모든 int attempt(일반 하위 타입 포함)에 대해 delay(attempt)는 예외 없이 2 + 3 * min(3, max(0, attempt))를 반환하고 새 schedule()의 원소는 순서대로 2, 5, 8, 11이다."
+justification = "range(*BOOTSTRAP)는 초기 목록에서 세 정수 값을 읽어 자체의 불변 등차수열 상태를 구성하므로 원본 목록을 나중에 변경해도 영향을 받지 않는다. range는 항목이나 슬라이스의 제자리 변경 및 start, stop, step의 속성 변경을 허용하지 않고 슬라이스 또한 불변 range이다. 따라서 전역이나 반환 별칭을 통해 정책 상태를 바꿀 수 없으며 길이는 항상 4이고, min과 max가 모든 int 인덱스를 0부터 3까지로 제한하므로 지연 조회도 항상 정의된다."
+guard_symbol = "RETRY_DELAYS"
+guard_lines = [7, 7]
+
+[twin]
+defect = "불변 range를 가변 list로 대체하여 schedule()로 얻은 별칭의 항목 대입이나 clear()가 전역 지연 정책을 바꾸고 이후 delay()의 오답 또는 IndexError를 일으킨다."

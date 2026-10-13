@@ -1,0 +1,15 @@
+decoy_id = "XC049-rgb-match"
+trap_kind = "type_narrowed"
+
+[bait]
+apparent_defect = "fullmatch의 반환형은 Match | None인데 match.group으로 RGB 채널을 읽으므로 잘못된 색상 문자열에서 AttributeError가 발생하는 것처럼 보인다."
+lure_lines = [13, 17]
+
+[safety]
+claim = "parse_rgb는 선언 타입 str의 모든 값과 허용된 하위 타입에 대해 호출 순서나 반복에 관계없이 예외 없이 동작한다. 입력 전체가 선택적인 ASCII # 하나와 정확히 여섯 개의 ASCII 16진수 문자로 이루어지면, 대소문자와 무관하게 연속 두 문자씩 해석한 빨강, 초록, 파랑 정수 세 개의 튜플을 반환한다. 그 밖의 모든 입력은 None을 반환한다."
+justification = "파일 안의 정규식은 선택적인 # 뒤에 ASCII 16진수 두 자리인 캡처 그룹 세 개만 허용한다. fullmatch가 문자열 전체를 검사하고 parse_rgb의 None 검사에서 일치 실패를 즉시 반환하기 때문에 아래 group 호출에는 실제 Match만 도달한다. 따라서 각 그룹은 비어 있지 않은 두 자리 16진수이며 int의 16진수 변환이 항상 정의된다. str 하위 타입도 정규식이 문자열 내용을 직접 읽으므로 Enum의 표시용 문자열 변환에 영향받지 않고, 매 호출의 지역 매치만 사용하므로 이전 결과에도 의존하지 않는다."
+guard_symbol = "parse_rgb"
+guard_lines = [10, 12]
+
+[twin]
+defect = "일치 실패를 걸러내는 None 검사와 반환을 제거하여 잘못된 문자열에서 None.group 호출로 AttributeError가 발생한다."

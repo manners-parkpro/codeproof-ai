@@ -1,0 +1,15 @@
+decoy_id = "XC037-bit-clear-retry"
+trap_kind = "idempotent_retry"
+
+[bait]
+apparent_defect = "disable은 플래그를 변경한 뒤 확인 콜백의 TimeoutError를 잡고 같은 비트 연산을 재실행하므로 확인 응답이 유실되면 해제한 기능이 다시 켜지는 것으로 보인다."
+lure_lines = [19, 24]
+
+[safety]
+claim = "한 스레드에서 생성과 순차적인 공개 API 호출로 도달한 FeatureFlags의 모든 상태에서, 모든 int 초기값·mask·attempts(음수, 임의 크기 정수, bool·IntEnum·IntFlag·메서드 재정의 없는 하위 타입 포함)에 대해 disable의 정상 종료 또는 동기 예외 전파 뒤 snapshot은 attempts가 양수이면 호출 직전 값에서 mask의 1인 비트만 모두 지운 값이고 비양수이면 호출 직전 값이다. 호출된 각 확인 콜백 안에서 조회한 snapshot도 같은 결과이며, 확인 응답의 성공·동기 예외·재시도 횟수와 무관하게 이 성질이 성립한다. 확인 콜백은 snapshot 조회는 할 수 있으나 disable로 재진입하지 않는다. 반환값, 예외의 타입, 콜백 자체의 외부 효과와 동시 호출은 주장하지 않는다."
+justification = "생성자는 initial을 int로 정규화하고 가드 _clear_bits는 mask를 int로 정규화한 뒤 그 비트 반전 값과 현재 정수를 AND 한다. 따라서 IntFlag의 유한 범위 반전과 같은 표준 하위 타입의 특수 연산도 개입하지 않는다. Python 정수는 음수도 부호 확장한 비트 연산을 사용하므로 모든 비트에서 같은 제거 마스크의 반복 AND는 최초 적용과 동일하다. 따라서 (a & ~m) & ~m = a & ~m 이며 미지정 비트는 보존된다. 이 연산은 각 확인 콜백보다 먼저 실행되므로 콜백 내부 조회와 동기 예외 뒤에도 결과가 유지된다. TimeoutError는 같은 제거만 반복하고, 다른 동기 예외는 이미 적용된 상태를 남긴다. 비양수 attempts에서는 range가 비어 어떠한 변경도 일어나지 않는다."
+guard_symbol = "_clear_bits"
+guard_lines = [13, 14]
+
+[twin]
+defect = "제거 마스크와의 AND를 mask와의 XOR로 우회한다. 예를 들어 초기값 3, mask 1에서 첫 적용 뒤 값은 2이지만 확인 콜백이 TimeoutError를 내어 재시도하면 값이 3으로 돌아와 해제한 비트가 다시 켜진다."

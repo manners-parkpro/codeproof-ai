@@ -1,0 +1,15 @@
+decoy_id = "XC066-deferred-cleanup"
+trap_kind = "exception_absorbed"
+
+[bait]
+apparent_defect = "정리 콜백의 BaseException까지 pass로 삼키고 원래 대기 목록을 비워 버리므로, 정리에 실패한 자원도 큐에서 영구히 사라져 다음 호출에서 재시도하지 못하는 것처럼 보인다."
+lure_lines = [18, 29]
+
+[safety]
+claim = "동시 호출과 dispose의 큐 재진입이 없는 CleanupQueue는 빈 상태로 시작하고, enqueue는 모든 object 값과 평범한 하위 타입의 등록을 동일 객체의 중복까지 순서대로 보관한다; pending은 보관 항목의 순서와 객체 동일성을 보존하는 독립된 스냅샷이다; 각 sweep은 진입 시의 모든 등록 항목에 dispose를 등록 순서대로 정확히 한 번씩 호출하고, 반환값과 무관하게 정상 반환한 항목만 제거하며 어떤 동기 BaseException으로 실패한 항목은 순서와 중복과 객체 동일성을 보존하여 다음 sweep을 위해 보관한다; sweep은 콜백 예외를 전파하지 않고 정상 반환한 항목 수를 반환하며, 이 규칙은 빈 큐와 임의의 유한한 등록 및 sweep 연속에도 성립한다; 실제 외부 자원의 정리 성공과 실패 항목의 궁극적인 성공은 보장하지 않는다."
+justification = "sweep은 기존 목록을 batch로 분리하여 각 등록을 한 번씩 방문한다. released는 매 항목마다 False로 초기화되고 dispose가 정상 반환한 뒤에만 True가 되므로, BaseException을 삼킨 경로에서는 finally가 해당 객체를 새 대기 목록에 다시 추가한다. 따라서 실패 항목은 다음 호출에 남고 성공 항목만 제거되며, 순차 append가 실패 항목의 순서와 중복을 보존한다. completed는 콜백 반환값 대신 이 정상 종료 표지만 누적한다. enqueue는 값의 동등성이나 해시를 검사하지 않고 추가하며 pending은 매번 별도 tuple을 만든다."
+guard_symbol = "released"
+guard_lines = [21, 29]
+
+[twin]
+defect = "finally의 실패 항목 재보관 가드를 제거하여 dispose가 예외를 던진 항목도 큐에서 사라지고 이후 sweep에서 재시도되지 않는다."

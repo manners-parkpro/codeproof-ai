@@ -1,0 +1,15 @@
+decoy_id = "XC056-retirement-phase"
+trap_kind = "exception_absorbed"
+
+[bait]
+apparent_defect = "factory 호출까지 감싼 except BaseException이 생성 실패와 취소를 삼켜 기존 자원을 새 자원처럼 반환하고 실패한 교체를 성공으로 위장하는 것처럼 보인다."
+lure_lines = [20, 29]
+
+[safety]
+claim = "동시 호출과 콜백의 슬롯 재진입이 없는 ResourceSlot에서 초기값 및 factory 반환값이 어떤 object이든 current는 보관한 객체를 그대로 반환한다; 각 replace는 factory를 정확히 한 번 호출하며, factory가 동기 BaseException을 던지면 그 예외 객체를 그대로 전파하고 보관한 객체를 바꾸거나 retire를 호출하지 않는다; factory가 정상 반환하면 그 반환 객체를 먼저 current에 게시하고, 이전 객체와 다른 객체일 때만 retire에 이전 객체를 정확히 한 번 전달하며, retire의 반환값 또는 어떤 동기 BaseException과 무관하게 예외 없이 새 객체를 그대로 반환하고 보관한다; 동일 객체이면 retire를 호출하지 않으며 이 규칙은 임의의 유한한 연속 호출에도 적용된다. 실제 외부 자원의 정리 성공은 보장하지 않는다."
+justification = "installed는 매 호출마다 False로 시작하고 factory의 정상 반환 뒤 슬롯 대입이 끝나야 True가 된다. 따라서 except가 넓어도 생성 중 예외는 bare raise로 동일 객체가 전파되며, 게시 이후 이전 자원 정리에서 발생한 예외만 흡수된다. 이전 값은 별도로 보관하고 is 비교로 동일 객체의 정리를 건너뛰므로 값의 참거짓이나 동등성에 기대지 않는다."
+guard_symbol = "installed"
+guard_lines = [19, 29]
+
+[twin]
+defect = "예외 경로의 installed 검사를 제거하여 factory의 실패도 흡수하고 기존 객체를 정상 반환한다."

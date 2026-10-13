@@ -1,0 +1,15 @@
+decoy_id = "XC085-cleanup-fallbacks"
+trap_kind = "exception_absorbed"
+
+[bait]
+apparent_defect = "정리 후보를 실행하는 루프가 BaseException까지 붙잡고 계속 진행하므로 취소와 종료를 포함한 모든 정리 실패를 삼키고, 어느 후보도 성공하지 못한 호출을 정상 완료로 위장하는 것처럼 보인다."
+lure_lines = [8, 14]
+
+[safety]
+claim = "cleanup_with_fallback은 모든 유한한 tuple[Callable[[], object], ...]과 평범한 tuple 하위 타입에 대해 빈 입력이면 콜백 없이 None을 반환한다; 비어 있지 않으면 등록 순서대로 같은 콜백의 중복도 별도 항목으로 정확히 한 번씩 시도하며, 어떤 object든 첫 정상 반환을 성공으로 삼아 이후 후보를 호출하지 않고 None을 반환한다; 정상 반환 전의 어떤 동기 BaseException에도 다음 후보를 시도하며, 모든 후보가 실패하면 BaseExceptionGroup을 전파하고 그 즉시 자식들은 각 실패의 원래 예외 객체를 순서, 중복 횟수, 동일성을 그대로 보존한다; 중첩 예외 묶음도 하나의 실패 객체로 보존하며, 이 성질은 동일 후보 및 서로 다른 후보에 대한 임의의 유한한 반복 호출에도 성립한다. 콜백 자체의 종료, 실제 외부 자원의 정리 성공, 묶음의 메시지와 구체 하위 타입, traceback과 cause와 context는 보장하지 않는다."
+justification = "각 호출이 새 failures 목록을 만들고 루프가 정상 반환에서만 즉시 끝나므로 앞선 정리 실패는 후속 후보의 성공이 있을 때만 흡수된다. 모든 후보가 실패하면 failures가 비어 있지 않기 때문에 마지막 가드가 BaseExceptionGroup을 반드시 전파한다. 잡은 예외 객체를 복제하거나 펼치지 않고 append하므로 즉시 자식의 순서와 중복과 객체 동일성도 보존된다. 빈 입력에서는 목록이 비어 있어 예외 없이 None을 반환한다."
+guard_symbol = "failures"
+guard_lines = [15, 16]
+
+[twin]
+defect = "마지막 failures 검사만 False로 우회하여 모든 후보가 실패해도 묶음 예외를 전파하지 않고 None을 반환한다."
