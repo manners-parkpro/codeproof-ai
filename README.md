@@ -10,8 +10,8 @@
 
 > **상태** — 정적분석기(Ruff · mypy)와 에이전트 층(Claude Code · Codex CLI, 목표 150쌍 · 각 3회) 측정을 마쳤다.
 > 모델 API 층은 어댑터만 있고 아직 재지 않았다.
-> 현재 숫자는 생성물 [docs/MEASUREMENTS.md](docs/MEASUREMENTS.md) 에 있다. 진행 중: Codex 가 쓴 쌍으로 같은 비교를
-> 다시 한다 ([DESIGN §7.10d](docs/DESIGN.md)).
+> 현재 숫자는 생성물 [docs/MEASUREMENTS.md](docs/MEASUREMENTS.md) 에 있다. Codex 가 쓴 쌍으로 같은 비교를 다시 한 결과는
+> [results/xauthor/MEASUREMENTS.md](results/xauthor/MEASUREMENTS.md) 에 있다 — 판정이 흔들려 결론으로 쓰지 않는다 [실측 · 72쌍].
 
 ## 30초 요약
 
@@ -25,8 +25,8 @@ Claude Code 와 Codex CLI 에게 같은 파이썬 코드를 리뷰시켰다 — 
 - **버그를 짚었다** Claude 69.6% · Codex 47.6% — 대신 **안전한 코드에 헛경고** Claude 7.1% · Codex 2.0%.
 - 🔴 점수의 상당 부분은 채점 규칙이 만든다 — 같은 Ruff 경고를 채점 규칙만 바꿔 셌더니 헛경고가 **17 대 777 — 45.7배**
   로 갈렸고, 보안 규칙만 고르면(`--ruff-select S`) 같아졌다 [실측 · 150쌍] (결과 2 · 6 · 아래 그림).
-- 조건 — 같은 프롬프트 하나 · 추론 강도(effort) low · 짝은 Claude 가 썼다. 그래서 Codex 가 쓴 짝으로 다시 잰다
-  (결과 7 · 한계 6 · 7).
+- 조건 — 같은 프롬프트 하나 · 추론 강도(effort) low · 짝은 Claude 가 썼다. Codex 가 쓴 짝으로 다시 쟀더니 매칭 허용 오차에
+  따라 앞서는 쪽이 바뀌어 결론을 내지 못했다 [실측 · 72쌍] (결과 7 · 한계 6 · 7).
 
 ![같은 경고를 두 채점 규칙으로 센 헛경고 수 (생성물)](docs/figures/spread.svg)
 
@@ -109,8 +109,8 @@ API 키 없이 다시 나온다 — 결과 1~3 · 5 · 6 은 `uv run codeproof m
 4. **한계 4** — 오염 내성은 층마다 다르다 — 직접 만든 층(변이 주입 · decoy)은 면역이고, 공개 PR 에서 캔 층은 아니다.
 5. **한계 5** — 변이 주입 층은 현실적이지 않다 → recall 바닥선으로만 쓴다.
 6. **한계 6** — 안전한 쪽 정답(decoy) · 결함 쪽 설계(twin) · 측정 뒤 재판정을 측정 대상 한쪽과 같은 패밀리(Claude)가 했다 —
-   틀린 라벨이나 설계 친숙도가 claude 쪽으로 기울일 수 있고, 차이는 twin 쪽에서 났다. 그래서 Codex 가 쓴 쌍으로 다시 잰다
-   ([DESIGN §7.10d](docs/DESIGN.md)).
+   틀린 라벨이나 설계 친숙도가 claude 쪽으로 기울일 수 있고, 차이는 twin 쪽에서 났다. Codex 가 쓴 쌍으로 다시 잰 비교는
+   판정이 흔들려 이 한계를 닫지 못했다 [실측 · 72쌍] ([결과](results/xauthor/MEASUREMENTS.md) · [DESIGN §7.10d](docs/DESIGN.md)).
 7. **한계 7** — 에이전트 비교는 같은 프롬프트 하나 위의 차이다 — 다른 프롬프트에서 같은 차이가 나는지는 재지 않았다.
 
 ## 기술 스택
