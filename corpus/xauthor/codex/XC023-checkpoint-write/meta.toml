@@ -1,0 +1,15 @@
+decoy_id = "XC023-checkpoint-write"
+trap_kind = "idempotent_retry"
+
+[bait]
+apparent_defect = "append는 데이터를 쓴 뒤 확인 응답의 TimeoutError를 잡고 쓰기를 반복하므로 응답이 유실되면 같은 payload가 여러 번 추가되는 것으로 보인다."
+lure_lines = [25, 30]
+
+[safety]
+claim = "한 스레드에서 생성과 순차적인 공개 API 호출로 도달한 UploadSpool의 모든 상태에서, 모든 bytes 초기 내용과 payload 및 모든 int attempts(평범한 하위 타입 포함)에 대해 append 종료 또는 동기 예외 전파 뒤 snapshot은 attempts가 양수이면 호출 직전 내용 + payload이고 비양수이면 호출 직전 내용이다. 확인 콜백은 spool에 재진입하지 않으며, 확인 응답의 성공·동기 예외·재시도 횟수와 무관하게 이 성질이 성립한다. 콜백 자체의 외부 효과와 동시 호출은 주장하지 않는다."
+justification = "append는 루프에 들어가기 전에 기존 데이터 끝의 위치를 checkpoint로 한 번만 저장한다. _write_at은 매 시도마다 그 위치로 seek한 다음 불변인 bytes payload 전체를 쓴다. 따라서 첫 쓰기는 기존 접두부 뒤에 payload를 붙이고 이후 쓰기는 이미 쓴 동일 구간만 같은 바이트로 덮어써 길이와 내용이 변하지 않는다. BytesIO와 그 커서는 외부에 노출되지 않고 snapshot은 불변 bytes를 반환하므로 순차 호출 사이에도 기존 내용이 보존된다. 비양수 attempts는 루프를 실행하지 않으며 확인 콜백의 동기 예외는 쓰기가 끝난 뒤 발생하므로 이미 완성된 내용에는 영향을 주지 않는다."
+guard_symbol = "_write_at"
+guard_lines = [14, 16]
+
+[twin]
+defect = "_write_at이 checkpoint로 쓰기 위치를 복원하지 않아 TimeoutError 뒤 재시도가 현재 커서 끝에 payload를 다시 추가한다."

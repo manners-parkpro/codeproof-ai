@@ -1,0 +1,15 @@
+decoy_id = "XC083-reflected-selection"
+trap_kind = "contract_half_open"
+
+[bait]
+apparent_defect = "역순 좌표 계산이 length - 1에서 빼지 않고 length에서 빼므로 선택 구간이 한 칸 밀리고, start가 0이면 오른쪽 경계가 문서 길이와 같아져 범위를 벗어나는 것처럼 보인다."
+lure_lines = [8, 10]
+
+[safety]
+claim = "reflect_selection은 모든 int 인수 length, start, stop(임의 크기 정수, bool, IntEnum 및 메서드를 재정의하지 않은 하위 타입 포함)에 대해 length < 0 또는 0 <= start <= stop <= length가 아니면 거절하고, 나머지는 원래 반열린 선택 [start, stop)의 문자 인덱스 i를 length - 1 - i로 뒤집었을 때의 정확한 반열린 선택 경계 (length - stop, length - start)를 두 정수의 튜플로 반환하며, 빈 선택도 (length - start, length - start) 위치로 옮긴다."
+justification = "입력 검사로 선택의 양쪽 경계가 길이 안에서 순서대로 놓이도록 제한한다. 비어 있지 않은 선택의 마지막 문자 stop - 1은 반사 후 length - stop이 되고 첫 문자 start는 length - 1 - start가 된다. 따라서 새 시작은 length - stop이고 새 끝은 마지막 문자 다음 경계인 length - start여야 한다. 끝 경계는 문자 인덱스가 아니므로 length와 같아도 유효하며, 빈 선택에서는 두 식이 같은 위치로 합쳐진다. 정수 뺄셈만 쓰기 때문에 임의 크기 정수와 평범한 정수 하위 타입에서도 반올림이나 고정 폭 오버플로가 없다."
+guard_symbol = "reflect_selection"
+guard_lines = [4, 10]
+
+[twin]
+defect = "반열린 경계에 문자 인덱스용 -1을 적용하여 유효한 선택을 왼쪽으로 한 칸 밀며, 끝이 length인 선택에는 음수 시작 경계를 반환한다."

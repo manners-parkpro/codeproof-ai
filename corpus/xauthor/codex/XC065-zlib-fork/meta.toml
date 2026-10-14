@@ -1,0 +1,15 @@
+decoy_id = "XC065-zlib-fork"
+trap_kind = "defensive_copy"
+
+[bait]
+apparent_defect = "compress와 flush가 호출자의 압축 이력과 출력 대기 상태를 진행시키며, 크기 제한 거절 뒤에도 원본이 바뀌고 반환 압축기의 후속 사용이나 종료가 원본 스트림을 손상하는 것처럼 보인다."
+lure_lines = [18, 21]
+
+[safety]
+claim = "stage_chunk는 선언 타입의 모든 source, payload, limit에 대해 정상 반환하거나 동기 예외로 종료할 때 원본 압축기의 압축 이력, 대기 출력과 사용 가능성을 보존한다. 사용 가능한 source에서는 호출 시점의 상태를 복제한 표준 zlib 압축기에 payload를 compress하고 Z_SYNC_FLUSH로 flush한 바이트를 이어 붙인 결과가 limit 바이트 이하일 때 정확히 그 바이트와 계산 직후의 압축기를 반환하며, 초과하면 거절한다. 이미 종료된 source는 거절한다. 반환 압축기와 원본 어느 쪽의 후속 compress, copy 및 모든 지원 flush 모드 호출도 반대쪽의 후속 출력과 사용 가능성에 영향을 주지 않는다."
+justification = "fork_stream은 zlib 압축기의 copy를 호출하여 압축 사전, 압축 이력, 체크섬과 대기 출력까지 독립된 내부 상태로 복제한다. 따라서 stage_chunk의 compress와 Z_SYNC_FLUSH 및 크기 검사 전후의 모든 변경은 새 압축기에만 적용되고, 거절 경로에서도 원본 상태에는 쓰기가 없다. 반환 압축기도 이 복사본이므로 별도의 압축 이력과 종료 수명을 갖는다. 종료된 압축기는 복사 단계에서 거절된다."
+guard_symbol = "fork_stream"
+guard_lines = [10, 11]
+
+[twin]
+defect = "fork_stream이 원본을 그대로 반환하여 미리 보기와 크기 제한 거절이 원본 압축 상태를 진행시키며, 반환 압축기를 종료하면 원본도 더 사용할 수 없게 된다."

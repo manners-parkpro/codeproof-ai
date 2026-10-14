@@ -1,0 +1,15 @@
+decoy_id = "XC048-checkpoint-residual"
+trap_kind = "idempotent_retry"
+
+[bait]
+apparent_defect = "advance는 체크포인트에 진행량을 더한 뒤 확인 콜백의 TimeoutError를 잡고 같은 갱신을 반복하므로, 응답 유실 시 진행량을 중복 반영하여 아직 처리하지 않은 위치까지 넘어가는 것으로 보인다."
+lure_lines = [23, 28]
+
+[safety]
+claim = "한 스레드에서 모든 int 초기값으로 생성한 Checkpoint의 snapshot은 초기값과 같다. 생성 및 순차적인 공개 API 호출로 도달한 모든 상태에서 모든 int position과 attempts에 대해, advance의 정상 종료 또는 동기 예외 전파 뒤 snapshot은 attempts가 양수이면 호출 직전 위치와 position 중 큰 값이고 비양수이면 호출 직전 위치이다. 호출된 각 확인 콜백 안에서 조회한 snapshot도 같은 값이다. int에는 음수, 임의 크기 정수, bool, IntEnum, IntFlag 및 메서드를 재정의하지 않은 하위 타입이 포함된다. 확인 응답의 성공, 동기 예외 및 재시도 횟수와 무관하게 성립하며, 콜백은 snapshot 조회만으로 재진입할 수 있다. 반환값, 예외 타입, 콜백 자체의 외부 효과와 동시 호출은 주장하지 않는다."
+justification = "초기 위치와 목표를 정수로 읽고 _advance가 현재 위치를 뺀 잔여량의 양수 부분만 더하기 때문에, 한 번 적용하면 위치는 이전 값과 목표 중 큰 값이 된다. 이후 같은 목표에 대한 잔여량은 0 이하이므로 확인 응답이 유실되어 반복되어도 더하는 양은 0이다. 음수 목표나 큰 정수도 같은 대수적 관계를 만족하며, 비양수 attempts에서는 반복문이 실행되지 않아 저장된 위치가 바뀌지 않는다. 갱신은 콜백보다 먼저 이루어져 조회 시점과 예외 전파 시점에도 같은 불변식이 유지된다."
+guard_symbol = "_advance"
+guard_lines = [13, 14]
+
+[twin]
+defect = "_advance에서 현재 위치를 차감하는 가드를 우회하여 목표 자체의 양수 부분을 매번 더한다. 초기값 0, 목표 7에서 첫 확인 응답이 TimeoutError이고 두 번째가 성공하면 snapshot은 7 대신 14가 되어 미처리 위치를 건너뛴다."

@@ -1,0 +1,15 @@
+decoy_id = "XC079-dispatched-segments"
+trap_kind = "type_narrowed"
+
+[bait]
+apparent_defect = "path_segments의 value는 str | tuple[str, ...]인데 split을 바로 호출하므로 튜플로 전달한 경로 조각에서 AttributeError가 발생하는 것처럼 보인다."
+lure_lines = [7, 8]
+
+[safety]
+claim = "path_segments는 선언 타입 str | tuple[str, ...]의 모든 값과 허용된 하위 타입에 대해 호출 순서나 반복에 관계없이 예외 없이 새로운 문자열 목록을 반환한다. 문자열 입력은 ASCII 슬래시 하나마다 나누되 앞뒤와 연속 구분자의 빈 조각 및 빈 입력의 빈 조각 하나를 보존한다. 튜플 입력은 각 원소의 문자열 내용을 나누거나 정규화하지 않고 원래 순서와 중복 그대로 담는다. 두 경우 모두 공백, 대소문자, 유니코드 및 원소 내용을 보존하며 입력을 변경하지 않고, 반환 목록의 추가, 삭제, 교체, 정렬은 다른 호출의 결과에 영향을 주지 않는다."
+justification = "singledispatch는 첫 인자의 실제 타입과 상속 관계로 등록 함수를 선택한다. 이 파일의 register(tuple)가 tuple과 그 하위 타입을 _tuple_segments로 보내므로 split 호출에 도달하는 선언 타입은 str과 그 하위 타입뿐이다. 문자열의 split은 명시적 슬래시로 빈 조각까지 보존하고, 튜플 처리의 list는 모든 원소를 순서대로 복사하기 때문에 각 호출은 입력과 독립된 새 목록을 얻는다."
+guard_symbol = "_tuple_segments"
+guard_lines = [11, 13]
+
+[twin]
+defect = "tuple 처리 함수의 등록 데코레이터를 제거하여 튜플 입력도 기본 구현의 split에 도달하고 AttributeError가 발생한다."

@@ -1,0 +1,15 @@
+decoy_id = "XC038-dispatched-hex"
+trap_kind = "type_narrowed"
+
+[bait]
+apparent_defect = "numeric_token의 value는 int | float인데 정수에 없는 hex 메서드를 무조건 호출하므로 정수 입력에서 AttributeError가 발생하는 것처럼 보인다."
+lure_lines = [7, 8]
+
+[safety]
+claim = "numeric_token은 선언 타입 int | float의 모든 값과 허용된 하위 타입에 대해 호출 순서나 반복에 관계없이 예외 없이 문자열을 반환한다. 정수 계열의 결과는 hex(value)와 같고, 실수 계열의 결과는 float.hex(value)와 같으며 부호, 정밀도, 음의 0, 무한대와 NaN의 표준 표현을 보존한다."
+justification = "singledispatch는 실제 인자 타입의 상속 관계로 구현을 선택하고 int 등록은 bool, IntEnum, 메서드를 재정의하지 않은 int 하위 클래스도 포괄한다. 따라서 정수는 기본 구현의 value.hex 호출에 도달하지 않고 _integer_token에서 임의 정밀도 정수의 hex 표현을 얻는다. 남은 선언 타입은 float 계열이므로 기본 구현에서 상속된 hex 메서드가 유효하다. float.hex는 음의 0, 비유한 값과 모든 유한 실수를 처리하며 정수 구현은 실수 변환이나 자릿수 제한이 있는 십진 변환을 거치지 않는다. 디스패치 캐시는 타입별로 구현을 저장하므로 입력 순서나 반복이 결과를 바꾸지 않는다."
+guard_symbol = "numeric_token"
+guard_lines = [11, 11]
+
+[twin]
+defect = "int 구현의 등록 데코레이터만 제거하여 정수도 기본 구현으로 전달된다. numeric_token(0)은 int에 hex 메서드가 없어 AttributeError를 발생시킨다."

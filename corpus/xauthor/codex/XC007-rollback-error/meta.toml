@@ -1,0 +1,15 @@
+decoy_id = "XC007-rollback-error"
+trap_kind = "exception_absorbed"
+
+[bait]
+apparent_defect = "롤백을 감싼 except BaseException: pass가 취소와 종료까지 삼켜 작업 실패를 성공으로 위장하는 것처럼 보인다."
+lure_lines = [13, 16]
+
+[safety]
+claim = "run_with_rollback은 operation을 한 번 호출한다. 성공하면 반환 객체를 그대로 반환하고 rollback을 호출하지 않는다. operation이 동기적으로 BaseException을 던지면 rollback을 그 뒤 정확히 한 번 호출하고, rollback의 정상 종료 또는 어떤 동기 BaseException에도 원래 operation 예외 객체를 그대로 전파한다. 롤백 자체의 성공이나 외부 상태 복구는 보장하지 않는다."
+justification = "operation 호출은 내부 예외 흡수 구간 밖에 있고 성공 경로는 즉시 return하므로 반환 객체를 바꾸거나 롤백을 실행하지 않는다. 실패 경로의 내부 try는 rollback 호출만 포함하므로 BaseException을 넓게 흡수해도 정리 실패만 사라진다. 내부 처리기가 끝나면 파이썬은 바깥 처리기의 활성 예외를 복원하기 때문에 마지막 bare raise가 최초 작업 예외를 같은 객체로 다시 전파한다. 따라서 롤백 실패가 원래 실패를 성공이나 다른 예외로 바꾸지 않는다."
+guard_symbol = "run_with_rollback"
+guard_lines = [9, 17]
+
+[twin]
+defect = "바깥 예외 처리기 마지막의 bare raise를 제거하여 작업 실패 후 롤백을 거쳐 None으로 정상 반환한다. 따라서 호출자는 실패한 작업을 성공으로 오인한다."

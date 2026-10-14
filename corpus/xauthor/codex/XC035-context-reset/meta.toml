@@ -1,0 +1,15 @@
+decoy_id = "XC035-context-reset"
+trap_kind = "exception_absorbed"
+
+[bait]
+apparent_defect = "종료 콜백의 BaseException까지 pass로 삼켜 콜백 실패 뒤 요청 컨텍스트의 복원을 누락하고 이전 요청으로 식별자가 새는 것처럼 보인다."
+lure_lines = [21, 26]
+
+[safety]
+claim = "같은 실행 컨텍스트에서 request_scope를 동기 with로 사용하면, 모든 str 식별자와 평범한 하위 타입에 대해 본문과 finish는 전달한 식별자 객체를 current_request로 관찰하고 as 값도 그 객체이며, 본문의 정상 종료 또는 어떤 동기 BaseException에도 finish를 종료 시 정확히 한 번 호출하고 finish의 정상 종료 또는 어떤 동기 BaseException에도 진입 직전의 식별자 객체(초기값 None 포함)를 복원하며, 본문이 정상 종료하면 예외 없이 종료하고 본문이 실패하면 원래 예외 객체를 전파한다; 이 성질은 본문과 finish 안에서 균형 있게 중첩된 with 및 반복 사용에도 성립하며 finish의 실제 외부 정리 성공은 보장하지 않는다."
+justification = "ContextVar.set이 진입 직전 바인딩을 담은 토큰을 반환하고 yield는 전달받은 객체를 그대로 본문에 넘긴다. 본문을 둘러싼 finally가 종료 콜백을 한 번 호출하며 콜백에만 적용한 except BaseException이 정리 실패를 흡수하기 때문에 본문의 진행 중인 예외는 바뀌지 않는다. 또한 별도의 안쪽 finally가 콜백 결과와 무관하게 토큰을 reset하므로 중첩된 바인딩도 각 진입 직전 객체로 돌아간다."
+guard_symbol = "request_scope"
+guard_lines = [16, 26]
+
+[twin]
+defect = "복원 finally를 else로 바꾸어 finish가 예외를 내면 예외는 삼키지만 토큰 복원은 건너뛰므로 with 종료 뒤에도 종료된 요청의 식별자가 남는다."

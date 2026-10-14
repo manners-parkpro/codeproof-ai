@@ -503,10 +503,11 @@ HIGHLIGHTS = (
 
 
 CAVEAT = (
-    "짝은 Claude 와 함께 만들었다 — Claude 에 유리할 수 있어 Codex 가 설계한 짝으로 "
-    "다시 재고 있다."
+    "짝은 Claude 와 함께 만들었다 — Claude 에 유리할 수 있어 Codex 가 설계한 "
+    "짝 72쌍으로 다시 쟀더니, 몇 줄 차이까지 같은 지적으로 치느냐에 따라 "
+    "앞서는 쪽이 바뀌어 결론을 내지 못했다."
 )
-"""주 지표 카드의 한계 한 줄 - 교차 저자 측정(DESIGN §7.10d)을 싣으면 그 결과로 바꾼다."""
+"""주 지표 카드의 한계 한 줄 - 교차 저자 측정의 판정 (DESIGN §7.10d)."""
 
 
 def render_highlights(spreads: Sequence[Spread], found: Glance | None) -> str:

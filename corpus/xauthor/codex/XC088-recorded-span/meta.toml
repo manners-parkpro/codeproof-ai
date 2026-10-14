@@ -1,0 +1,15 @@
+decoy_id = "XC088-recorded-span"
+trap_kind = "type_narrowed"
+
+[bait]
+apparent_defect = "recorded_span의 samples 원소는 int | None인데 max와 min의 결과를 바로 빼므로 누락 측정값이 섞이면 비교 또는 뺄셈에서 TypeError가 발생하는 것처럼 보인다."
+lure_lines = [14, 14]
+
+[safety]
+claim = "recorded_span은 선언 타입 list[int | None]의 모든 값과 허용된 하위 타입에 대해 호출 순서와 반복에 관계없이 예외 없이 동작한다. None 원소를 제외한 정수가 없으면 None을 반환하고, 하나 이상이면 그 정수들의 수학적 최댓값에서 최솟값을 뺀 정수 값을 반환한다. 0, 음수, bool, IntEnum 및 임의 크기 정수도 누락으로 취급하지 않으며, 입력 목록의 원소와 순서 및 길이를 변경하지 않는다."
+justification = "_is_recorded는 None과의 동일성만 검사하므로 거짓으로 평가되는 0과 False를 포함한 모든 정수 계열 원소를 보존한다. 따라서 filter가 만든 recorded에는 None이 없고, 빈 결과는 먼저 반환하므로 max와 min은 항상 하나 이상의 서로 비교 가능한 정수에 적용된다. 파이썬 정수 뺄셈은 고정 폭 오버플로가 없으며 새 튜플을 읽기만 하므로 원본 목록을 변경하지 않는다."
+guard_symbol = "_is_recorded"
+guard_lines = [6, 7]
+
+[twin]
+defect = "판별 함수가 무조건 True를 반환하여 None도 recorded에 들어간다. 예를 들어 [None, 3]에서 max의 비교가 TypeError를 일으킨다."

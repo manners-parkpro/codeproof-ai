@@ -1,0 +1,15 @@
+decoy_id = "XC060-ring-remainder"
+trap_kind = "unreachable_branch"
+
+[bait]
+apparent_defect = "음수 순번의 보관 레코드 분기가 외부 archive_path를 그대로 open으로 읽어 반환하므로, 요청자가 임의의 로컬 파일 내용을 얻을 수 있어 보인다."
+lure_lines = [9, 11]
+
+[safety]
+claim = "read_record는 모든 list[bytes] records, int sequence, str archive_path 값(빈 버퍼, 임의 길이, 정수의 부호와 크기, 평범한 하위 타입 포함)에 대해 음수 인덱스의 보관 파일 읽기 분기에 진입하지 않는다."
+justification = "빈 records는 나머지 계산 전에 반환한다. 나머지 경로에서는 내장 len이 양수 size를 만들고, Python 정수의 sequence % size는 입력의 부호나 크기와 무관하게 0 이상 size 미만이다. 따라서 index < 0 조건은 항상 거짓이어서 외부 archive_path를 사용하는 파일 읽기 분기는 도달 불가능하다. bool, IntEnum 및 메서드를 재정의하지 않은 int와 list 하위 타입도 같은 정수 나머지 및 길이 연산을 따른다."
+guard_symbol = "index"
+guard_lines = [8, 8]
+
+[twin]
+defect = "나머지 정규화를 우회해 sequence를 index에 그대로 넣는다. 비어 있지 않은 버퍼에 음수 순번을 주면 archive_path의 파일을 읽어 반환하므로 로컬 파일 내용이 노출된다."

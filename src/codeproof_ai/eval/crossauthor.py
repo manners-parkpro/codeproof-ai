@@ -334,10 +334,12 @@ def _rung_row(label: str, r: Rung) -> str:
 def _verdict_section(primary: Sequence[Rung], twin: Sequence[Rung]) -> list[str]:
     reading = read(primary, twin)
     head, why = READINGS[reading]
+    # 「흔들린다」는 번호가 없다 - 값과 문장이 같아 이으면 두 번 찍힌다 [실측 · ③ 첫 채점]
+    label = head if reading is Reading.SHAKY else f"{reading.value} {head}"
     return [
         "## 판정",
         "",
-        f"> **{reading.value} {head}** — {why}",
+        f"> **{label}** — {why}",
         "",
         "| 지표 | slack | claude | codex | 차이 (claude - codex) | 95% 구간 | 판정 |",
         "|---|---:|---:|---:|---:|---|---|",

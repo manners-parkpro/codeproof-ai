@@ -1,0 +1,15 @@
+decoy_id = "XC055-rng-state-fork"
+trap_kind = "defensive_copy"
+
+[bait]
+apparent_defect = "shuffle이 호출자의 난수 상태를 소모해 이후 추첨 결과를 바꾸며, 반환한 난수 생성기를 사용해도 원본 스트림이 함께 진행되는 것처럼 보인다."
+lure_lines = [17, 18]
+
+[safety]
+claim = "preview_shuffle은 선언 타입의 모든 source와 entries에 대해 정상 반환하거나 동기 예외로 종료할 때 원본 난수 생성기의 추출 가능한 getstate 상태 및 가우스 캐시와 입력 튜플을 보존한다. 상태 추출이 지원되지 않으면 거절한다. 지원되면 원본의 호출 시점 전체 상태를 표준 Random에 복원하여 entries의 목록을 한 번 shuffle한 것과 같은 순열 및 계산 직후의 전체 난수 상태를 반환한다. 빈 입력과 중복 항목도 이 규칙을 따른다. 반환 순열의 변경은 입력에 영향을 주지 않으며, 원본과 반환 난수 생성기 어느 쪽의 random, getrandbits, gauss, seed, setstate 호출도 반대쪽의 getstate 상태를 바꾸지 않는다."
+justification = "fork_rng는 독립적인 Random 인스턴스를 먼저 만들고 source.getstate의 버전, 내부 생성기 상태와 가우스 캐시를 setstate로 함께 복원한다. 따라서 shuffle과 반환 후 난수 호출은 별도의 생성기 상태만 갱신하며 원본을 진행시키지 않는다. 입력 항목은 불변 문자열이고 list가 튜플의 새 목록을 만들기 때문에 순열의 제자리 변경도 원본 튜플을 바꾸지 않는다. 상태 추출 또는 후속 연산이 동기 예외를 내더라도 원본에 쓰는 연산이 없으므로 이전 상태가 보존된다."
+guard_symbol = "fork_rng"
+guard_lines = [6, 9]
+
+[twin]
+defect = "fork_rng 호출을 우회하고 source 자체를 working으로 사용하므로 두 항목 이상인 순열 계산이 원본 난수 상태를 진행시키고, 빈 입력에서도 반환 생성기와 원본이 같은 객체여서 후속 호출이 서로 영향을 준다."

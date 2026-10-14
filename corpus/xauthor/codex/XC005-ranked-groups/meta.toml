@@ -1,0 +1,15 @@
+decoy_id = "XC005-ranked-groups"
+trap_kind = "defensive_copy"
+
+[bait]
+apparent_defect = "점수 행의 sort와 del, 바깥 목록의 슬라이스 대입이 호출자의 원본을 직접 변경하고 반환값과 원본의 별칭을 남기는 것처럼 보인다."
+lure_lines = [8, 12]
+
+[safety]
+claim = "top_scores는 선언 타입의 모든 groups와 count에 대해 동기 예외로 종료할 때도 원본 바깥 목록의 행 참조와 각 행의 값을 보존하며, 정상 반환 뒤 원본 또는 반환값의 바깥 목록이나 내부 행을 변경해도 다른 쪽은 바뀌지 않는다."
+justification = "_copy_groups는 새 바깥 목록을 만들고 모든 내부 행도 list로 새로 만들기 때문에 정렬과 절단과 빈 행 제거는 복사본에만 적용된다. 공유되는 점수는 불변 int 값뿐이므로 반환 후 양방향 목록 변경도 원본과 결과 사이를 전파하지 못한다. 음수 count는 변경 전에 거절하며 복사나 정렬 중 동기 예외가 나도 원본에 쓰는 경로가 없다. 빈 목록, 원본 내부의 행 공유, 메서드를 재정의하지 않은 하위 타입도 같은 원리로 보호된다."
+guard_symbol = "top_scores"
+guard_lines = [18, 18]
+
+[twin]
+defect = "_copy_groups 호출을 우회하므로 제자리 정렬·절단·빈 행 제거가 원본에 적용되고 반환값의 후속 변경도 원본에 전파된다."

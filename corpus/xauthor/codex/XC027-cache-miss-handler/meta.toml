@@ -1,0 +1,15 @@
+decoy_id = "XC027-cache-miss-handler"
+trap_kind = "unreachable_branch"
+
+[bait]
+apparent_defect = "캐시 파일이 없으면 FileNotFoundError 처리기가 부모 디렉터리를 shutil.rmtree로 재귀 삭제하여 다른 캐시 파일까지 지우는 것처럼 보인다."
+lure_lines = [13, 15]
+
+[safety]
+claim = "read_cached_blob은 모든 str 캐시 경로와 파일 열기·컨텍스트 진입·읽기·종료의 모든 동기적 결과에 대해, FileNotFoundError 처리기의 부모 디렉터리 재귀 삭제를 실행하지 않는다."
+justification = "FileNotFoundError와 그 하위 예외는 모두 OSError의 하위 타입이기 때문에, 파이썬은 먼저 나온 OSError 처리기를 선택하고 뒤의 FileNotFoundError 처리기를 선택하지 않는다. 정상 종료와 다른 종류의 예외도 그 처리기로 들어가지 않으므로, 경로의 내용과 읽기 단계에 관계없이 그 안의 재귀 삭제 호출은 도달 불가능하다."
+guard_symbol = "read_cached_blob"
+guard_lines = [11, 12]
+
+[twin]
+defect = "앞 처리기를 PermissionError로 좁히면 FileNotFoundError가 뒤 처리기에 도달하여, 없는 캐시 파일을 조회하는 것만으로 부모 디렉터리를 재귀 삭제한다."

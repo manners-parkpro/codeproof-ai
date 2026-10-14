@@ -1,0 +1,15 @@
+decoy_id = "XC028-rectangular-report"
+trap_kind = "upstream_validation"
+
+[bait]
+apparent_defect = "report_columns의 zip(*rows)는 가장 짧은 행에서 멈추므로 길이가 다른 보고서 행을 받으면 긴 행의 뒤쪽 셀을 조용히 버리는 것처럼 보인다."
+lure_lines = [15, 15]
+
+[safety]
+claim = "report_columns는 선언 타입의 모든 입력에 대해 행 길이가 하나라도 서로 다르면 예외로 거절하고, 모든 길이가 같으면 각 셀을 원래 행 순서의 해당 열에 정확히 한 번 보존한 전치 결과를 반환한다. 빈 입력과 폭이 0인 직사각형 입력은 빈 결과를 반환하며 입력을 변경하지 않는다."
+justification = "_validate_widths가 전치 전에 모든 행의 길이를 첫 행의 길이와 비교하여 불일치를 예외로 거절하기 때문에 zip이 실행될 때에는 모든 행이 같은 횟수만큼 순회된다. 따라서 가장 짧은 행에서 멈추는 zip의 동작이 셀을 누락시키지 않으며 행과 열의 순서도 보존된다. 빈 입력과 길이가 모두 0인 입력에는 셀이 없으므로 빈 결과가 정확하다. 입력은 불변 tuple과 str로 이루어지며 길이 확인과 순회만 수행한다."
+guard_symbol = "_validate_widths"
+guard_lines = [14, 14]
+
+[twin]
+defect = "전치 직전의 폭 검사를 제거하여 길이가 다른 행도 zip에 전달되고 긴 행의 셀이 조용히 누락된다. 예를 들어 두 번째 행에만 추가된 셀이 사라진다."

@@ -1,0 +1,15 @@
+decoy_id = "XC026-match-receipts"
+trap_kind = "type_narrowed"
+
+[bait]
+apparent_defect = "outcome은 Delivered | Deferred인데 match 바깥에서 receipt를 바로 읽으므로, receipt 속성이 없는 Deferred 입력에서 AttributeError가 발생하는 것처럼 보인다."
+lure_lines = [22, 22]
+
+[safety]
+claim = "receipt_ids는 선언 타입의 모든 목록과 허용된 하위 타입에 대해 예외 없이, Deferred의 인스턴스인 원소를 모두 제외하고 남은 Delivered 원소의 receipt를 원래 순서와 중복 및 문자열 값 그대로 담은 목록을 반환하며 입력 목록과 원소를 변경하지 않는다. 두 클래스 모두의 인스턴스인 경우에도 Deferred 제외가 우선한다."
+justification = "클래스 패턴 Deferred()는 값이나 정확한 클래스 일치가 아니라 하위 타입까지 포함하는 인스턴스 검사이므로, 재시도 항목은 retry_after의 크기와 무관하게 continue로 현재 반복을 끝낸다. 따라서 receipt 접근에 도달한 원소는 선언된 합집합 중 Deferred가 아닌 Delivered로 좁혀지며 해당 필드를 가진다. 각 생존 원소의 필드를 새 목록에 한 번씩 순차 추가하므로 순서와 중복 및 문자열 값이 유지되고 입력에는 쓰기가 없다."
+guard_symbol = "receipt_ids"
+guard_lines = [19, 21]
+
+[twin]
+defect = "Deferred 클래스 패턴의 continue를 pass로 우회하여 Deferred도 receipt 접근에 도달하고 AttributeError가 발생한다."

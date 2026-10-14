@@ -1,0 +1,2 @@
+# claude 감사 판정자 B - IN 이 하나라도 있는 쌍 (DESIGN §7.10d)
+XC038-dispatched-hex

@@ -1,0 +1,15 @@
+decoy_id = "XC033-decimal-preview"
+trap_kind = "defensive_copy"
+
+[bait]
+apparent_defect = "정밀도 대입, clear_flags, traps 변경 및 quantize의 누적 신호 기록이 호출자의 계산 컨텍스트를 오염시키며 반환 컨텍스트에도 원본과의 별칭을 남기는 것처럼 보인다."
+lure_lines = [10, 14]
+
+[safety]
+claim = "preview_amount는 선언 타입의 모든 amount, quantum, template, precision에 대해 동기 예외로 종료할 때도 template의 정밀도, 반올림 모드, 지수 경계, capitals, clamp, flags와 traps를 보존한다. 계산은 template의 설정에서 정밀도만 precision으로 바꾸고 flags를 모두 지우고 Inexact 트랩만 끈 컨텍스트의 quantize와 같은 결과 또는 거절 여부를 낸다. 정상 반환한 컨텍스트는 그 계산 직후의 설정과 신호를 담으며, 원본 또는 반환 컨텍스트의 설정 대입, flags와 traps의 항목 변경 및 clear_flags와 clear_traps 호출은 반대쪽 상태에 영향을 주지 않는다."
+justification = "Context.copy는 수치 설정뿐 아니라 flags와 traps의 내부 신호 저장소도 독립적으로 복제한다. 따라서 정밀도 검증부터 quantize까지 모든 변경은 working에서만 일어나며, 정밀도 대입이나 산술 트랩에서 동기 예외가 발생해도 template에는 쓰기가 없다. Decimal 입력은 불변이고 quantize는 working을 명시적인 계산 컨텍스트로 사용하므로 원본의 누적 플래그도 바뀌지 않는다. 반환된 working 역시 별도 저장소를 소유하기 때문에 어느 방향의 후속 설정 변경도 반대편으로 전달되지 않는다."
+guard_symbol = "preview_amount"
+guard_lines = [9, 9]
+
+[twin]
+defect = "컨텍스트 복사를 원본 참조로 바꾸어 정밀도와 traps, flags를 직접 변경한다. 정상 반환 뒤에도 원본과 반환 컨텍스트가 같아 후속 변경이 전파된다."

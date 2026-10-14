@@ -1,0 +1,15 @@
+decoy_id = "XC057-frozen-methods"
+trap_kind = "frozen_after_init"
+
+[bait]
+apparent_defect = "supported_methods()가 전역 허용 메서드 집합을 그대로 반환하고 accepts()가 같은 집합을 직접 읽으므로, 호출자가 원본 또는 공개 집합의 원소를 추가하거나 제거하여 이후 요청의 허용 여부를 바꿀 수 있어 보인다."
+lure_lines = [10, 15]
+
+[safety]
+claim = "모듈 초기화 뒤 BOOTSTRAP, METHODS, supported_methods()의 반환값 및 그 복사·합집합·교집합·차집합·대칭차 결과에 대해 str 원소(일반 하위 타입 포함)를 사용하는 일반적인 집합 변경과 제자리 집합 연산을 어떤 순서로 시도해도, 이후 모든 str method(일반 하위 타입 포함)에 대해 accepts(method)는 예외 없이 정확히 GET, HEAD, OPTIONS와 같은 문자열에만 True를 반환하고 새 supported_methods()의 원소는 정확히 이 세 문자열이다."
+justification = "METHODS는 모듈 초기화 때 가변 원본의 원소를 frozenset으로 복사하기 때문에 BOOTSTRAP의 이후 변경과 저장소를 공유하지 않는다. 또한 원소인 문자열 자체가 불변이며 frozenset에는 원소를 변경하는 연산이 없으므로 반환값을 통해 전역의 내용을 바꿀 수 없다. 복사와 집합 연산은 기존 집합을 유지하고, 제자리 연산도 호출자 쪽 이름에 별도 결과를 연결할 뿐이어서 이후 멤버십 검사와 새 반환값이 초기 세 원소를 보존한다."
+guard_symbol = "METHODS"
+guard_lines = [7, 7]
+
+[twin]
+defect = "frozenset 대신 가변 set을 공개하므로 supported_methods().add('POST') 뒤에 accepts('POST')가 True가 되며 discard('GET')로 기존 허용 메서드도 제거할 수 있다."

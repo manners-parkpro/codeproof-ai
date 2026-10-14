@@ -1,0 +1,15 @@
+decoy_id = "XC022-frozen-tariff"
+trap_kind = "frozen_after_init"
+
+[bait]
+apparent_defect = "tariff()가 전역 요금 객체를 그대로 반환하고 quote()가 그 필드를 직접 읽으므로, 호출자가 필드를 바꾸거나 삭제하여 이후 모든 작업의 요금을 변조하거나 계산을 중단시킬 수 있어 보인다."
+lure_lines = [15, 20]
+
+[safety]
+claim = "모듈 초기화 뒤 TARIFF 및 tariff()로 얻은 객체의 두 공개 요금 필드에 int 값(일반 하위 타입 포함)을 대입하거나 증감하거나 삭제하는 어떤 순서의 일반적인 속성 변경 시도 뒤에도, 모든 int units에 대해 quote(units)는 예외 없이 125 + 7 * max(0, units)를 반환한다. 별도 Tariff 생성도 이 결과를 바꾸지 않는다."
+justification = "모듈 수준의 Tariff 선언에 frozen=True가 있으므로 dataclass가 생성한 __setattr__와 __delattr__는 초기화 이후 두 필드의 대입 및 삭제를 거절한다. 필드의 초기 값은 불변인 정수 125와 7이고, 증감 대입도 새 정수를 필드에 다시 대입해야 하므로 같은 방어에 막힌다. 별도 인스턴스는 독립 필드를 가지며 전역 참조는 함수 안에서 재대입되지 않는다. 따라서 일반 속성 변경 시도는 기존 요금표 상태를 보존하고 정수 계산은 명시한 수식을 유지한다."
+guard_symbol = "Tariff"
+guard_lines = [6, 9]
+
+[twin]
+defect = "frozen=False로 필드 동결을 제거하여 노출된 객체의 base_cents 또는 unit_cents 대입이 다음 quote()의 요금을 바꾸고, 필드 삭제는 계산 중 AttributeError를 일으킨다."

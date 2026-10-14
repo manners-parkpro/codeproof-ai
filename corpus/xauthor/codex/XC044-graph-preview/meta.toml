@@ -1,0 +1,15 @@
+decoy_id = "XC044-graph-preview"
+trap_kind = "defensive_copy"
+
+[bait]
+apparent_defect = "노드 라벨 대입과 children.reverse가 원본 그래프를 변경하고, 노드 수 제한으로 중간에 예외가 나면 일부 변경이 남으며 반환 그래프도 원본 노드를 공유하는 것처럼 보인다."
+lure_lines = [35, 40]
+
+[safety]
+claim = "preview는 선언 타입의 모든 유한 도달 그래프 root, prefix, limit에 대해 성공하거나 동기 예외로 종료할 때 원본의 노드 라벨, children 목록의 정체성과 순서 및 간선 대상 정체성을 보존한다. 도달하는 서로 다른 노드 수가 limit 이하이면 정상 반환하고 그 밖에는 거절한다. 정상 반환 그래프는 원본의 각 노드에 정확히 하나의 새 노드를 대응시키며 라벨은 prefix + 원래 라벨이고 각 노드의 간선 순서는 역순이다. 순환, 중복 간선, 공유 노드와 서로 다른 노드의 구별은 보존하며, 모든 반환 노드와 children 목록은 원본의 모든 도달 노드와 children 목록에서 분리되어 어느 쪽의 라벨 대입이나 children 목록 수정 및 재대입도 반대쪽 상태를 바꾸지 않는다."
+justification = "_snapshot은 원본 노드의 id를 키로 새 노드를 먼저 등록한 뒤 각 간선의 대상을 그 표에서 찾아 연결한다. 따라서 순환을 다시 확장하지 않고 공유 대상에는 같은 복제 노드를 사용하며 서로 다른 원본은 합치지 않는다. 각 새 Node의 기본 children 목록은 새로 생성되므로 원본 목록을 공유하지 않는다. 문자열 라벨은 불변이고 preview가 _decorate에 복제 루트만 전달하므로 라벨 대입, 역순 변경 및 제한 초과 이전의 부분 변경 모두 원본에는 도달하지 않는다."
+guard_symbol = "preview"
+guard_lines = [45, 45]
+
+[twin]
+defect = "preview가 _snapshot을 우회하여 원본 루트를 _decorate에 전달하므로 라벨과 children 순서가 직접 변경되고 제한 초과 시에도 부분 변경이 남으며 반환값은 원본 자체이다."

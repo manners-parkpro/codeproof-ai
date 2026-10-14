@@ -1,0 +1,15 @@
+decoy_id = "XC043-span-subtraction"
+trap_kind = "contract_half_open"
+
+[bait]
+apparent_defect = "오른쪽 잔여 구간의 시작이 stop과 같으면 엄격한 < 검사로 조각을 버리므로, 마지막 경계의 사용 가능한 칸을 누락하는 off-by-one처럼 보인다."
+lure_lines = [16, 18]
+
+[safety]
+claim = "subtract_span은 모든 int 인수(음수, 임의 크기 정수, bool, IntEnum 및 메서드를 재정의하지 않은 하위 타입 포함)에 대해 start > stop 또는 cut_start > cut_stop이면 거절하고, 나머지는 [start, stop)에서 [cut_start, cut_stop)을 뺀 집합의 최대 비어 있지 않은 반열린 정수 구간들을 중복 없이 오름차순 리스트로 반환한다. 빈 원본은 빈 리스트이고 빈 삭제 구간은 원본을 그대로 보존한다."
+justification = "먼저 두 입력의 역전을 검사하므로 빈 원본에서도 잘못된 삭제 경계를 거절한다. 빈 원본과 빈 삭제 구간은 별도로 처리하기 때문에 빈 조각이나 서로 붙은 조각을 만들지 않는다. 나머지 경우 왼쪽 끝은 min(stop, cut_start)로, 오른쪽 시작은 max(start, cut_stop)로 원본 안에 잘라 맞춘다. 따라서 양쪽의 엄격한 시작 < 끝 검사는 양의 길이인 잔여 구간만 남기며, stop 자체는 반열린 원본에 속하지 않으므로 시작이 stop인 조각을 버려도 아무 원소도 잃지 않는다. 양쪽 조각 사이에는 비어 있지 않은 삭제 구간이 있으므로 반환 조각들은 최대이고 분리되어 있다. 정수 비교와 min 및 max만 사용하므로 음수와 큰 정수 및 일반 하위 타입에도 같은 논리가 적용된다."
+guard_symbol = "subtract_span"
+guard_lines = [4, 19]
+
+[twin]
+defect = "오른쪽 잔여 구간의 양의 길이 가드를 <=로 약화하여 삭제가 원본의 끝에 정확히 닿으면 (stop, stop)이라는 빈 조각을 반환한다. 예를 들어 subtract_span(0, 5, 2, 5)는 [(0, 2)] 대신 [(0, 2), (5, 5)]를 반환한다."

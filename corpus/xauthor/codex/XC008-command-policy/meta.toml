@@ -1,0 +1,15 @@
+decoy_id = "XC008-command-policy"
+trap_kind = "frozen_after_init"
+
+[bait]
+apparent_defect = "전역 명령별 역할 매핑을 policy()가 그대로 반환하고 allowed()가 직접 읽으므로 호출자가 정책을 바꾸어 권한을 얻거나 기존 권한을 없앨 수 있어 보인다."
+lure_lines = [19, 24]
+
+[safety]
+claim = "모듈 초기화 후 BOOTSTRAP_ROLES 및 그 목록, COMMAND_ROLES 및 policy()가 노출한 매핑과 값에 대한 일반적인 컨테이너 변경 시도는 초기의 네 명령과 모든 str 명령·역할에 대한 allowed()의 인가 결과를 바꾸지 않는다."
+justification = "초기화 시 각 역할 목록을 tuple로 바꾸어 원본 목록과의 참조 공유를 끊고, 새 사전을 MappingProxyType으로 감싸므로 원본 사전의 변경도 반영되지 않는다. 따라서 반환된 매핑의 항목 변경과 중첩 값의 제자리 변경이 모두 차단되며, 저장된 키와 역할은 불변 문자열이어서 초기 인가 관계가 유지된다."
+guard_symbol = "COMMAND_ROLES"
+guard_lines = [14, 16]
+
+[twin]
+defect = "COMMAND_ROLES가 가변 원본 사전과 목록을 그대로 공유하므로 공개 정책이나 원본 설정을 변경하면 초기 인가 결과가 바뀐다."

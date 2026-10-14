@@ -1,0 +1,15 @@
+decoy_id = "XC074-weighted-ticket"
+trap_kind = "contract_half_open"
+
+[bait]
+apparent_defect = "남은 티켓 번호가 버킷의 가중치와 같을 때도 >= 비교로 현재 버킷을 건너뛰므로, 마지막 티켓을 다음 버킷에 잘못 배정하는 off-by-one처럼 보인다."
+lure_lines = [12, 14]
+
+[safety]
+claim = "bucket_for_ticket은 모든 list[int] weights와 int ticket 입력(빈 리스트, 0, 음수, 임의 크기 정수, bool, IntEnum 및 메서드를 재정의하지 않은 하위 타입 포함)에 대해 음수 가중치가 하나라도 있거나 ticket < 0 또는 ticket >= sum(weights)이면 거절하고, 나머지는 sum(weights[:i]) <= ticket < sum(weights[:i+1])을 만족하는 유일한 원래 버킷 인덱스 i를 반환한다. 가중치 0인 버킷에는 티켓을 배정하지 않으며, 성공과 거절 모두 입력 리스트의 내용을 바꾸지 않는다."
+justification = "모든 가중치를 먼저 검사하므로 선택된 버킷 뒤의 음수도 거절된다. 전체 합과 티켓의 범위를 검사한 뒤, 각 반복의 remaining은 원래 티켓에서 앞선 가중치들의 합을 뺀 값이다. 따라서 remaining >= weight이면 현재 반열린 구간 밖이므로 그 가중치를 빼고 다음 버킷으로 진행해야 한다. 0인 가중치도 이 분기로 건너뛰며, 남은 값이 가중치보다 작아지는 유일한 버킷에서 원래 인덱스를 반환한다. 모든 연산은 정수 비교와 뺄셈이고 입력에 쓰는 연산이 없으므로 큰 정수와 평범한 하위 타입에도 동일한 기전이 적용되고 입력은 보존된다."
+guard_symbol = "bucket_for_ticket"
+guard_lines = [4, 16]
+
+[twin]
+defect = ">= 가드를 >로 약화하여 weights=[2,3], ticket=2에서 반열린 경계의 티켓을 다음 버킷 1 대신 버킷 0에 배정한다. weights=[0,2], ticket=0에서는 비어 있는 버킷 0에 배정한다."

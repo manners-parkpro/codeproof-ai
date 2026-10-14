@@ -1,0 +1,15 @@
+decoy_id = "XC084-context-preview"
+trap_kind = "defensive_copy"
+
+[bait]
+apparent_defect = "variable.set이 호출자가 제공한 컨텍스트의 설정을 덮어쓰며, 뒤의 필수 설정 조회가 실패하면 앞선 변경이 원본에 남고 반환 컨텍스트의 후속 변경도 원본을 오염시키는 것처럼 보인다."
+lure_lines = [10, 12]
+
+[safety]
+claim = "preview_settings는 선언 타입의 모든 source, bindings, required에 대해 정상 반환하거나 동기 예외로 종료할 때 원본 및 호출 시 활성 컨텍스트의 바인딩 존재 여부와 값 참조를 보존한다. 이미 진입된 source도 허용한다. 계산은 source의 모든 바인딩에서 시작하여 bindings를 순서대로 대입한 뒤 required를 순서대로 조회하며, 미바인딩 변수는 그 변수의 기본값을 사용하고 기본값도 없으면 거절한다. 그 외에는 조회한 값 참조들의 열과 계산 직후의 모든 바인딩을 담은 별도 Context를 반환한다. 빈 입력, 반복 대입, 같은 이름의 서로 다른 변수와 기본값도 이 규칙을 따른다. 정상 반환 뒤 원본 또는 반환 컨텍스트 안에서 ContextVar.set 및 유효한 토큰의 reset으로 바인딩을 추가, 교체, 복원, 제거해도 다른 쪽의 바인딩 존재 여부와 값 참조는 바뀌지 않는다. 바인딩된 객체의 내부 내용에 대한 깊은 복사는 주장하지 않는다."
+justification = "source.copy()가 별도 Context를 만들고 working.run이 그 복사본을 활성화하므로 variable.set과 필수값 조회는 복사본의 바인딩에만 작용한다. Context의 복사 시 공유되는 내부 저장 구조는 바인딩 변경을 양쪽에 전파하지 않으며, run은 정상 종료와 동기 예외 모두에서 이전 활성 컨텍스트를 복원한다. 따라서 중간 조회 실패나 반환 후 set과 reset도 원본 바인딩을 변경하지 않는다."
+guard_symbol = "preview_settings"
+guard_lines = [15, 20]
+
+[twin]
+defect = "컨텍스트 복사를 source 별칭으로 대체하여 set이 원본에 기록되고, 필수값 조회 실패 뒤에도 변경이 남으며 반환 컨텍스트도 원본과 동일하다."

@@ -1,0 +1,15 @@
+decoy_id = "XC069-calendar-dispatch"
+trap_kind = "type_narrowed"
+
+[bait]
+apparent_defect = "day_distance의 date 입력에는 하위 타입 datetime도 포함되는데 right - left를 바로 계산하므로 날짜와 시각이 섞이면 TypeError가 발생하고 시각끼리는 하루 미만의 차이를 잘못 계산하는 것처럼 보인다."
+lure_lines = [18, 20]
+
+[safety]
+claim = "day_distance는 선언 타입 date의 모든 시작값과 끝값 및 허용된 하위 타입에 대해 호출 순서와 반복에 관계없이 예외 없이 정수를 반환한다. 반환값은 각 입력의 연·월·일로 정한 그레고리력 날짜에서 끝 날짜의 서수를 뺀 부호 있는 일수이며, datetime의 시각과 시간대는 결과에 영향을 주지 않고 입력은 변경되지 않는다."
+justification = "singledispatch에 등록한 datetime 처리 함수는 datetime과 그 하위 타입을 date()로 투영하고, 나머지 date 값은 기본 처리 함수가 그대로 전달한다. 따라서 두 피연산자는 모두 datetime이 아닌 날짜로 좁혀지므로 혼합 타입이나 시간대의 차이에 따른 뺄셈 예외가 없고, 날짜 뺄셈의 days는 경계 연도를 포함해 연·월·일의 서수 차이를 정확히 반환한다. 날짜 객체는 불변이고 함수는 상태를 저장하지 않으므로 입력 변경이나 호출 이력의 영향도 없다."
+guard_symbol = "_calendar_day"
+guard_lines = [12, 14]
+
+[twin]
+defect = "datetime 등록을 제거하면 기본 처리 함수가 datetime을 그대로 반환한다. date와 datetime의 혼합 뺄셈은 TypeError를 내고, 시각끼리의 뺄셈은 달력 날짜 차이 대신 시각·시간대에 의존하는 일수를 반환한다."
