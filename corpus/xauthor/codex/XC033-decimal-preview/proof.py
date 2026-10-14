@@ -25,7 +25,9 @@ class Digits(IntEnum):
 
 
 ATTRS = ("prec", "rounding", "Emin", "Emax", "capitals", "clamp")
-SIGNALS = tuple(Context().flags)
+# 신호 목록을 낸 컨텍스트를 붙잡아 둔다 - 3.14.7 부터 주인이 해제된 flags 는 무효다 (gh-146011 · DESIGN §7.10d)
+_SIGNAL_SOURCE = Context()
+SIGNALS = tuple(_SIGNAL_SOURCE.flags)
 ROUNDINGS = (
     ROUND_05UP, ROUND_CEILING, ROUND_DOWN, ROUND_FLOOR,
     ROUND_HALF_DOWN, ROUND_HALF_EVEN, ROUND_HALF_UP, ROUND_UP,
