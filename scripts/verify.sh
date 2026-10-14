@@ -117,6 +117,12 @@ if uv run codeproof report --check > /dev/null 2>&1; then
 else
   bad "생성물이 낡았다 — codeproof report 로 다시 만든다" "생성물"
 fi
+if uv run codeproof xauthor-report --check > /dev/null 2>&1; then
+  ok "results/xauthor/MEASUREMENTS.md 가 codex 가 쓴 쌍 · 두 묶음 · 라벨 목록과 일치한다 (교차 저자 · DESIGN §7.10d)"
+  why "선언한 분석을 묶음에서 다시 채점해 대조한다 — 측정 뒤 고를 손잡이가 없다."
+else
+  bad "교차 저자 생성물이 낡았다 — codeproof xauthor-report 로 다시 만든다" "생성물"
+fi
 
 # ── 요약 ───────────────────────────────────────────────────────────────────
 printf '\n%s%s%s\n' "$D" "────────────────────────────────────────────────────────" "$O"

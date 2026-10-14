@@ -110,6 +110,7 @@ SCENARIOS=(layering runner registry registry-derived sdk-lazy falsify-shard proo
            xauthor-publish-email-escape xauthor-publish-example-case xauthor-publish-worktree xauthor-publish-home-account
            xauthor-publish-roots xauthor-publish-duplicate xauthor-publish-staging xauthor-publish-blocked runner-cli-absolute xauthor-min-kinds-pin
            measure-refusal-claude measure-refusal-codex xauthor-shaky-label
+           xauthor-report-stale
            explorer-said-run explorer-verdict-check explorer-marks explorer-every-pair data-stale
            ruff-rules-empty highlights-leader highlights-shaky highlights-trade landing-ruff-pin
            landing-ruff-sri landing-inline-script serve-origin serve-host serve-json serve-one-at-a-time
@@ -1379,6 +1380,10 @@ guard_measure-refusal-codex() { uv run pytest tests/scripts/test_agent_output.py
 claim_xauthor-shaky-label() { echo "판정 줄은 판정 이름을 한 번만 싣는다 — 「흔들린다」는 값과 문장이 같아 두 번 찍혔다 (③ 첫 채점 2026-10-14)"; }
 break_xauthor-shaky-label() { perl -0pi -e 's/    label = head if reading is Reading\.SHAKY else f"\{reading\.value\} \{head\}"\n/    label = f"{reading.value} {head}"\n/' "$_XAN"; }
 guard_xauthor-shaky-label() { uv run pytest "$_XANT" -q -k names_the_reading_once; }
+
+claim_xauthor-report-stale() { echo "교차 저자 생성물이 코퍼스 · 묶음 · 라벨 목록과 다르면 --check 가 운다 — verify 가 낡은 공개 숫자를 잡는다 (§7.10d · F5b)"; }
+break_xauthor-report-stale() { perl -0pi -e 's/\*\*72쌍\*\*/**71쌍**/' results/xauthor/MEASUREMENTS.md; }
+guard_xauthor-report-stale() { uv run codeproof xauthor-report --check > /dev/null; }
 
 claim_xauthor-run-amend() { echo "측정 전에 낮춘 하한은 이어 받은 RUN.json 에도 고쳐 적고 보정을 남긴다 — 기록이 쓰지 않는 상한을 적지 않게 (C1a · 수집 중 보정 2026-10-09)"; }
 break_xauthor-run-amend() { perl -0pi -e 's/            caps\[key\] = value\n//' "$_XR"; }
