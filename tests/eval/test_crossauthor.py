@@ -88,6 +88,14 @@ class TestTheReadingIsTheDeclaredOne:
     def test_every_branch_has_its_declared_sentence(self) -> None:
         assert set(READINGS) == set(Reading)
 
+    def test_the_verdict_line_names_the_reading_once(self) -> None:
+        """[실측 · ③ 첫 채점] 「흔들린다」는 값과 문장이 같아 「흔들린다 흔들린다」로 찍혔다 -
+        번호가 있는 판정은 번호와 문장을 그대로 잇는다."""
+        shaky = crossauthor._verdict_section(_ladder(ABOVE, ABOVE, AROUND, AROUND), _flat(ABOVE))
+        assert shaky[2].startswith("> **흔들린다** — ")
+        both = crossauthor._verdict_section(_flat(ABOVE), _flat(ABOVE))
+        assert both[2].startswith(f"> **① {READINGS[Reading.BOTH][0]}** — ")
+
 
 class TestTheTwinSideCountsEveryCaughtTwin:
     def test_flagging_both_sides_still_caught_the_twin(self) -> None:
