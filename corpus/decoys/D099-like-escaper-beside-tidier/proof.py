@@ -15,7 +15,7 @@ _TERMS = ("%", "_", "\\", "a_b", "100%", "%cotton", "\\%", "\\_", "%%", "_ _", "
 _ESCAPE_CANDIDATES = tuple(c + "a" for c in "!#$&*+-./:;=?@^|~")
 # SQLite 는 텍스트 비교를 첫 NUL 에서 끊는다 - 거절해야 한다 (독립 검토)
 _NUL = ("\x00", "tee\x00", "\x00%", "cotton\x00zzz")
-# 🔴 SQLite 의 LIKE 는 U+FFFE · U+FFFF 를 U+FFFD 로 바꿔 견준다 - 양방향으로 엉뚱한 상품이 나온다 (교차 패밀리 감사)
+# 🔴 3.54.0 전의 SQLite LIKE 는 U+FFFE · U+FFFF 를 U+FFFD 로 바꿔 견준다 - 그 판에서는 양방향으로 엉뚱한 상품이 나온다 (교차 패밀리 감사)
 _REPLACED = ("\ufffd", "\uffff", "\ufffe", "x\uffffy", "\ufffd mark", "\ufffe tag")
 _ASCII_FOLD = str.maketrans(string.ascii_uppercase, string.ascii_lowercase)
 
