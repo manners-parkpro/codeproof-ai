@@ -119,6 +119,13 @@ class TestCommand:
         assert main(["review", str(_file(tmp_path, "shell.py", SHELL)), "--out", str(out)]) == 0
         assert out.read_text(encoding="utf-8").startswith("# 리뷰 보고서")
 
+    def test_json_keeps_the_code_with_the_screens_report(self, tmp_path: Path) -> None:
+        """대시보드의 리뷰 예시가 이 출력을 그대로 싣는다 - 코드와 serve 화면의 꼴이 같이 있다."""
+        src, out = _file(tmp_path, "shell.py", "\ufeff" + SHELL), tmp_path / "report.json"
+        assert main(["review", str(src), "--json", "--out", str(out)]) == 0
+        got = json.loads(out.read_text(encoding="utf-8"))
+        assert got == {"code": SHELL, "agent": None, "report": review.review_dict(review_file(src))}
+
     @pytest.mark.parametrize("name", ["notes.txt", "missing.py"])
     def test_only_an_existing_python_file_is_reviewed(self, tmp_path: Path, name: str) -> None:
         path = tmp_path / name
@@ -234,6 +241,28 @@ class TestTheReportSaysOnlyWhatItSaw:
         kinds = {ev.kind for ev in style[0].verified.evidence}
         assert EvidenceKind.GUARD not in kinds and EvidenceKind.REACHABILITY not in kinds
         assert "보지 않음 — 관례 주장" in render_review(report)
+
+    def test_a_convention_claim_does_not_corroborate_a_defect_claim(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """[실측] 리뷰 예시 D069 에서 ±2줄 안의 줄 길이 경고(E501)가 AI 의 결함 지적을
+        「뒷받침」했다 - 관례 주장은 결함을 짚은 것이 아니다 (F4a).
+        대조군은 같은 실행에서 결함 주장(F821) 옆의 지적이다."""
+        code = 'x = "' + "a" * 100 + '"\n' + "".join(f"y{i} = {i}\n" for i in range(5))
+        code += "z = undefined_name\n"
+        path = _file(tmp_path, "long.py", code)
+        said = [_said("long.py", 1, "aaaa"), _said("long.py", 7, "undefined_name")]
+        _agent_says(monkeypatch, said)
+        report = review_file(path, agent="claude")
+        rules = {e.verified.finding.rule_id for e in report.entries if e.reviewer == "ruff"}
+        assert {"E501", "F821"} <= rules  # 입력이 의도대로 - 관례 주장과 결함 주장이 둘 다 있다
+        verdict = {
+            e.verified.finding.location.line: next(
+                ev.verdict for ev in e.verified.evidence if ev.kind is EvidenceKind.CORROBORATION
+            )
+            for e in report.entries if e.reviewer == "claude"
+        }
+        assert verdict == {1: Verdict.INCONCLUSIVE, 7: Verdict.SUPPORTS}
 
     def test_findings_on_one_line_are_not_folded(self, tmp_path: Path) -> None:
         """🔴 [실측] `return foo + bar` 의 F821 두 건 중 bar 가 말없이 사라졌다."""

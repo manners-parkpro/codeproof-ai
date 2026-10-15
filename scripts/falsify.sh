@@ -80,7 +80,7 @@ SCENARIOS=(layering runner registry registry-derived sdk-lazy falsify-shard proo
            xauthor-inventory-ids xauthor-builtin-instructions xauthor-pair-leak xauthor-pair-leak-readme
            xauthor-run-credit xauthor-run-repro xauthor-run-kind xauthor-run-budget xauthor-run-frozen
            review-unlabeled review-no-defect-claim review-self-corroboration review-static-citation
-           review-silent-agent review-agent-citation
+           review-silent-agent review-agent-citation review-corroboration-kind
            xauthor-run-restore xauthor-audit-schema xauthor-run-refused xauthor-run-refused-kind
            xauthor-run-refused-resume xauthor-run-idle-cut scripts-typed xauthor-run-gate-output
            xauthor-run-gate-rc xauthor-run-timeout xauthor-run-kind-budget xauthor-run-interrupted
@@ -112,6 +112,7 @@ SCENARIOS=(layering runner registry registry-derived sdk-lazy falsify-shard proo
            measure-refusal-claude measure-refusal-codex xauthor-shaky-label
            xauthor-report-stale
            explorer-said-run explorer-verdict-check explorer-marks explorer-every-pair data-stale
+           explorer-examples-picked explorer-examples-code explorer-examples-agent explorer-examples-shipped
            ruff-rules-empty highlights-leader highlights-shaky highlights-trade landing-ruff-pin
            landing-ruff-sri landing-inline-script serve-origin serve-host serve-json serve-one-at-a-time
            serve-unknown-agent serve-origin-null serve-body-cap serve-length ruff-syntax-adapter
@@ -1410,6 +1411,26 @@ guard_explorer-marks() { uv run pytest "$_EXT" -q -k 'marks_say_why or each_outc
 claim_explorer-every-pair() { echo "기록된 리뷰는 고르지 않는다 — 잰 짝 전부를 싣는다"; }
 break_explorer-every-pair() { perl -0pi -e 's/s\.sample_id in measured\)/s.sample_id in measured)[:1]/' "$_EX"; }
 guard_explorer-every-pair() { uv run pytest tests/cli/test_commands.py -q -k dashboard_data_is_generated; }
+
+claim_review-corroboration-kind() { echo "교차 확인은 같은 종류끼리만 견준다 — 관례 주장(줄 길이 등)이 AI 의 결함 지적을 「뒷받침」하지 않게 (F4a)"; }
+break_review-corroboration-kind() { perl -0pi -e 's/reference=\[f for f in others if f\.category\.is_defect_claim\]/reference=others/' src/codeproof_ai/review.py; }
+guard_review-corroboration-kind() { uv run pytest tests/review/test_review.py -q -k convention_claim_does_not_corroborate; }
+
+claim_explorer-examples-picked() { echo "리뷰 예시는 고르지 않는다 — 기록이 예시 규칙이 고른 짝 전부 · 그것만일 때만 싣는다"; }
+break_explorer-examples-picked() { perl -0pi -e 's/if sorted\(records\) != sorted\(shown\):/if False:/' "$_EX"; }
+guard_explorer-examples-picked() { uv run pytest "$_EXT" -q -k hand_picked; }
+
+claim_explorer-examples-code() { echo "리뷰 예시는 기록한 코드가 지금 버그 코드와 다르면 싣지 않는다 — 옛 출력이 새 코드의 리뷰로 읽힌다"; }
+break_explorer-examples-code() { perl -0pi -e 's/if record\.get\("code"\) != code:/if False:/' "$_EX"; }
+guard_explorer-examples-code() { uv run pytest "$_EXT" -q -k other_code; }
+
+claim_explorer-examples-agent() { echo "리뷰 예시는 에이전트 리뷰 기록만 싣는다 — 정적분석기 보고서가 「AI 리뷰 예시」로 읽히지 않게"; }
+break_explorer-examples-agent() { perl -0pi -e 's/if record\.get\("agent"\) != EXAMPLE_AGENT:/if False:/' "$_EX"; }
+guard_explorer-examples-agent() { uv run pytest "$_EXT" -q -k only_an_agent; }
+
+claim_explorer-examples-shipped() { echo "실린 리뷰 예시는 화면의 예시 짝 전부 · 그 짝의 버그 코드다 — 생성물을 손으로 고쳐도 운다"; }
+break_explorer-examples-shipped() { perl -0pi -e 's/"pair":"D117-/"pair":"D118-/' docs/data/review-examples.js; }
+guard_explorer-examples-shipped() { uv run pytest "$_EXT" -q -k featured_pairs_buggy_code; }
 
 claim_data-stale() { echo "더는 만들지 않는 대시보드 데이터가 남으면 --check 가 운다 — 점수판 없는 옛 기록을 보여 주지 않게 (F5b)"; }
 break_data-stale() { perl -0pi -e 's/pattern="\*\.js", banner=explorer\.BANNER/pattern="*.nope", banner=explorer.BANNER/' src/codeproof_ai/cli.py; }

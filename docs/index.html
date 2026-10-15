@@ -195,6 +195,7 @@
 </style>
 <script src="data/reviews.js" defer></script>
 <script src="data/ruff.js" defer></script>
+<script src="data/review-examples.js" defer></script>
 <script src="app.js" defer></script>
 </head>
 <body>
@@ -256,9 +257,10 @@
 <section id="try" class="band">
   <div class="wrap">
     <h2>직접 해 보기</h2>
-    <p class="sub">두 AI 가 실제로 남긴 리뷰를 짝마다 열어 보거나, 내 코드를 붙여 넣어 린터가 무엇을 보는지 확인한다. 설치도 API 키도 필요 없다.</p>
+    <p class="sub">두 AI 가 실제로 남긴 리뷰를 짝마다 열어 보고, 명령 한 줄의 AI 리뷰 보고서를 보고, 내 코드를 붙여 넣어 린터가 무엇을 보는지 확인한다. 설치도 API 키도 필요 없다.</p>
     <div class="tabs" role="tablist" aria-label="직접 해 보기">
       <button type="button" role="tab" id="tab-records" aria-controls="panel-records" aria-selected="true">실제 AI 리뷰 기록 보기</button>
+      <button type="button" role="tab" id="tab-example" aria-controls="panel-example" aria-selected="false" tabindex="-1">AI 리뷰 예시</button>
       <button type="button" role="tab" id="tab-code" aria-controls="panel-code" aria-selected="false" tabindex="-1">내 코드 넣어 보기</button>
     </div>
 
@@ -284,6 +286,20 @@
           <div class="code" id="code-view" tabindex="0" role="region" aria-label="리뷰어가 본 코드"></div>
         </div>
         <div class="reviews" id="reviews" aria-live="polite"></div>
+      </div>
+    </div>
+
+    <div id="panel-example" role="tabpanel" aria-labelledby="tab-example" hidden>
+      <noscript><p class="quiet">리뷰 예시는 자바스크립트가 필요하다. 같은 기록은 저장소의 results/review-examples 에 있다.</p></noscript>
+      <p class="sub" id="example-intro"></p>
+      <div class="picks" id="example-picks"></div>
+      <dl class="story" id="example-story"></dl>
+      <div class="pane">
+        <div>
+          <p class="legend" id="example-legend"></p>
+          <div class="code" id="example-code" tabindex="0" role="region" aria-label="리뷰한 코드"></div>
+        </div>
+        <div class="reviews" id="example-report" aria-live="polite"></div>
       </div>
     </div>
 

@@ -1,0 +1,27 @@
+{
+ "code": "\"\"\"목록 한 쪽.\"\"\"\n\n_MAX_PAGE = 100\n\n\ndef page(items: list[str], offset: int, limit: int) -> list[str]:\n    if offset < 0 or limit < 1:\n        raise ValueError(\"offset 은 0 이상, limit 은 1 이상이다\")\n    return items[offset : offset + limit]\n",
+ "agent": "claude",
+ "report": {
+  "path": "module.py",
+  "reviewers": [
+   "ruff/0.16.8",
+   "mypy/2.3.1",
+   "claude-code 2.1.299 · claude-fable-5-1 · effort=low"
+  ],
+  "settings": [
+   "ruff(select=F+E+B+S+SIM+PL+RUF,target=py314,ignore-noqa,cat=tool)",
+   "mypy(strict=False,py=3.14,isolated,no-cache)"
+  ],
+  "rejected": [],
+  "weights": "b0.5/c0.2/g0.3/x0.2/r0.15",
+  "entries": [],
+  "limits": [
+   "교차 확인 — 다른 도구가 같은 자리(±2줄)에 같은 종류의 지적(결함 주장끼리 · 관례 주장끼리)을 냈는지만 본다. 같은 문제를 짚었다는 뜻은 아니다. 짚지 않은 것은 반박이 아니다 (mypy 에는 보안 규칙이 없다).",
+   "가드 — 같은 함수 안에서 그 줄보다 앞선 이른 반환 · 예외 · assert · 둘러싼 try/with 와, 부른 함수의 인자 검사만 찾는다. 「반박」은 같은 이름을 쓰는 그런 코드가 있다는 뜻이지 그 코드가 이 지적의 실패를 막는다는 증명이 아니다 (분기는 보지 않는다). 데이터 흐름으로 막는 가드는 보지 못한다. 못 찾은 것은 가드가 없다는 뜻이 아니다.",
+   "도달성 — 이 파일 안의 함수 참조만 본다. 분기 단위 · 파일 밖 · 동적 호출은 보지 못한다.",
+   "가드 · 도달성은 관례 주장(스타일)에는 걸지 않는다 — 막을 실패가 없다.",
+   "인용 — 모델이 인용한 코드가 그 자리에 실제로 있는지 본다. 인용문이 파일 어디에도 없으면 모인 근거는 0 이다 (하드 게이트). 정적분석기는 파일을 직접 읽어 늘 맞으므로 돌리지 않는다.",
+   "모인 근거 — 리뷰어마다 붙는 근거가 달라 상한이 다르다 (정적분석기에는 인용 검증이 없다). 리뷰어끼리 견주지 않는다."
+  ]
+ }
+}

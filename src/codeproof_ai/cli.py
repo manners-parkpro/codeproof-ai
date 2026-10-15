@@ -12,7 +12,7 @@ import shutil
 import sys
 import tempfile
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from codeproof_ai import serve
 from codeproof_ai.analysis.registry import (
@@ -72,7 +72,7 @@ from codeproof_ai.llm.registry import (
 from codeproof_ai.llm.registry import available as provider_available
 from codeproof_ai.llm.render import load_prompt
 from codeproof_ai.llm.render import prompt_hash as prompt_hash_of
-from codeproof_ai.review import AGENTS, ReviewError, render_review, review_file
+from codeproof_ai.review import AGENTS, ReviewError, render_review, review_file, review_record
 from codeproof_ai.reviewers.imported import (
     BUNDLE_FILE,
     DIGEST_SUFFIX,
@@ -249,6 +249,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="로컬 Ollama 모델의 리뷰도 붙인다 (예: qwen3:4b) - 계정 · 키 없음."
         " Ollama 를 켜고 모델을 받아 둔다 (ollama pull)",
     )
+    rv.add_argument(
+        "--json", action="store_true",
+        help="Markdown 대신 JSON - 리뷰한 코드 · 에이전트 · serve 화면과 같은 꼴의 보고서"
+        " (대시보드의 리뷰 예시가 이 출력이다)",
+    )
 
     sub.add_parser("doctor", help="자격증명 · 도구 준비 상태 확인")
 
@@ -321,6 +326,12 @@ def _add_report_parser(sub: argparse._SubParsersAction[argparse.ArgumentParser])
         "--figures",
         default=None,
         help="생성 그림(SVG) 디렉터리 - 기본은 --out 옆의 figures/ (--out - 이면 그리지 않는다)",
+    )
+    rep.add_argument(
+        "--examples",
+        default=None,
+        help="대시보드의 리뷰 예시 기록(<짝>.json - review --json 의 출력) 디렉터리"
+        " - 기본은 --agents 옆의 review-examples/ (예시는 그 묶음의 예시 짝에 딸린다)",
     )
 
 
@@ -1085,6 +1096,7 @@ def _print_observations(run: ReviewerRun) -> None:
 
 def _cmd_review(
     path: Path, out: Path | None, agent: str | None = None, local: str | None = None,
+    *, as_json: bool = False,
 ) -> int:
     """정답이 없는 코드 - 채점하지 않고 지적과 근거만 낸다 (review.py)."""
     if path.suffix != ".py" or not path.is_file():
@@ -1104,7 +1116,11 @@ def _cmd_review(
     except (UnicodeDecodeError, OSError) as exc:
         print(f"파일을 읽지 못했다 (UTF-8 파이썬 파일이어야 한다): {path} - {exc}", file=sys.stderr)
         return 2
-    text = render_review(report)
+    if as_json:
+        code = path.read_text(encoding="utf-8").removeprefix("﻿")  # review_file 이 읽은 그대로
+        text = json.dumps(review_record(report, code), ensure_ascii=False, indent=1) + "\n"
+    else:
+        text = render_review(report)
     if out is None:
         print(text, end="")
     else:
@@ -1425,9 +1441,17 @@ def _cmd_pack(corpus: Path, src: Path, out: Path, *, runs: int | None = None) ->
     return 0
 
 
+def _review_examples(folder: Path) -> dict[str, dict[str, Any]]:
+    """`<짝>.json` - `review --json` 의 출력 그대로다. 짝은 파일 이름이 정한다 (explorer)."""
+    if not folder.is_dir():
+        return {}
+    files = sorted(folder.glob("*.json"))
+    return {p.stem: json.loads(p.read_text(encoding="utf-8")) for p in files}
+
+
 def _cmd_report(
     corpus: Path, analyzer: str, ruff_select: str, out: str, *, check: bool, agents: Path,
-    figures: Path,
+    figures: Path, examples: Path | None = None,
 ) -> int:
     """🔴 측정값을 **생성**한다 - 문서가 숫자를 베끼면 반드시 낡는다."""
     samples = load_decoy_samples(corpus)
@@ -1480,6 +1504,13 @@ def _cmd_report(
     if (pair := reviewer_pair(sections)) is not None:
         featured = [e.pair_id for e in glance.examples] if glance is not None else []
         made[explorer.REVIEWS] = explorer.reviews(pair, samples, featured)
+        # 리뷰 예시 - 기록이 없으면 만들지 않는다 (있던 파일이 남으면 --check 가 낡았다고 운다)
+        if records := _review_examples(examples or agents.parent / "review-examples"):
+            try:
+                made[explorer.EXAMPLES] = explorer.review_examples(records, pair, samples, featured)
+            except ValueError as exc:
+                print(f"리뷰 예시를 싣지 않는다: {exc}", file=sys.stderr)
+                return 2
     outputs = {
         out: body,
         **{str(figures / name): svg for name, svg in drawn.items()},
@@ -1749,6 +1780,7 @@ _COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
     "report": lambda a: _cmd_report(
         Path(a.corpus), a.analyzer, a.ruff_select, a.out, check=a.check, agents=Path(a.agents),
         figures=Path(a.figures) if a.figures else Path(a.out).parent / "figures",
+        examples=Path(a.examples) if a.examples else Path(a.agents).parent / "review-examples",
     ),
     "serve": lambda a: _cmd_serve(Path(a.docs), a.port),
     "xauthor-report": lambda a: _cmd_xauthor_report(
@@ -1759,7 +1791,7 @@ _COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
     "pack": lambda a: _cmd_pack(Path(a.corpus), Path(a.src), Path(a.out), runs=a.runs),
     "doctor": lambda _a: _cmd_doctor(),
     "review": lambda a: _cmd_review(
-        Path(a.path), Path(a.out) if a.out else None, a.agent, a.ollama,
+        Path(a.path), Path(a.out) if a.out else None, a.agent, a.ollama, as_json=a.json,
     ),
     "history": lambda a: _cmd_history(a.store, a.limit, a.repro),
     "import": lambda a: _cmd_import(

@@ -27,7 +27,11 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
+    # 느린 러너에서 20분에 끊겼다 — pytest 97% 에서, corpus 시험만 약 16분이었다 (전날 main 은 약 8분)
+    # [실측 · 2026-10-15 · run 38687311393]. 경쟁 반증이 ubuntu 에서 느리다 (같은 커밋 D132 변이 198초 · macOS 27초).
+    # corpus 만 따로 떼면 그 작업이 다시 20분 근처라 verify 와 같은 30분으로 올린다 —
+    # 25분 넘김이 되풀이되면 한도를 더 올리지 말고 corpus 시험을 조각으로 나눈다.
+    timeout-minutes: 30
     env:
       UV_LOCKED: "1"   # uv.lock 이 pyproject 와 어긋나면 고쳐 쓰지 않고 실패한다
     steps:

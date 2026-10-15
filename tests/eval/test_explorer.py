@@ -163,6 +163,59 @@ class TestRuffRules:
             explorer.ruff_rules("9.9.9", {})
 
 
+def _record(code: str, agent: str | None = "claude") -> dict[str, object]:
+    """`review --json` 의 꼴 - 보고서는 화면이 그리는 그대로 싣는다 (안을 보지 않는다)."""
+    return {"code": code, "agent": agent, "report": {"path": "module.py", "entries": [{"line": 9}]}}
+
+
+def _buggy() -> str:
+    twin = next(s for s in _samples() if s.sample_id == f"{D117}#twin")
+    return neutral_docstring(twin.target.files[0].content)
+
+
+class TestReviewExamples:
+    """대시보드의 리뷰 예시 - `review --json` 기록을 그대로 싣되, 예시 규칙이 고른 짝 전부 ·
+    그것만 · 지금 코드여야 한다 (손으로 고른 예시는 결과를 고르는 것이다)."""
+
+    @pytest.fixture
+    def pair(self, tmp_path: Path) -> tuple[AgentSection, AgentSection]:
+        return (_section(tmp_path, "claude", CLAUDE), _section(tmp_path, "codex", CODEX))
+
+    def test_the_record_is_shown_as_recorded(self, pair: tuple[AgentSection, AgentSection]) -> None:
+        """재지 않은 짝(D999)은 화면의 예시 짝에서 빠지듯 여기서도 빠진다."""
+        record = _record(_buggy())
+        made = explorer.review_examples({D117: record}, pair, _samples(), [D117, "D999-gone"])
+        got = explorer.load(made)
+        assert (got["command"], got["agent"]) == (explorer.EXAMPLE_COMMAND, explorer.EXAMPLE_AGENT)
+        assert got["examples"] == [{"pair": D117, "code": _buggy(), "report": record["report"]}]
+
+    def test_a_hand_picked_set_is_refused(self, pair: tuple[AgentSection, AgentSection]) -> None:
+        """고른 짝 밖의 기록을 더해도, 고른 짝을 빼도 거부한다."""
+        record = _record(_buggy())
+        for records in ({D117: record, "D001-x": record}, {"D001-x": record}):
+            with pytest.raises(ValueError, match="예시 규칙이 고른 짝"):
+                explorer.review_examples(records, pair, _samples(), [D117])
+
+    def test_a_record_of_other_code_is_refused(
+        self, pair: tuple[AgentSection, AgentSection]
+    ) -> None:
+        """잰 뒤 코드가 바뀌면 옛 출력이 새 코드의 리뷰로 읽힌다 - 대조군은 지금 코드의 기록."""
+        explorer.review_examples({D117: _record(_buggy())}, pair, _samples(), [D117])
+        with pytest.raises(ValueError, match="지금 버그 코드와 다르다"):
+            explorer.review_examples(
+                {D117: _record(_buggy() + "# 고친 뒤\n")}, pair, _samples(), [D117]
+            )
+
+    def test_only_an_agent_review_is_an_example(
+        self, pair: tuple[AgentSection, AgentSection]
+    ) -> None:
+        """`--agent` 없이 기록하면 정적분석기 보고서다 - 「AI 리뷰 예시」로 읽히면 안 된다."""
+        with pytest.raises(ValueError, match="에이전트 리뷰 기록이 아니다"):
+            explorer.review_examples(
+                {D117: _record(_buggy(), agent=None)}, pair, _samples(), [D117]
+            )
+
+
 class TestTheShippedData:
     """저장소의 생성물 - 잰 짝 전부 · 알려진 값만 (`report --check` 가 최신인지 본다)."""
 
@@ -182,6 +235,15 @@ class TestTheShippedData:
         ids = [p["id"] for p in data["pairs"]]
         assert ids == sorted(measured)
         assert set(data["featured"]) <= set(ids)
+
+    def test_review_examples_are_the_featured_pairs_buggy_code(self) -> None:
+        """실린 리뷰 예시 - 화면의 예시 짝 전부 · 그 짝의 버그 코드 · 에이전트가 들어간 보고서."""
+        reviews, shipped = self._load(explorer.REVIEWS), self._load(explorer.EXAMPLES)
+        assert [e["pair"] for e in shipped["examples"]] == reviews["featured"]
+        code = {p["id"]: p["buggy"]["code"] for p in reviews["pairs"]}
+        for e in shipped["examples"]:
+            assert e["code"] == code[e["pair"]]
+            assert any(r.startswith("claude-code ") for r in e["report"]["reviewers"])
 
     def test_unscored_claims_lie_outside_the_labeled_range(self) -> None:
         """화면은 채점하지 않은 결함 주장(`out`)에 정답 구간까지의 거리를 적는다 - 겹치면 그 거리가
