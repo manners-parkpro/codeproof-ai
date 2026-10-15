@@ -228,7 +228,7 @@ def review_file(
     for name, findings in found.items():
         others = [f for other, fs in found.items() if other != name for f in fs]
         # 🔴 같은 종류끼리만 교차 확인한다 - 관례 주장(줄 길이 등)은 결함을 짚은 것이 아니다 (F4a).
-        #    [실측] 리뷰 예시 D069 에서 ±2줄 안의 Ruff E501 이 AI 의 결함 지적을 「뒷받침」했다
+        #    [실측] 대시보드의 리뷰 예시에서 ±2줄 안의 Ruff E501 이 AI 의 결함 지적을 「뒷받침」했다
         on_defect: list[Verifier] = [
             CorroborationVerifier(reference=[f for f in others if f.category.is_defect_claim])
         ]
