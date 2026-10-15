@@ -60,7 +60,7 @@
 
   // ── 탭 ──────────────────────────────────────────────────────────────────
   function selectTab(which) {
-    ["records", "code"].forEach(function (name) {
+    ["records", "example", "code"].forEach(function (name) {
       var on = name === which;
       var tab = $("tab-" + name);
       tab.setAttribute("aria-selected", on ? "true" : "false");
@@ -70,7 +70,7 @@
   }
 
   function setupTabs() {
-    var tabs = [$("tab-records"), $("tab-code")];
+    var tabs = [$("tab-records"), $("tab-example"), $("tab-code")];
     tabs.forEach(function (tab, i) {
       tab.addEventListener("click", function () { selectTab(tab.id.slice(4)); });
       tab.addEventListener("keydown", function (e) {
@@ -451,8 +451,6 @@
   // 보고서 한 건 — 이 컴퓨터의 리뷰와 기록된 리뷰 예시가 같은 꼴(review_dict)을 같은 함수로 그린다
   function renderReport(out, rep) {
     out.appendChild(el("h3", { text: "지적 " + rep.entries.length + "건 · " + rep.reviewers.join(" · ") }));
-    out.appendChild(el("p", { cls: "hint" }, "도구 설정 — ", el("code", { text: rep.settings.join(" · ") }),
-      ". 브라우저 Ruff 는 전체 규칙(ALL)이라 지적 수가 다를 수 있다."));
     if (!rep.entries.length) {
       out.appendChild(el("p", { cls: "quiet", text: "리뷰어가 짚은 것이 없다 — 결함이 없다는 뜻은 아니다." }));
     }
@@ -469,61 +467,96 @@
       item.appendChild(list);
       out.appendChild(item);
     });
-    var limits = el("details", null, el("summary", { text: "검증자가 보지 못하는 것" }));
+    var more = el("details", null, el("summary", { text: "도구 설정 · 검증자가 보지 못하는 것" }));
+    more.appendChild(el("p", { cls: "hint" }, "도구 설정 — ", el("code", { text: rep.settings.join(" · ") }),
+      ". 브라우저 Ruff 는 전체 규칙(ALL)이라 지적 수가 다를 수 있다."));
     var ul = el("ul", { cls: "hint" });
     rep.limits.forEach(function (l) { ul.appendChild(el("li", { text: l })); });
-    limits.appendChild(ul);
-    out.appendChild(limits);
+    more.appendChild(ul);
+    out.appendChild(more);
   }
 
   // ── 명령 한 줄의 실제 결과 — 웹 판은 모델을 부르지 못해 기록을 보여 준다 ──────────
   var X = window.CODEPROOF_REVIEW_EXAMPLES;
 
   function setupExamples() {
-    var box = $("example-box");
-    if (!X || !X.examples.length || !box) return;
-    clear(box);
-    box.hidden = false;
-    box.appendChild(el("h3", { text: "AI 리뷰는 이렇게 나온다 — 실제 기록" }));
-    box.appendChild(el("p", null, "웹 판은 AI 를 부르지 않는다. 점수판의 예시 짝 버그 코드를 ",
+    if (!X || !X.examples.length || !$("panel-example")) return;
+    $("example-intro").appendChild(el("span", null, "웹 판은 AI 를 부르지 않는다. 점수판의 예시 짝 버그 코드를 ",
       el("code", { text: X.command }),
-      " 로 실제로 한 번씩 리뷰한 출력을 그대로 싣는다 — 내 코드에 같은 명령을 쓰면 같은 꼴의 보고서가 나온다."));
+      " 로 한 번씩 리뷰한 실제 출력이다 — 내 코드에 같은 명령을 쓰면 같은 꼴의 보고서가 나온다."));
     var picks = el("div", { cls: "seg", role: "group", "aria-label": "리뷰 예시" });
-    var out = el("div", { cls: "result", "aria-live": "polite" });
-    X.examples.forEach(function (ex) {
+    X.examples.forEach(function (ex, i) {
       var pair = R && R.pairs.find(function (p) { return p.id === ex.pair; });
-      var label = ex.pair.split("-")[0] + " 버그 코드";
-      if (pair) {
-        var won = correct(pair, 0) > correct(pair, 1) ? 0 : 1;
-        label += " · 측정에서 " + R.reviewers[won].name.split(" ")[0] + " 만 구별";
-      }
+      var label = ex.pair.split("-")[0];
+      if (pair) label += " · 측정에서 " + R.reviewers[correct(pair, 0) > correct(pair, 1) ? 0 : 1].name.split(" ")[0] + " 만 구별";
       var b = el("button", { type: "button", "aria-pressed": "false", text: label });
-      b.addEventListener("click", function () {
-        Array.prototype.forEach.call(picks.children, function (c) { c.setAttribute("aria-pressed", String(c === b)); });
-        $("source").value = ex.code;
-        showExample(out, ex, pair);
-      });
+      b.addEventListener("click", function () { showExample(i); });
       picks.appendChild(b);
     });
-    box.appendChild(picks);
-    box.appendChild(out);
+    $("example-picks").appendChild(picks);
+    showExample(0);
   }
 
-  function showExample(out, ex, pair) {
-    clear(out);
-    out.appendChild(el("p", { cls: "hint", text: "왼쪽 칸에 리뷰한 코드를 넣었다 — 리뷰어가 측정에서 본 코드와 같다 (파일 이름 module.py · 주석 속 힌트를 지운 판)." }));
+  function showExample(i) {
+    var ex = X.examples[i];
+    var pair = R && R.pairs.find(function (p) { return p.id === ex.pair; });
+    Array.prototype.forEach.call($("example-picks").querySelectorAll("button"), function (b, j) {
+      b.setAttribute("aria-pressed", String(j === i));
+    });
+    var mine = ex.report.entries.filter(function (e) { return e.reviewer === X.agent && e.defect_claim; });
+    var defect = pair ? pair.buggy.defect : null;
+    renderExampleCode(ex.code, defect, mine);
+    var story = $("example-story");
+    clear(story);
+    function row(term, desc) { story.appendChild(el("dt", { text: term })); story.appendChild(el("dd", { text: desc })); }
     if (pair) {
-      // 짚음(결함 쪽을 짚었다)과 구별(안전한 쪽은 짚지 않았다)을 나눈다 - 하나로 세면 「만 구별」 버튼과 모순으로 읽힌다
-      var measured = R.reviewers.map(function (rv, who) {
-        var runs = pair.reviews[who];
-        var hit = runs.filter(function (r) { return r.verdict === "P-C" || r.verdict === "P-V"; }).length;
-        return rv.name + " 는 " + runs.length + "번 중 결함을 " + hit + "번 짚었고 구별은 " + correct(pair, who) + "번";
-      });
-      out.appendChild(el("p", { cls: "callout", text: "이 코드는 " + pair.id + " 의 버그 코드다 — " + pair.bug.trim() +
-        " 측정에서 " + measured.join(", ") + "이었다 (구별 = 버그 쪽만 짚고 안전한 쪽은 짚지 않음)." }));
-      out.appendChild(el("p", { cls: "hint", text: "아래는 버그 코드를 한 번 돌린 출력이라 성적이 아니다 — 성적은 위 점수판이고, 같은 짝의 안전한 코드에 대한 리뷰는 「실제 AI 리뷰 기록 보기」에 회차마다 있다." }));
+      row("정답", pair.bug.trim());
+      row("이번 결과", exampleResult(mine, defect));
+      row("측정 (" + pair.reviews[0].length + "회)", R.reviewers.map(function (rv, who) {
+        var hit = pair.reviews[who].filter(function (r) { return r.verdict === "P-C" || r.verdict === "P-V"; }).length;
+        return rv.name + " 결함 " + hit + "번 · 구별 " + correct(pair, who) + "번";
+      }).join(" / ") + " (구별 = 버그 쪽만 짚고 안전한 쪽은 짚지 않음)");
     }
+    row("읽는 법", "한 번 돌린 출력이라 성적이 아니다 — 성적은 위 점수판이고, 같은 짝의 안전한 코드에 대한 리뷰는 「실제 AI 리뷰 기록 보기」에 회차마다 있다.");
+    var out = $("example-report");
+    clear(out);
     renderReport(out, ex.report);
+  }
+
+  // 정답 줄과 몇 줄 떨어졌는지 - 주 지표는 겹친 지적만 센다 (허용 오차 0 · 결과 5 의 사다리)
+  function exampleResult(mine, defect) {
+    if (!defect) return "";
+    if (!mine.length) return "이번 한 번은 결함을 짚지 못했다 — 같은 명령 · 같은 코드도 돌릴 때마다 결과가 달라 측정은 여러 번 돌려 센다.";
+    var gap = Math.min.apply(null, mine.map(function (e) {
+      return e.line < defect[0] ? defect[0] - e.line : e.line > defect[1] ? e.line - defect[1] : 0;
+    }));
+    var at = "AI 지적 " + mine.map(function (e) { return "L" + e.line; }).join(" · ");
+    return (gap === 0
+      ? at + " 이 정답 줄(" + span(defect) + ")과 겹친다 — 주 지표(허용 오차 0)로도 맞힌 것으로 센다."
+      : at + " 이 정답 줄(" + span(defect) + ")에서 " + gap + "줄 떨어져 있다 — 주 지표(허용 오차 0)로는 범위 밖, 허용 오차 " + gap + " 부터 맞힌 것으로 센다.") +
+      " 같은 결함을 말하는지는 오른쪽 문장으로 판단한다.";
+  }
+
+  // 기록 보기 탭의 코드 보기와 같은 꼴 - 정답 줄과 AI 가 짚은 줄
+  function renderExampleCode(code, defect, mine) {
+    var view = $("example-code");
+    clear(view);
+    var flagged = {};
+    mine.forEach(function (e) { flagged[e.line] = true; });
+    code.replace(/\n$/, "").split("\n").forEach(function (line, i) {
+      var n = i + 1, cls = "ln", what = "";
+      if (defect && within(defect, n)) { cls += " defect"; what = "결함"; }
+      var dots = el("span", { cls: "marks" });
+      if (flagged[n]) dots.appendChild(el("i", { cls: "dot a", role: "img", "aria-label": "AI 지적", title: "AI 지적" }));
+      view.appendChild(el("div", { cls: cls },
+        el("span", { cls: "no", text: String(n) }, what ? el("span", { cls: "sr", text: " " + what }) : null),
+        dots, el("span", { text: line || " " })));
+    });
+    var legend = $("example-legend");
+    clear(legend);
+    [["k-defect", "정답 — 안전장치를 지우거나 바꾼 자리"], ["k-a", "AI(Claude Code) 지적"]].forEach(function (it) {
+      legend.appendChild(el("span", null, el("i", { cls: it[0] }), it[1]));
+    });
   }
 
   function start() {

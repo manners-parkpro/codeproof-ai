@@ -186,7 +186,7 @@ class TestReviewExamples:
         record = _record(_buggy())
         made = explorer.review_examples({D117: record}, pair, _samples(), [D117, "D999-gone"])
         got = explorer.load(made)
-        assert got["command"] == explorer.EXAMPLE_COMMAND
+        assert (got["command"], got["agent"]) == (explorer.EXAMPLE_COMMAND, explorer.EXAMPLE_AGENT)
         assert got["examples"] == [{"pair": D117, "code": _buggy(), "report": record["report"]}]
 
     def test_a_hand_picked_set_is_refused(self, pair: tuple[AgentSection, AgentSection]) -> None:

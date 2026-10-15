@@ -230,7 +230,7 @@ def review_examples(
             msg = f"{pid}: 기록한 코드가 지금 버그 코드와 다르다 - 바뀐 코드로 다시 기록한다"
             raise ValueError(msg)
         rows.append({"pair": pid, "code": code, "report": record["report"]})
-    head = {"command": EXAMPLE_COMMAND}
+    head = {"command": EXAMPLE_COMMAND, "agent": EXAMPLE_AGENT}
     return _with_rows("CODEPROOF_REVIEW_EXAMPLES", head, "examples", rows)
 
 
