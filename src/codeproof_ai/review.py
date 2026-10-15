@@ -85,8 +85,9 @@ KIND = {
 }
 
 LIMITS = (
-    "교차 확인 — 다른 도구가 같은 자리(±2줄)를 짚었는지만 본다. 같은 문제를 짚었다는 뜻은 "
-    "아니다. 짚지 않은 것은 반박이 아니다 (mypy 에는 보안 규칙이 없다).",
+    "교차 확인 — 다른 도구가 같은 자리(±2줄)에 같은 종류의 지적(결함 주장끼리 · 관례 주장끼리)을 "
+    "냈는지만 본다. 같은 문제를 짚었다는 뜻은 아니다. 짚지 않은 것은 반박이 아니다 (mypy 에는 "
+    "보안 규칙이 없다).",
     "가드 — 같은 함수 안에서 그 줄보다 앞선 이른 반환 · 예외 · assert · 둘러싼 try/with 와, "
     "부른 함수의 인자 검사만 찾는다. 「반박」은 같은 이름을 쓰는 그런 코드가 있다는 뜻이지 그 "
     "코드가 이 지적의 실패를 막는다는 증명이 아니다 (분기는 보지 않는다). 데이터 흐름으로 막는 "
@@ -226,12 +227,20 @@ def review_file(
     entries = []
     for name, findings in found.items():
         others = [f for other, fs in found.items() if other != name for f in fs]
-        common: list[Verifier] = [CorroborationVerifier(reference=others)]
+        # 🔴 같은 종류끼리만 교차 확인한다 - 관례 주장(줄 길이 등)은 결함을 짚은 것이 아니다 (F4a).
+        #    [실측] 리뷰 예시 D069 에서 ±2줄 안의 Ruff E501 이 AI 의 결함 지적을 「뒷받침」했다
+        on_defect: list[Verifier] = [
+            CorroborationVerifier(reference=[f for f in others if f.category.is_defect_claim])
+        ]
+        on_convention: list[Verifier] = [
+            CorroborationVerifier(reference=[f for f in others if not f.category.is_defect_claim])
+        ]
         if not kinds[name].is_deterministic:
             # 🔴 인용은 모델 지적에서만 뜻이 있다 - 정적분석기의 「인용」은 늘 맞아 근거를 부풀린다
-            common.insert(0, CitationVerifier())
-        defect = VerificationPipeline([*common, GuardVerifier(), ReachabilityVerifier()])
-        convention = VerificationPipeline(common)  # 관례 주장 - 막을 실패가 없다 (F4a)
+            on_defect.insert(0, CitationVerifier())
+            on_convention.insert(0, CitationVerifier())
+        defect = VerificationPipeline([*on_defect, GuardVerifier(), ReachabilityVerifier()])
+        convention = VerificationPipeline(on_convention)  # 관례 주장 - 막을 실패가 없다 (F4a)
         entries += [
             ReviewEntry(name, (defect if f.category.is_defect_claim else convention).run(f, target))
             for f in findings

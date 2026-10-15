@@ -80,7 +80,7 @@ SCENARIOS=(layering runner registry registry-derived sdk-lazy falsify-shard proo
            xauthor-inventory-ids xauthor-builtin-instructions xauthor-pair-leak xauthor-pair-leak-readme
            xauthor-run-credit xauthor-run-repro xauthor-run-kind xauthor-run-budget xauthor-run-frozen
            review-unlabeled review-no-defect-claim review-self-corroboration review-static-citation
-           review-silent-agent review-agent-citation
+           review-silent-agent review-agent-citation review-corroboration-kind
            xauthor-run-restore xauthor-audit-schema xauthor-run-refused xauthor-run-refused-kind
            xauthor-run-refused-resume xauthor-run-idle-cut scripts-typed xauthor-run-gate-output
            xauthor-run-gate-rc xauthor-run-timeout xauthor-run-kind-budget xauthor-run-interrupted
@@ -1411,6 +1411,10 @@ guard_explorer-marks() { uv run pytest "$_EXT" -q -k 'marks_say_why or each_outc
 claim_explorer-every-pair() { echo "기록된 리뷰는 고르지 않는다 — 잰 짝 전부를 싣는다"; }
 break_explorer-every-pair() { perl -0pi -e 's/s\.sample_id in measured\)/s.sample_id in measured)[:1]/' "$_EX"; }
 guard_explorer-every-pair() { uv run pytest tests/cli/test_commands.py -q -k dashboard_data_is_generated; }
+
+claim_review-corroboration-kind() { echo "교차 확인은 같은 종류끼리만 견준다 — 관례 주장(줄 길이 등)이 AI 의 결함 지적을 「뒷받침」하지 않게 (F4a)"; }
+break_review-corroboration-kind() { perl -0pi -e 's/reference=\[f for f in others if f\.category\.is_defect_claim\]/reference=others/' src/codeproof_ai/review.py; }
+guard_review-corroboration-kind() { uv run pytest tests/review/test_review.py -q -k convention_claim_does_not_corroborate; }
 
 claim_explorer-examples-picked() { echo "리뷰 예시는 고르지 않는다 — 기록이 예시 규칙이 고른 짝 전부 · 그것만일 때만 싣는다"; }
 break_explorer-examples-picked() { perl -0pi -e 's/if sorted\(records\) != sorted\(shown\):/if False:/' "$_EX"; }

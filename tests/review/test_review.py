@@ -242,6 +242,28 @@ class TestTheReportSaysOnlyWhatItSaw:
         assert EvidenceKind.GUARD not in kinds and EvidenceKind.REACHABILITY not in kinds
         assert "보지 않음 — 관례 주장" in render_review(report)
 
+    def test_a_convention_claim_does_not_corroborate_a_defect_claim(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """[실측] 리뷰 예시 D069 에서 ±2줄 안의 줄 길이 경고(E501)가 AI 의 결함 지적을
+        「뒷받침」했다 - 관례 주장은 결함을 짚은 것이 아니다 (F4a).
+        대조군은 같은 실행에서 결함 주장(F821) 옆의 지적이다."""
+        code = 'x = "' + "a" * 100 + '"\n' + "".join(f"y{i} = {i}\n" for i in range(5))
+        code += "z = undefined_name\n"
+        path = _file(tmp_path, "long.py", code)
+        said = [_said("long.py", 1, "aaaa"), _said("long.py", 7, "undefined_name")]
+        _agent_says(monkeypatch, said)
+        report = review_file(path, agent="claude")
+        rules = {e.verified.finding.rule_id for e in report.entries if e.reviewer == "ruff"}
+        assert {"E501", "F821"} <= rules  # 입력이 의도대로 - 관례 주장과 결함 주장이 둘 다 있다
+        verdict = {
+            e.verified.finding.location.line: next(
+                ev.verdict for ev in e.verified.evidence if ev.kind is EvidenceKind.CORROBORATION
+            )
+            for e in report.entries if e.reviewer == "claude"
+        }
+        assert verdict == {1: Verdict.INCONCLUSIVE, 7: Verdict.SUPPORTS}
+
     def test_findings_on_one_line_are_not_folded(self, tmp_path: Path) -> None:
         """🔴 [실측] `return foo + bar` 의 F821 두 건 중 bar 가 말없이 사라졌다."""
         path = _file(tmp_path, "two.py", "def f() -> int:\n    return foo + bar\n")
