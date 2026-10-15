@@ -317,6 +317,7 @@ uv run pytest tests/corpus/test_proofs.py  # 안전 근거가 참인지 — 쌍�
 uv run codeproof review 파일.py                    # Ruff · mypy (자격증명 불필요)
 uv run codeproof review 파일.py --ollama qwen3:4b  # + 로컬 Ollama 모델 (계정 · 키 없음 · ollama pull 로 받아 둔다)
 uv run codeproof review 파일.py --agent claude     # + 에이전트 (CLI 로그인 필요)
+uv run codeproof review 파일.py --agent claude --json  # 같은 보고서를 JSON 으로 — 대시보드의 리뷰 예시가 이 출력이다
 uv run codeproof serve                             # 대시보드를 127.0.0.1 에 열고 붙여 넣은 코드를 review 와 같은 경로로
 
 # ── 외부 리뷰어 가져오기 (자격증명 불필요) ──────────────

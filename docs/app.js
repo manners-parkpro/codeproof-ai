@@ -1,6 +1,6 @@
-/* CodeProof AI 대시보드 — 기록된 리뷰 · 브라우저 Ruff · 이 컴퓨터의 리뷰 (`uv run codeproof serve`).
+/* CodeProof AI 대시보드 — 기록된 리뷰 · 브라우저 Ruff · 리뷰 예시 · 이 컴퓨터의 리뷰 (`uv run codeproof serve`).
  *
- * 데이터는 생성물이다 (data/reviews.js · data/ruff.js — `uv run codeproof report`).
+ * 데이터는 생성물이다 (data/reviews.js · data/ruff.js · data/review-examples.js — `uv run codeproof report`).
  * 모델이 쓴 문장과 코드는 전부 textContent 로 넣는다 — HTML 로 해석하지 않는다.
  * Ruff(WebAssembly)는 「분석」을 누를 때만 받고, 받은 파일은 SRI 해시로 검증한다.
  * 붙임 코드(vendor/)는 npm 의 같은 판에서 가져왔다 — 바깥 스크립트를 실행하지 않는다.
@@ -445,7 +445,11 @@
       out.appendChild(el("p", { cls: "quiet", text: body.error || "알 수 없는 오류" }));
       return;
     }
-    var rep = body.report;
+    renderReport(out, body.report);
+  }
+
+  // 보고서 한 건 — 이 컴퓨터의 리뷰와 기록된 리뷰 예시가 같은 꼴(review_dict)을 같은 함수로 그린다
+  function renderReport(out, rep) {
     out.appendChild(el("h3", { text: "지적 " + rep.entries.length + "건 · " + rep.reviewers.join(" · ") }));
     out.appendChild(el("p", { cls: "hint" }, "도구 설정 — ", el("code", { text: rep.settings.join(" · ") }),
       ". 브라우저 Ruff 는 전체 규칙(ALL)이라 지적 수가 다를 수 있다."));
@@ -472,11 +476,62 @@
     out.appendChild(limits);
   }
 
+  // ── 명령 한 줄의 실제 결과 — 웹 판은 모델을 부르지 못해 기록을 보여 준다 ──────────
+  var X = window.CODEPROOF_REVIEW_EXAMPLES;
+
+  function setupExamples() {
+    var box = $("example-box");
+    if (!X || !X.examples.length || !box) return;
+    clear(box);
+    box.hidden = false;
+    box.appendChild(el("h3", { text: "AI 리뷰는 이렇게 나온다 — 실제 기록" }));
+    box.appendChild(el("p", null, "웹 판은 AI 를 부르지 않는다. 점수판의 예시 짝 버그 코드를 ",
+      el("code", { text: X.command }),
+      " 로 실제로 한 번씩 리뷰한 출력을 그대로 싣는다 — 내 코드에 같은 명령을 쓰면 같은 꼴의 보고서가 나온다."));
+    var picks = el("div", { cls: "seg", role: "group", "aria-label": "리뷰 예시" });
+    var out = el("div", { cls: "result", "aria-live": "polite" });
+    X.examples.forEach(function (ex) {
+      var pair = R && R.pairs.find(function (p) { return p.id === ex.pair; });
+      var label = ex.pair.split("-")[0] + " 버그 코드";
+      if (pair) {
+        var won = correct(pair, 0) > correct(pair, 1) ? 0 : 1;
+        label += " · 측정에서 " + R.reviewers[won].name.split(" ")[0] + " 만 구별";
+      }
+      var b = el("button", { type: "button", "aria-pressed": "false", text: label });
+      b.addEventListener("click", function () {
+        Array.prototype.forEach.call(picks.children, function (c) { c.setAttribute("aria-pressed", String(c === b)); });
+        $("source").value = ex.code;
+        showExample(out, ex, pair);
+      });
+      picks.appendChild(b);
+    });
+    box.appendChild(picks);
+    box.appendChild(out);
+  }
+
+  function showExample(out, ex, pair) {
+    clear(out);
+    out.appendChild(el("p", { cls: "hint", text: "왼쪽 칸에 리뷰한 코드를 넣었다 — 리뷰어가 측정에서 본 코드와 같다 (파일 이름 module.py · 주석 속 힌트를 지운 판)." }));
+    if (pair) {
+      // 짚음(결함 쪽을 짚었다)과 구별(안전한 쪽은 짚지 않았다)을 나눈다 - 하나로 세면 「만 구별」 버튼과 모순으로 읽힌다
+      var measured = R.reviewers.map(function (rv, who) {
+        var runs = pair.reviews[who];
+        var hit = runs.filter(function (r) { return r.verdict === "P-C" || r.verdict === "P-V"; }).length;
+        return rv.name + " 는 " + runs.length + "번 중 결함을 " + hit + "번 짚었고 구별은 " + correct(pair, who) + "번";
+      });
+      out.appendChild(el("p", { cls: "callout", text: "이 코드는 " + pair.id + " 의 버그 코드다 — " + pair.bug.trim() +
+        " 측정에서 " + measured.join(", ") + "이었다 (구별 = 버그 쪽만 짚고 안전한 쪽은 짚지 않음)." }));
+      out.appendChild(el("p", { cls: "hint", text: "아래는 버그 코드를 한 번 돌린 출력이라 성적이 아니다 — 성적은 위 점수판이고, 같은 짝의 안전한 코드에 대한 리뷰는 「실제 AI 리뷰 기록 보기」에 회차마다 있다." }));
+    }
+    renderReport(out, ex.report);
+  }
+
   function start() {
     setupTabs();
     setupRecords();
     setupRuff();
     setupLocal();
+    setupExamples();
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);

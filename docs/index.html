@@ -195,6 +195,7 @@
 </style>
 <script src="data/reviews.js" defer></script>
 <script src="data/ruff.js" defer></script>
+<script src="data/review-examples.js" defer></script>
 <script src="app.js" defer></script>
 </head>
 <body>
@@ -303,6 +304,7 @@
             <h3>Ruff 결과</h3>
             <p class="quiet">왼쪽 코드를 분석하면 여기에 지적이 나온다. 린터의 규칙 분류(결함 주장 · 관례)는 이 저장소의 측정과 같다.</p>
           </div>
+          <div class="local" id="example-box" hidden></div>
           <div class="local" id="local-box">
             <h3>AI 리뷰와 근거 검증까지 보려면</h3>
             <p>내 컴퓨터에서 같은 화면을 열면 Claude Code 나 로컬 모델(Ollama)이 리뷰하고, 지적마다 인용이 그 줄에 있는지 · 린터도 같은 곳을 짚었는지 근거가 붙는다. API 키는 필요 없다.</p>

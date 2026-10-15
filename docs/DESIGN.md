@@ -930,7 +930,7 @@ src/codeproof_ai/
 │   ├── report.py            #   측정값 생성 — 산문에 베끼지 않는다
 │   ├── figures.py           #   생성 그림 (SVG) — report 와 같은 계산 · 받은 값만 그린다
 │   ├── glance.py            #   점수판 · 예시 짝 — 같은 짝 판정을 다시 묶는다 · 예시는 규칙으로 고른다
-│   ├── explorer.py          #   대시보드의 기록된 리뷰 · 브라우저 Ruff 표 — 점수판과 같은 판정 · 회차마다 그 회차의 원문
+│   ├── explorer.py          #   대시보드의 기록된 리뷰 · 브라우저 Ruff 표 · 리뷰 예시 — 점수판과 같은 판정 · 회차마다 그 회차의 원문
 │   ├── export.py            #   코퍼스 → 에이전트 입력 (§7.10)
 │   ├── gate.py              #   codex 가 쓴 쌍의 관문 — 기계로 보는 것만 (§7.10d)
 │   ├── crossauthor.py       #   codex 가 쓴 쌍의 선언한 분석 — 결과 전에 고정 · 선언과 다른 입력은 거절 (§7.10d)
@@ -1773,7 +1773,7 @@ README 에 **반드시** 들어가야 한다 — README 에는 한 줄씩(「재
 | `analysis` | Ruff · mypy 어댑터 · AST 심볼 인덱스 · **일괄 분석** · **호스트 격리** |
 | `reviewers` | **통합 Reviewer 층** · SARIF/bandit/native 가져오기 |
 | `verify` | citation · guard(callee 포함) · corroboration · reachability · confidence |
-| `eval` | 채점자 **4종** · **편차** · **짝 채점** · **민감도** · **미끼 측정** · **다회 실행 관점**(기대값 · k-임계) · **짝 차이** · Wilson CI · **대시보드 데이터**(기록된 리뷰 · 브라우저 Ruff 분류 — `explorer`) |
+| `eval` | 채점자 **4종** · **편차** · **짝 채점** · **민감도** · **미끼 측정** · **다회 실행 관점**(기대값 · k-임계) · **짝 차이** · Wilson CI · **대시보드 데이터**(기록된 리뷰 · 브라우저 Ruff 분류 · 리뷰 예시 — `explorer`) |
 | `store` | SQLite · 매니페스트 없는 결과를 외래키가 거부 (F1) · `config_hash` 재현성 검사 |
 | `corpus` | decoy 템플릿 · 검증기 **13규칙** · 실행 반증(`proof.py`) · 분류 14종 × 가드 위치 4종 (쌍 수는 [MEASUREMENTS](MEASUREMENTS.md)) |
 | `llm` | 스키마 · 프롬프트 · 파서 · replay · **Anthropic/OpenAI 어댑터** · **Ollama 어댑터** (로컬 서버 · 계정 · 키 없음) |

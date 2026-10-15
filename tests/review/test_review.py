@@ -119,6 +119,13 @@ class TestCommand:
         assert main(["review", str(_file(tmp_path, "shell.py", SHELL)), "--out", str(out)]) == 0
         assert out.read_text(encoding="utf-8").startswith("# 리뷰 보고서")
 
+    def test_json_keeps_the_code_with_the_screens_report(self, tmp_path: Path) -> None:
+        """대시보드의 리뷰 예시가 이 출력을 그대로 싣는다 - 코드와 serve 화면의 꼴이 같이 있다."""
+        src, out = _file(tmp_path, "shell.py", "\ufeff" + SHELL), tmp_path / "report.json"
+        assert main(["review", str(src), "--json", "--out", str(out)]) == 0
+        got = json.loads(out.read_text(encoding="utf-8"))
+        assert got == {"code": SHELL, "agent": None, "report": review.review_dict(review_file(src))}
+
     @pytest.mark.parametrize("name", ["notes.txt", "missing.py"])
     def test_only_an_existing_python_file_is_reviewed(self, tmp_path: Path, name: str) -> None:
         path = tmp_path / name

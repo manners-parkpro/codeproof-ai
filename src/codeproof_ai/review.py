@@ -271,6 +271,14 @@ def review_dict(report: ReviewReport) -> dict[str, object]:
     }
 
 
+def review_record(report: ReviewReport, code: str) -> dict[str, object]:
+    """`codeproof review --json` - 리뷰한 코드와 화면의 보고서 꼴을 같이 둔다.
+
+    대시보드의 리뷰 예시가 이 출력을 그대로 싣는다 - 손으로 고친 기록이 아니다 (eval/explorer.py).
+    """
+    return {"code": code, "agent": report.agent, "report": review_dict(report)}
+
+
 def render_review(report: ReviewReport) -> str:
     """Markdown 보고서 - 지적마다 근거를 붙이고, 검증자가 못 보는 것을 같이 적는다."""
     lines = [

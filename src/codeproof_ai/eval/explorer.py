@@ -39,6 +39,10 @@ if TYPE_CHECKING:
 BANNER = "// 🔴 생성된 파일이다. 손으로 고치지 마라. `uv run codeproof report` 로 다시 만든다.\n"
 REVIEWS = "reviews.js"
 RUFF = "ruff.js"
+EXAMPLES = "review-examples.js"
+EXAMPLE_AGENT = "claude"
+EXAMPLE_COMMAND = f"uv run codeproof review module.py --agent {EXAMPLE_AGENT}"
+"""리뷰 예시를 만든 명령 - 측정과 같은 이름(`module.py`)과 같은 docstring 손잡이의 코드로 돈다."""
 
 KIND_LABELS: dict[TrapKind, str] = {
     TrapKind.UPSTREAM_VALIDATION: "앞에서 이미 검사했다",
@@ -185,6 +189,49 @@ def reviews(
         "featured": [f for f in featured if f in pairs],
     }
     return _with_rows("CODEPROOF_REVIEWS", head, "pairs", rows)
+
+
+def review_examples(
+    records: Mapping[str, Mapping[str, Any]],
+    pair: tuple[AgentSection, AgentSection],
+    samples: Sequence[LabeledSample],
+    featured: Sequence[str],
+) -> str:
+    """예시 짝의 버그 코드를 `codeproof review --agent claude` 로 한 번씩 리뷰한 실제 출력.
+
+    성적이 아니다. 웹 판은 모델을 부르지 못한다 (정적 호스팅) - 명령 한 줄이 내는 보고서를
+    기록으로 보여 준다.
+    기록은 `review --json` 의 출력 그대로다 (`results/review-examples/<짝>.json`).
+    🔴 고르지 않는다 - 기록한 짝이 예시 규칙이 고른 짝 전부 · 그것만이어야 한다.
+    🔴 기록한 코드가 지금 그 짝의 버그 코드(리뷰어가 본 내보내기)와 다르면 싣지 않는다 - 잰 뒤
+       코드를 고치면 옛 출력이 새 코드의 리뷰로 읽힌다 (`packed_digests` 와 같은 이유).
+    """
+    measured = {o.sample_id for o in pair[0].run.outcomes}
+    # 화면의 예시 짝과 같은 목록 - reviews 의 featured 와 같은 거르기
+    shown = [f for f in featured if f in measured]
+    if sorted(records) != sorted(shown):
+        msg = (
+            f"리뷰 예시 기록 {sorted(records)} 이 예시 규칙이 고른 짝 {sorted(shown)} 과 다르다 - "
+            f"고른 짝 전부를 다시 기록한다 ({EXAMPLE_COMMAND} --json)"
+        )
+        raise ValueError(msg)
+    by_id = {s.sample_id: s for s in samples}
+    rows = []
+    for pid in shown:
+        record = records[pid]
+        if record.get("agent") != EXAMPLE_AGENT:
+            msg = (
+                f"{pid}: 에이전트 리뷰 기록이 아니다 ({record.get('agent')})"
+                f" - --agent {EXAMPLE_AGENT} 로 기록한다"
+            )
+            raise ValueError(msg)
+        code = _code(by_id[f"{pid}#twin"], pair[0].docstrings)
+        if record.get("code") != code:
+            msg = f"{pid}: 기록한 코드가 지금 버그 코드와 다르다 - 바뀐 코드로 다시 기록한다"
+            raise ValueError(msg)
+        rows.append({"pair": pid, "code": code, "report": record["report"]})
+    head = {"command": EXAMPLE_COMMAND}
+    return _with_rows("CODEPROOF_REVIEW_EXAMPLES", head, "examples", rows)
 
 
 def ruff_rules(version: str, categories: Mapping[str, Category]) -> str:

@@ -48,7 +48,8 @@ uv run pytest           # 전체 테스트
 짚었는지 · 가드 · 도달성)를 붙여 낸다. 모델 리뷰도 붙일 수 있다 — `--ollama qwen3:4b` 는 로컬 Ollama 모델(계정 · 키 없음),
 `--agent claude` 는 로그인된 에이전트(측정과 같은 실행기 · 모델 기준)이고, 둘 다 인용이 코드에 실제로 있는지까지 본다.
 정답이 없는 코드라 결함이라고 판정하지는 않는다. 같은 리뷰를 위 페이지의 화면으로 하려면 `uv run codeproof serve` 로
-그 페이지를 내 컴퓨터(127.0.0.1)에서 연다 — 웹 판에서는 브라우저 Ruff 까지만 된다.
+그 페이지를 내 컴퓨터(127.0.0.1)에서 연다 — 웹 판에서는 브라우저 Ruff 까지만 돌고, AI 리뷰는 같은 명령의 실제
+출력을 기록으로 보여 준다.
 
 소요는 기계와 가드 수에 따라 다르다 — 재 본 값은 [docs/VERIFY.md](docs/VERIFY.md) §0 에 있다. 같은 검사를 GitHub Actions 가
 PR 마다 Linux · macOS 새 환경에서 돈다 ([실행 기록](https://github.com/manners-parkpro/codeproof-ai/actions/workflows/ci.yml)).
