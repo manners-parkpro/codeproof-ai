@@ -503,11 +503,13 @@ HIGHLIGHTS = (
 
 
 CAVEAT = (
-    "짝은 Claude 와 함께 만들었다 — Claude 에 유리할 수 있어 Codex 가 설계한 "
-    "짝 72쌍으로 다시 쟀더니, 몇 줄 차이까지 같은 지적으로 치느냐에 따라 "
-    "앞서는 쪽이 바뀌어 결론을 내지 못했다."
+    "짝을 Claude 와 함께 만들어 Codex 가 설계한 짝 72쌍으로 다시 쟀더니, "
+    "몇 줄 차이까지 같은 지적으로 치느냐에 따라 앞서는 쪽이 바뀌었다."
 )
-"""주 지표 카드의 한계 한 줄 - 교차 저자 측정의 판정 (DESIGN §7.10d)."""
+"""답의 한계 문장 - 교차 저자 측정의 판정 (DESIGN §7.10d).
+
+🔴 답 안에 둔다 - 카드의 잔글씨로 두면 「앞섰다」만 읽히고 그것을 흔드는 판정은 묻힌다.
+"""
 
 
 def render_highlights(spreads: Sequence[Spread], found: Glance | None) -> str:
@@ -522,12 +524,12 @@ def render_highlights(spreads: Sequence[Spread], found: Glance | None) -> str:
     if found is not None:
         cards += _agent_cards(found)
     lines.append('  <div class="cards">')
-    for eyebrow, big, text in cards:
+    for eyebrow, big, body in cards:
         lines += [
             '    <div class="card">',
             f'      <p class="eyebrow">{eyebrow}</p>',
             f'      <p class="big">{escape(big)}</p>',
-            f"      <p>{text}</p>",
+            f"      {body}",
             "    </div>",
         ]
     lines.append("  </div>")
@@ -535,10 +537,15 @@ def render_highlights(spreads: Sequence[Spread], found: Glance | None) -> str:
 
 
 def _headline(found: Glance) -> list[str]:
-    """주 지표 카드 - 수집 전에 선언한 하나 (DESIGN §7.10b). 답 문장 · 막대 · 차이와 구간 · 조건.
+    """주 지표 카드 - 수집 전에 선언한 하나 (DESIGN §7.10b).
+
+    답 문장과 한계 · 막대 · 차이와 구간 · 한 줄.
 
     🔴 답은 두 AI 의 비교만 말한다 - 린터(Ruff)를 잰 채점 규칙 카드와 한 문장에 묶으면 린터의 값이
        AI 의 값으로 읽힌다 (F3 · 독립 검토). 숫자는 바로 옆 막대가 든다.
+    🔴 「한 번 리뷰했을 때」는 지우지 않는다 - 단일 실행 기대값과 k-임계는 다른 숫자다 (F3).
+       모델 · 조건은 화면에 싣지 않고 측정값 문서가 든다 -
+       첫 화면이 조건으로 빽빽해져 읽히지 않았다.
     """
     board = found.board
     a, b = (escape(n) for n in board.names)
@@ -563,9 +570,9 @@ def _headline(found: Glance) -> list[str]:
         else "0 을 포함한다 — 이 표본으로는 구별되지 않는다"
     )
     runs = board.runs[0] if board.runs[0] == board.runs[1] else f"{board.runs[0]} · {board.runs[1]}"
-    models = " · ".join(escape(m) for m in board.models)
+    but = "다만 " if row.distinguishable else ""  # 앞선 쪽을 말했을 때만 맞서는 말을 붙인다
     return [
-        f'  <p class="answer"><b>답</b> {claim}</p>',
+        f'  <p class="answer"><b>답</b> {claim} {but}{escape(CAVEAT)}</p>',
         '  <div class="headline">',
         f'    <p class="label">{escape(row.label)} — {escape(row.meaning)}</p>',
         *(
@@ -576,10 +583,7 @@ def _headline(found: Glance) -> list[str]:
         ),
         f'    <p class="diff"><b>{row.diff.point * 100:+.1f}%p</b> 95% 구간 {lo:+.1f} ~ {hi:+.1f}%p'
         f" · {reading}</p>",
-        f'    <p class="note">파이썬 짝 {board.pairs}쌍 · 짝마다 {runs}번 리뷰 · 한 번 리뷰했을 때 '
-        f"기대할 수 있는 비율 · 모델 {models} · {escape(board.conditions)}</p>",
-        f'    <p class="note">한계 — 차이에는 모델과 제품(도구 · 권한)이 함께 들어 있다. '
-        f"{escape(CAVEAT)}</p>",
+        f'    <p class="note">한 번 리뷰했을 때의 기대 비율 · 짝마다 {runs}번 리뷰</p>',
         "  </div>",
     ]
 
@@ -594,18 +598,22 @@ def _spread_card(spread: Spread, security: Spread | None) -> tuple[str, str, str
         f"{spread.injected_fp} 대 {spread.safety_fp}"
     )
     text = (
-        "린터는 같은 코드에 늘 같은 경고를 낸다 — 그 경고를 Qodo 벤치마크처럼 「결함 없는 코드의 "
-        f"경고는 전부 헛경고」로 세면 <b>{spread.injected_fp}건</b>, 「안전하다고 증명한 범위 안을 "
-        f"버그라 한 것」만 세면 <b>{spread.safety_fp}건</b>이다 (전체 규칙)."
+        "같은 경고를 Qodo 벤치마크처럼 「결함 없는 코드의 경고는 전부 헛경고」로 세면 "
+        f"<b>{spread.injected_fp}건</b>, 「안전하다고 증명한 범위 안을 버그라 한 것」만 세면 "
+        f"<b>{spread.safety_fp}건</b>이다 (전체 규칙)."
     )
     if security is not None:
         same = "로 같다" if security.safety_fp == security.injected_fp else "이다"
         text += f" 보안 규칙만 고르면 {security.injected_fp} 대 {security.safety_fp}{same}."
-    return "린터(Ruff) 경고를 두 채점 규칙으로 세면", big, text
+    return "린터(Ruff) 경고를 두 채점 규칙으로 세면", big, f"<p>{text}</p>"
 
 
 def _agent_cards(found: Glance) -> list[tuple[str, str, str]]:
-    """보조 카드 둘 - 버그를 짚은 비율의 사다리 · 헛경고. 주 지표가 아니다 (사후 보조)."""
+    """보조 카드 둘 - 버그를 짚은 비율의 사다리 · 헛경고. 주 지표가 아니다 (사후 보조).
+
+    사다리의 숫자 넷은 문장이 아니라 작은 표로 싣는다 - 한 문장에 숫자 넷이면 읽히지 않았다.
+    예시 짝(근처 지적)은 측정값 문서가 든다.
+    """
     board = found.board
     a, b = (escape(n) for n in board.names)
     alarm = next(r for r in board.rows if r.verdicts == tuple(v.value for v in ALARM))
@@ -614,19 +622,14 @@ def _agent_cards(found: Glance) -> list[tuple[str, str, str]]:
     rise = caught.a.loose > caught.a.strict and caught.b.loose > caught.b.strict
     stays = caught.stable and caught.distinguishable
     big = ("둘 다 오르고, " if rise else "") + ("차이는 남는다" if stays else "차이는 흔들린다")
-    text = (
-        f"결함 줄과 겹친 지적만 인정하면 {a} {caught.a.strict:.1%} · {b} {caught.b.strict:.1%}, "
-        f"근처 {near}줄까지 인정하면 {a} {caught.a.loose:.1%} · {b} {caught.b.loose:.1%}."
+    table = (
+        f'<table class="mini"><tr><th></th><th class="a">{a}</th><th class="b">{b}</th></tr>'
+        + _mini_row("결함 줄과 겹친 지적만", caught.a.strict, caught.b.strict)
+        + _mini_row(f"근처 {near}줄까지", caught.a.loose, caught.b.loose)
+        + "</table>"
     )
-    if found.near is not None:
-        short = escape(found.near.pair_id.split("-", 1)[0])
-        who = (a, b)[found.near.side]
-        text += (
-            f" 예: {short} 에서 {who} 는 {board.runs[found.near.side]}회 모두 결함 근처를 "
-            f"가리켰지만 「놓침」으로 셌다 — {found.near.slack}줄만 넓혀도 「짚음」이다."
-        )
     eyebrow = "버그를 짚은 비율(헛경고는 따지지 않음)은 몇 줄 차이까지 같은 지적으로 치느냐에 따라"
-    cards = [(eyebrow, big, text)]
+    cards = [(eyebrow, big, table)]
     more = a if alarm.a.strict > alarm.b.strict else b
     caught_more = a if caught.a.strict > caught.b.strict else b
     said = "안전하다고 증명한 범위를 버그라 한 비율은"
@@ -637,8 +640,12 @@ def _agent_cards(found: Glance) -> list[tuple[str, str, str]]:
         note = f"{said} {more} 가 더 높았다."
         if more == caught_more:
             note += " 많이 짚는 쪽이 헛경고도 더 냈다."
-    cards.append((eyebrow, f"{alarm.a.strict:.1%} 대 {alarm.b.strict:.1%}", note))
+    cards.append((eyebrow, f"{alarm.a.strict:.1%} 대 {alarm.b.strict:.1%}", f"<p>{note}</p>"))
     return cards
+
+
+def _mini_row(head: str, a: float, b: float) -> str:
+    return f"<tr><th>{head}</th><td>{a:.1%}</td><td>{b:.1%}</td></tr>"
 
 
 def _estimate(

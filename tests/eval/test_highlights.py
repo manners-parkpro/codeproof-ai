@@ -50,6 +50,17 @@ class TestTheAnswerFollowsTheValues:
         assert "근처 10줄까지 넓혀 세도 차이가 남았다." in answer
         assert "0 을 포함하지 않는다 — 이 150쌍에서는 우연으로 보기 어렵다" in page
 
+    def test_the_answer_carries_the_cross_author_caveat(self) -> None:
+        """🔴 「앞섰다」 옆에 그것을 흔드는 판정을 둔다 - 카드의 잔글씨로 두면 묻힌다 (§7.10d)."""
+        answer = _answer(render_highlights([ALL], _glance(CAUGHT, ALARM, PRIMARY)))
+        assert "다만 짝을 Claude 와 함께 만들어" in answer
+        assert "앞서는 쪽이 바뀌었다." in answer
+
+    def test_the_card_says_its_rate_is_for_one_review(self) -> None:
+        """🔴 단일 실행 기대값과 k-임계는 다른 숫자다 - 라벨이 없으면 막대가 어느 쪽인지 모른다."""
+        page = render_highlights([ALL], _glance(CAUGHT, ALARM, PRIMARY))
+        assert "한 번 리뷰했을 때의 기대 비율 · 짝마다 3번 리뷰" in page
+
     def test_the_answer_speaks_only_of_the_two_ais(self) -> None:
         """🔴 45.7배는 린터(Ruff)를 잰 값이다 - 답에 섞으면 AI 의 헛경고가 갈린 것으로 읽힌다."""
         page = render_highlights([ALL, SECURITY], _glance(CAUGHT, ALARM, PRIMARY))

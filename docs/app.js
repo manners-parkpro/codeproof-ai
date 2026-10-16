@@ -142,21 +142,11 @@
         seg.appendChild(b);
       })(r);
     }
+    // 처음 여는 짝 - 점수판의 규칙이 고른 예시 짝 (손으로 고르지 않는다). 바로가기 버튼은 두지 않는다 -
+    // 같은 짝을 「AI 리뷰 예시」 탭과 그림이 이미 보여 준다
     var featured = (R.featured || []).map(function (id) {
       return R.pairs.findIndex(function (p) { return p.id === id; });
     }).filter(function (i) { return i >= 0; });
-    // 예시 바로가기 - 점수판의 규칙이 고른 짝 (손으로 고르지 않는다)
-    if (featured.length) {
-      var picks = el("div", { cls: "seg", role: "group", "aria-label": "예시 짝" });
-      featured.forEach(function (i) {
-        var pair = R.pairs[i];
-        var won = correct(pair, 0) > correct(pair, 1) ? 0 : 1;
-        var b = el("button", { type: "button", text: "예시 " + pair.id.split("-")[0] + " · " + R.reviewers[won].name.split(" ")[0] + " 만 구별" });
-        b.addEventListener("click", function () { state.pair = i; renderPair(); });
-        picks.appendChild(b);
-      });
-      $("examples").appendChild(picks);
-    }
     state.pair = featured.length ? featured[0] : order[0];
   }
 
@@ -450,7 +440,8 @@
 
   // 보고서 한 건 — 이 컴퓨터의 리뷰와 기록된 리뷰 예시가 같은 꼴(review_dict)을 같은 함수로 그린다
   function renderReport(out, rep) {
-    out.appendChild(el("h3", { text: "지적 " + rep.entries.length + "건 · " + rep.reviewers.join(" · ") }));
+    out.appendChild(el("h3", { cls: "report-head", text: "지적 " + rep.entries.length + "건" }));
+    out.appendChild(el("p", { cls: "report-meta", text: rep.reviewers.join(" · ") }));
     if (!rep.entries.length) {
       out.appendChild(el("p", { cls: "quiet", text: "리뷰어가 짚은 것이 없다 — 결함이 없다는 뜻은 아니다." }));
     }
@@ -517,7 +508,7 @@
         return rv.name + " 결함 " + hit + "번 · 구별 " + correct(pair, who) + "번";
       }).join(" / ") + " (구별 = 버그 쪽만 짚고 안전한 쪽은 짚지 않음)");
     }
-    row("읽는 법", "한 번 돌린 출력이라 성적이 아니다 — 성적은 위 점수판이고, 같은 짝의 안전한 코드에 대한 리뷰는 「실제 AI 리뷰 기록 보기」에 회차마다 있다.");
+    row("읽는 법", "한 번 돌린 출력이라 성적이 아니다 — 성적은 맨 위 점수판이다.");
     var out = $("example-report");
     clear(out);
     renderReport(out, ex.report);

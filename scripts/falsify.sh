@@ -57,7 +57,7 @@ PASS=0; FAIL=0; FAILED_NAMES=()
 #   break_X   그 불변식을 깨는 최소 변경
 #   guard_X   가드. 깨끗한 트리에서 **통과**하고 깨뜨린 뒤 **실패**해야 한다.
 
-SCENARIOS=(layering runner registry registry-derived sdk-lazy falsify-shard proof-label proof-vacuous corpus-strict convention docs-tree docs-results-prose selection-headline selection-table selection-repeats fp-counts-floor pair-table pair-sentence pair-block generated figures-generated figures-beside stale-figure out-dash pairs-ladder-label pair-ladder-note agents-points landing-page landing-css landing-blob landing-numbers mutants-unknown
+SCENARIOS=(layering runner registry registry-derived sdk-lazy falsify-shard proof-label proof-vacuous corpus-strict convention docs-tree docs-results-prose selection-headline selection-table selection-repeats fp-counts-floor pair-table pair-sentence pair-block generated figures-generated figures-beside stale-figure out-dash pairs-ladder-label pair-ladder-note agents-points landing-page landing-css landing-blob landing-numbers landing-one-review mutants-unknown
            readme-scoreboard scoreboard-primary misses-complement
            example-rule-slack scoreboard-interval near-miss-rule landing-highlights landing-markers
            agent-contract span-match llm-symbol import-format import-manifest import-rejected
@@ -343,6 +343,10 @@ guard_landing-blob() { uv run pytest tests/docs/test_consistency.py -q -k reposi
 claim_landing-numbers() { echo "첫 페이지의 손으로 쓴 문장에는 숫자가 없다 — 숫자는 생성 그림이 든다 (F5b)"; }
 break_landing-numbers() { perl -0pi -e 's/보안 규칙만 고르면 같아진다\./보안 규칙만 고르면 같아진다 (45.7배)./' docs/index.html; }
 guard_landing-numbers() { uv run pytest tests/docs/test_consistency.py -q -k quotes_no_numbers; }
+
+claim_landing-one-review() { echo "첫 화면 주 지표 카드는 한 번 리뷰했을 때의 기대 비율이라고 밝힌다 — k-임계와 다른 숫자다 (F3)"; }
+break_landing-one-review() { perl -0pi -e 's/한 번 리뷰했을 때의 기대 비율 · //' src/codeproof_ai/eval/report.py; }
+guard_landing-one-review() { uv run pytest tests/eval/test_highlights.py -q -k one_review; }
 
 claim_landing-highlights() { echo "첫 화면의 핵심 발견 카드는 생성물이다 — 손으로 숫자를 고치면 report --check 가 운다 (F5b)"; }
 break_landing-highlights() { perl -0pi -e 's/<p class="big">45\.7배<\/p>/<p class="big">45.8배<\/p>/' docs/index.html; }
